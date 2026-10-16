@@ -266,7 +266,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   `same-origin` and a restrictive `Permissions-Policy`.
 - `trusted-types 'none'` (stricter than the PRD) forbids creating any policy
   until the single reviewed policy module exists.
-- **Verified in Chromium** (Playwright against the Compose stack): React 19 +
+- **Verified in Chromium and Google Chrome** (Playwright against the Compose stack, locally and in CI): React 19 +
   Vite 8 render with zero CSP/Trusted Types violations, in a secure context,
   and a raw `innerHTML` assignment is blocked.
 - **Risk for slice 5:** Fluent UI v9 injects styles at runtime (Griffel). It
@@ -317,7 +317,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 
 - The image was built from a copy of the committed Dockerfile that mounts the
   proxy CA as a BuildKit secret on the two network steps. The committed
-  `Dockerfile` is unmodified; CI builds it as-is.
+  `Dockerfile` is unmodified, and CI builds it as-is; that build passed the
+  full smoke test on GitHub Actions.
 - NuGet restores ran with `NUGET_CERT_REVOCATION_MODE=offline`; CI uses online
   revocation checks.
 - The browser check ran on Chromium 141 (Playwright build 1194) driven by
@@ -333,11 +334,11 @@ done; **Not executed** = implemented but the check has not run (and why).
 
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|
-| 1 | `docker compose up` serves the health endpoints and the empty SPA (PRD §11 slice 1) | **Met (local)**; CI not executed | Compose smoke test 36/36 |
-| 2 | CI green (PRD §11) | See the PR checks | Workflow committed |
+| 1 | `docker compose up` serves the health endpoints and the empty SPA (PRD §11 slice 1) | **Met** (local and CI) | Compose smoke test 36/36 locally and on GitHub Actions (PR #1, run 38981505549) |
+| 2 | CI green (PRD §11) | **Met except dependency review** | PR #1 run 38981505549: policy, web, .NET, CodeQL ×3, code scanning, Compose smoke all pass; dependency review needs the owner to enable the dependency graph |
 | 3 | An unlisted npm dependency fails CI (PRD §11) | **Met (local)**: checker test + CI step before install | `check-dependency-policy.test.mjs`; demonstrated in the PR |
 | 4 | CI: build, test (PRD §11) | Met (defined); run not executed | `ci.yml` |
-| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | Gates added after the repository became public; see the PR checks | DEC-018 |
+| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | **CodeQL met**: C#, JS/TS and Actions pass; its first run found a real issue, which was fixed. **Dependency review blocked**: "Dependency graph is not enabled" (owner setting) | DEC-018 |
 | 6 | Dockerfile; Compose with SQL Server 2025 **Express** (PRD §11) | **Met (local)** | Smoke test: EngineEdition 4, major version 17 |
 | 7 | `/health/live`, `/health/ready` (US-01) | **Met** | 3 in-process tests + 5 smoke checks |
 | 8 | Serilog JSON; no credentials, auth headers or cookies in logs (PRD §11, NFR-LOG-1) | **Met** | `LoggingTests`; smoke: JSON lines, no secret in any container log |
