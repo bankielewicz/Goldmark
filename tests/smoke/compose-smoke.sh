@@ -57,7 +57,7 @@ gha_error() {
   local msg="${2//'%'/'%25'}"
   msg="${msg//$'\r'/}"
   msg="${msg//$'\n'/'%0A'}"
-  echo "::error title=Smoke - ${1//[:,]/ }::${msg}"
+  echo "::error title=Smoke test::${1//[:,]/ }%0A${msg}"
 }
 pass() { results+=("PASS  $1"); echo "PASS  $1"; }
 fail() {
@@ -75,6 +75,7 @@ cleanup() {
     echo "== Container logs (last 150 lines each)"
     "${compose[@]}" logs --no-color --tail 150 > "${work}/failure.log" 2>&1
     cat "${work}/failure.log"
+    gha_error "results" "$(printf '%s\n' "${results[@]}")"
     gha_error "container logs (tail)" "$(tail -n 40 "${work}/failure.log" | cut -c1-300)"
   fi
   if [[ "${GOLDMARK_SMOKE_KEEP:-}" == 1 ]]; then
@@ -108,7 +109,8 @@ echo "== Goldmark Compose smoke test (project ${project}, port ${port})"
 
 # --- Secrets are mandatory -------------------------------------------------------
 missing_output="$(docker compose -p "${project}-nosecrets" -f "${repo}/deploy/docker-compose.yml" --env-file /dev/null config 2>&1)"
-if [[ $? -ne 0 && "${missing_output}" == *"SQLSERVER_ACCEPT_EULA"* ]]; then
+# Compose versions differ in which missing variable they report first.
+if [[ $? -ne 0 && "${missing_output}" =~ required\ variable\ (SQLSERVER_ACCEPT_EULA|SQLSERVER_SA_PASSWORD|GOLDMARK_DB_PASSWORD)\ is\ missing ]]; then
   pass "compose refuses to run without required secrets"
 else
   fail "compose refuses to run without required secrets" "${missing_output:0:200}"
@@ -216,15 +218,23 @@ fi
 check "app runs as non-root (uid 1654) on a read-only root filesystem" bash -c "[[ \"\$(docker inspect -f '{{.Config.User}} {{.HostConfig.ReadonlyRootfs}}' ${project}-app-1)\" == '1654 true' ]]"
 
 # --- Logs ------------------------------------------------------------------------
-"${compose[@]}" logs --no-color --no-log-prefix app > "${work}/app.log" 2>&1
+"${compose[@]}" logs --no-color --no-log-prefix app > "${work}/app.log" 2> "${work}/compose-stderr.log"
 "${compose[@]}" logs --no-color db-init sqlserver sql-volume-init > "${work}/other.log" 2>&1
-check "app logs are JSON lines" python3 -c "
-import json,sys
-lines=[l for l in open('${work}/app.log') if l.strip()]
-assert lines, 'no log lines'
-for l in lines: json.loads(l)
-"
-check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' '${work}/app.log' '${work}/other.log'"
+json_result="$(python3 - "${work}/app.log" <<'PY'
+import json, sys
+lines = [l.rstrip("\n") for l in open(sys.argv[1]) if l.strip()]
+if not lines:
+    print("no log lines")
+for n, line in enumerate(lines, 1):
+    try:
+        json.loads(line)
+    except ValueError:
+        print(f"line {n} is not JSON: {line[:200]}")
+        break
+PY
+)"
+if [[ -z "${json_result}" ]]; then pass "app logs are JSON lines"; else fail "app logs are JSON lines" "${json_result}"; fi
+check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' '${work}/app.log' '${work}/other.log' '${work}/compose-stderr.log'"
 
 # --- Browser: SPA renders under the served CSP / Trusted Types ---------------------
 if [[ "${GOLDMARK_SMOKE_SKIP_BROWSER:-}" == 1 ]]; then
