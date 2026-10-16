@@ -55,6 +55,10 @@ skip() { results+=("SKIP  $1${2:+ — $2}"); echo "SKIP  $1${2:+ — $2}"; }
 check() { local name="$1"; shift; if "$@"; then pass "${name}"; else fail "${name}"; fi; }
 
 cleanup() {
+  if ((failures > 0)); then
+    echo "== Container logs (last 150 lines each)"
+    "${compose[@]}" logs --no-color --tail 150 2>&1
+  fi
   if [[ "${GOLDMARK_SMOKE_KEEP:-}" == 1 ]]; then
     echo "Stack left running (project ${project})."
   else
@@ -116,7 +120,6 @@ if wait_until 360 app_healthy; then
 else
   fail "stack starts and the app container becomes healthy (bounded: 360 s)"
   "${compose[@]}" ps -a
-  "${compose[@]}" logs --no-color --tail 80
   printf '%s\n' "${results[@]}"
   exit 1
 fi
