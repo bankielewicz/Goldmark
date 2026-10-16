@@ -1,0 +1,30 @@
+# pnpm settings for the Goldmark SPA (NFR-SEC-9, DEC-011).
+# pnpm 11 reads all non-auth settings from this file. The dependency policy
+# check (scripts/check-dependency-policy.mjs) fails CI if any of the security
+# settings below is removed or weakened.
+
+# Never resolve a version published less than 7 days ago. Strict mode makes an
+# immature pick fail the install instead of silently adding an exclusion.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+
+# Refuse a version whose publish-time trust evidence (provenance / trusted
+# publisher) is weaker than an earlier version of the same package.
+trustPolicy: no-downgrade
+
+# Transitive dependencies may only come from the registry (no git/tarball URLs).
+blockExoticSubdeps: true
+
+# No lifecycle scripts run during install, for dependencies or this project.
+ignoreScripts: true
+
+# Fail the install if any dependency wants to run a build script that has not
+# been explicitly decided below. Every decision must be `false` unless the
+# package is also listed under "allowBuilds" in dependency-allowlist.json.
+strictDepBuilds: true
+allowBuilds: {}
+
+engineStrict: true
+
+# Direct dependencies are saved as exact versions.
+savePrefix: ''

@@ -1,0 +1,72 @@
+{
+  "$comment": "Approved direct npm dependencies for web/ (NFR-SEC-9). Adding, removing or re-classifying an entry requires a reviewed PR. scripts/check-dependency-policy.mjs enforces this file in CI before any install runs. 'runtime' entries ship to browsers; 'dev' entries are build/test tooling only and never reach the bundle or the runtime image.",
+  "runtime": {
+    "react": {
+      "justification": "UI library chosen by D1 (ADR-0001).",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    },
+    "react-dom": {
+      "justification": "Browser renderer for React (client-only; react-dom/server is never imported).",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    },
+    "@fluentui/react-components": {
+      "justification": "Accessible component library (PRD §8.1). Not installed until the first functional screen.",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    },
+    "@fluentui/react-icons": {
+      "justification": "Icon set paired with Fluent UI (status icons alongside text, NFR-A11Y-1). Not installed until needed.",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    },
+    "cytoscape": {
+      "justification": "Graph explorer canvas (screen 6). Not installed until slice 6.",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    },
+    "react-router": {
+      "justification": "Client-side routing for stable deep links (US-53), library mode only. Not installed until slice 5.",
+      "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
+    }
+  },
+  "dev": {
+    "vite": {
+      "justification": "Bundler for the browser-only SPA (D1). Used with its built-in JSX transform; no React plugin.",
+      "approvedBy": "PRD §8.1; slice 1"
+    },
+    "typescript": {
+      "justification": "Type checking (tsc --noEmit). Held on 6.0.x until typescript-eslint supports 7.x.",
+      "approvedBy": "PRD §8.1; slice 1"
+    },
+    "@types/react": {
+      "justification": "Type definitions for react.",
+      "approvedBy": "slice 1"
+    },
+    "@types/react-dom": {
+      "justification": "Type definitions for react-dom.",
+      "approvedBy": "slice 1"
+    },
+    "@types/node": {
+      "justification": "Type definitions for build/test configuration files that run in Node.js (vite.config.ts, Playwright). Never in the browser bundle.",
+      "approvedBy": "slice 1"
+    },
+    "eslint": {
+      "justification": "Lint, including the NFR-SEC-9 bans on dangerouslySetInnerHTML, eval and new Function.",
+      "approvedBy": "PRD NFR-SEC-9; slice 1"
+    },
+    "@eslint/js": {
+      "justification": "ESLint's recommended core rule set.",
+      "approvedBy": "slice 1"
+    },
+    "typescript-eslint": {
+      "justification": "TypeScript parser and rules for ESLint.",
+      "approvedBy": "slice 1"
+    },
+    "prettier": {
+      "justification": "Formatting check in CI.",
+      "approvedBy": "slice 1"
+    },
+    "@playwright/test": {
+      "justification": "Browser smoke test proving the SPA renders under the production CSP and Trusted Types (PRD §8.1 lists Playwright). Uses a system Chrome/Chromium; browsers are never downloaded by an install script.",
+      "approvedBy": "PRD §8.1; slice 1"
+    }
+  },
+  "allowBuilds": {}
+}
