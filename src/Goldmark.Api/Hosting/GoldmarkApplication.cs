@@ -1,0 +1,75 @@
+using System.Security.Authentication;
+using Goldmark.Api.Configuration;
+using Goldmark.Api.Data;
+using Goldmark.Api.Health;
+using Goldmark.Api.Security;
+using Microsoft.AspNetCore.HttpsPolicy;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
+using Microsoft.Extensions.Options;
+
+namespace Goldmark.Api.Hosting;
+
+internal static class GoldmarkApplication
+{
+    public static WebApplicationBuilder AddGoldmark(this WebApplicationBuilder builder)
+    {
+        builder.AddGoldmarkLogging();
+
+        builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
+        builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart();
+        builder.Services.AddSingleton<IValidateOptions<HttpsOptions>, HttpsOptionsValidator>();
+        builder.Services.AddOptions<HttpsOptions>().BindConfiguration(HttpsOptions.SectionName).ValidateOnStart();
+
+        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddGoldmarkHealthChecks();
+        builder.Services.AddProblemDetails();
+
+        builder.Services.AddOptions<HstsOptions>().Configure<IOptions<HttpsOptions>>((hsts, https) =>
+        {
+            hsts.MaxAge = TimeSpan.FromDays(https.Value.Hsts.MaxAgeDays);
+            hsts.IncludeSubDomains = https.Value.Hsts.IncludeSubDomains;
+            hsts.Preload = false;
+        });
+
+        // HTTPS only (US-01). There is no plain-HTTP listener.
+        builder.WebHost.ConfigureKestrel(kestrel =>
+        {
+            kestrel.AddServerHeader = false;
+            var services = kestrel.ApplicationServices;
+            var https = services.GetRequiredService<IOptions<HttpsOptions>>().Value;
+            var logger = services.GetRequiredService<ILoggerFactory>().CreateLogger("Goldmark.Tls");
+            var certificate = new TlsCertificateProvider(https, services.GetRequiredService<TimeProvider>(), logger)
+                .GetCertificate();
+            kestrel.ListenAnyIP(https.Port, listen => listen.UseHttps(new HttpsConnectionAdapterOptions
+            {
+                ServerCertificate = certificate.Certificate,
+                ServerCertificateChain = certificate.Chain,
+                SslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+            }));
+        });
+
+        return builder;
+    }
+
+    public static WebApplication UseGoldmark(this WebApplication app)
+    {
+        // First, so headers are applied even to error responses produced further down.
+        app.UseMiddleware<SecurityHeadersMiddleware>();
+        if (!app.Environment.IsDevelopment())
+        {
+            app.UseExceptionHandler();
+        }
+
+        if (HstsPolicy.IsEnabled(app.Services.GetRequiredService<IOptions<HttpsOptions>>().Value))
+        {
+            app.UseHsts();
+        }
+
+        app.UseGoldmarkRequestLogging();
+        app.UseGoldmarkStaticFiles();
+        app.MapGoldmarkHealthEndpoints();
+        app.MapGoldmarkSpa();
+        return app;
+    }
+}
