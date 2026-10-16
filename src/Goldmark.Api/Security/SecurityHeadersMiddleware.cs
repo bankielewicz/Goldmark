@@ -30,14 +30,20 @@ internal sealed class SecurityHeadersMiddleware(RequestDelegate next)
 
     public Task InvokeAsync(HttpContext context)
     {
-        var headers = context.Response.Headers;
-        headers.ContentSecurityPolicy = ContentSecurityPolicy;
-        headers.XContentTypeOptions = "nosniff";
-        headers.XFrameOptions = "DENY";
-        headers["Referrer-Policy"] = "no-referrer";
-        headers["Cross-Origin-Opener-Policy"] = "same-origin";
-        headers["Cross-Origin-Resource-Policy"] = "same-origin";
-        headers["Permissions-Policy"] = PermissionsPolicy;
+        // Applied when the response starts, so they survive the exception handler,
+        // which clears headers before writing an error response.
+        context.Response.OnStarting(static state =>
+        {
+            var headers = ((HttpContext)state).Response.Headers;
+            headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            headers.XContentTypeOptions = "nosniff";
+            headers.XFrameOptions = "DENY";
+            headers["Referrer-Policy"] = "no-referrer";
+            headers["Cross-Origin-Opener-Policy"] = "same-origin";
+            headers["Cross-Origin-Resource-Policy"] = "same-origin";
+            headers["Permissions-Policy"] = PermissionsPolicy;
+            return Task.CompletedTask;
+        }, context);
         return next(context);
     }
 }

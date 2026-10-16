@@ -64,7 +64,7 @@ internal static class GoldmarkApplication
 
     public static WebApplication UseGoldmark(this WebApplication app)
     {
-        // First, so headers are applied even to error responses produced further down.
+        // Outermost, so every response, including error responses, gets the headers.
         app.UseMiddleware<SecurityHeadersMiddleware>();
         if (!app.Environment.IsDevelopment())
         {

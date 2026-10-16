@@ -69,6 +69,10 @@ internal sealed partial class HttpsOptionsValidator : IValidateOptions<HttpsOpti
         {
             failures.Add($"{HttpsOptions.SectionName}:CertificatePath and KeyPath must be set together.");
         }
+        else if (hasCert && (!File.Exists(options.CertificatePath) || !File.Exists(options.KeyPath)))
+        {
+            failures.Add($"{HttpsOptions.SectionName}:CertificatePath or KeyPath does not point to a readable file.");
+        }
 
         if (!hasCert)
         {

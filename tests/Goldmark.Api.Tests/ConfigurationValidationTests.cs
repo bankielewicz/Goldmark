@@ -56,6 +56,7 @@ public sealed class ConfigurationValidationTests
     {
         { o => o.CertificatePath = "/etc/goldmark/server.crt", "CertificatePath and KeyPath must be set together" },
         { o => o.KeyPath = "/etc/goldmark/server.key", "CertificatePath and KeyPath must be set together" },
+        { o => { o.CertificatePath = "/nonexistent/server.crt"; o.KeyPath = "/nonexistent/server.key"; }, "does not point to a readable file" },
         { o => o.Hostnames = "bad host!,localhost", "invalid DNS name" },
         { o => o.Hostnames = " , ", "at least one name" },
         { o => o.GeneratedCertificateDirectory = "", "GeneratedCertificateDirectory is required" },

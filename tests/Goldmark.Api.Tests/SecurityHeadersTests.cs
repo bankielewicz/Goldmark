@@ -1,6 +1,10 @@
 using System.Net;
 using Goldmark.Api.Security;
 using Goldmark.Api.Tests.Infrastructure;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Goldmark.Api.Tests;
 
@@ -60,8 +64,47 @@ public sealed class SecurityHeadersTests(GoldmarkFactory factory) : IClassFixtur
         Assert.False(response.Headers.Contains("Strict-Transport-Security"));
     }
 
+    [Fact]
+    public async Task Error_responses_keep_the_security_headers_and_hide_details()
+    {
+        await using var throwing = new ThrowingGoldmarkFactory();
+        using var client = throwing.CreateClient();
+
+        using var response = await client.GetAsync(new Uri(ThrowingGoldmarkFactory.Path, UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.Equal(SecurityHeadersMiddleware.ContentSecurityPolicy, Single(response.Headers, "Content-Security-Policy"));
+        Assert.Equal("nosniff", Single(response.Headers, "X-Content-Type-Options"));
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(ThrowingGoldmarkFactory.Secret, body, StringComparison.Ordinal);
+        Assert.DoesNotContain("   at ", body, StringComparison.Ordinal);
+    }
+
     private static string Single(System.Net.Http.Headers.HttpResponseHeaders headers, string name) =>
         Assert.Single(headers.GetValues(name));
+}
+
+/// <summary>Adds a route that throws, behind the whole Goldmark pipeline.</summary>
+public sealed class ThrowingGoldmarkFactory : GoldmarkFactory
+{
+    public const string Path = "/__throw.test";
+    public const string Secret = "exception-detail-NEVER-SHOWN";
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+        builder.ConfigureServices(services => services.AddSingleton<IStartupFilter, ThrowingStartupFilter>());
+    }
+
+    private sealed class ThrowingStartupFilter : IStartupFilter
+    {
+        public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+        {
+            next(app);
+            app.Use((HttpContext context, RequestDelegate _) =>
+                context.Request.Path == Path ? throw new InvalidOperationException(Secret) : Task.CompletedTask);
+        };
+    }
 }
 
 public sealed class HstsTests
@@ -82,8 +125,8 @@ public sealed class HstsTests
     public async Task Hsts_turns_on_automatically_with_an_operator_supplied_certificate()
     {
         await using var factory = new GoldmarkFactory();
-        factory.Settings["Goldmark:Https:CertificatePath"] = "/etc/goldmark/tls/server.crt";
-        factory.Settings["Goldmark:Https:KeyPath"] = "/etc/goldmark/tls/server.key";
+        factory.Settings["Goldmark:Https:CertificatePath"] = factory.CreateFile("server.crt");
+        factory.Settings["Goldmark:Https:KeyPath"] = factory.CreateFile("server.key");
         factory.Settings["Goldmark:Https:Hsts:MaxAgeDays"] = "30";
         factory.Settings["Goldmark:Https:Hsts:IncludeSubDomains"] = "true";
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://goldmark.example.com") });
@@ -97,8 +140,8 @@ public sealed class HstsTests
     public async Task Hsts_can_be_disabled_explicitly_with_an_operator_supplied_certificate()
     {
         await using var factory = new GoldmarkFactory();
-        factory.Settings["Goldmark:Https:CertificatePath"] = "/etc/goldmark/tls/server.crt";
-        factory.Settings["Goldmark:Https:KeyPath"] = "/etc/goldmark/tls/server.key";
+        factory.Settings["Goldmark:Https:CertificatePath"] = factory.CreateFile("server.crt");
+        factory.Settings["Goldmark:Https:KeyPath"] = factory.CreateFile("server.key");
         factory.Settings["Goldmark:Https:Hsts:Enabled"] = "false";
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://goldmark.example.com") });
 

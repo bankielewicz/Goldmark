@@ -351,7 +351,7 @@ done; **Not executed** = implemented but the check has not run (and why).
 | 19 | HTTPS on by default; per-installation certificate persisted outside the image; replacement documented (US-01) | **Met (local)** | Smoke: served = volume; survives re-creation; key 0600; TLS < 1.2 refused |
 | 20 | Certificate trust and HSTS documented separately | **Met** | `docs/ops/tls-certificates.md`, `docs/ops/hsts.md` |
 | 21 | CSP, Trusted Types and ESLint controls; incompatibilities reported | **Met**; no incompatibility found | Browser test; ESLint config; Fluent UI risk noted (DEC-017) |
-| 22 | Fast in-process HTTP tests **and** a real Compose smoke test with health checks and bounded waits | **Met** | 77 xUnit tests; `compose-smoke.sh` |
+| 22 | Fast in-process HTTP tests **and** a real Compose smoke test with health checks and bounded waits | **Met** | 79 xUnit tests; `compose-smoke.sh` |
 | 23 | Least-privilege workflow permissions | **Met** (static) | `ci.yml` |
 | 24 | `SECURITY.md` | **Met** | `SECURITY.md` |
 | 25 | US-01: DbUp migrations on start with a separate migration login; runtime login DML-only | **Unmet in slice 1** (slice 2) | DEC-015 |

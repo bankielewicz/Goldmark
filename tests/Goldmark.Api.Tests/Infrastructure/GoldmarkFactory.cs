@@ -49,6 +49,14 @@ public class GoldmarkFactory : WebApplicationFactory<Program>
 
     public string WebRoot { get; }
 
+    /// <summary>Creates a file with the given content in this factory's temporary directory.</summary>
+    public string CreateFile(string name, string content = "placeholder")
+    {
+        var path = Path.Combine(_root, name);
+        File.WriteAllText(path, content);
+        return path;
+    }
+
     public Dictionary<string, string?> Settings { get; }
 
     public CapturingSink Logs { get; } = new();
