@@ -13,10 +13,11 @@ first one ships.
 
 **Do not open a public issue, pull request or discussion for a security problem.**
 
-While the repository is private, report vulnerabilities privately to the
-maintainer, [@bankielewicz](https://github.com/bankielewicz), through GitHub.
-When the repository becomes public, GitHub private vulnerability reporting
-(*Security → Report a vulnerability*) will be enabled and becomes the preferred channel.
+Report vulnerabilities privately through GitHub's private vulnerability
+reporting: on the repository page, open *Security → Report a vulnerability*.
+If that option is not available, contact the maintainer,
+[@bankielewicz](https://github.com/bankielewicz), privately through GitHub
+and ask for a private channel. Do not include details in public places.
 
 Please include:
 

@@ -7,6 +7,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 4 * * 1" # weekly, so new CodeQL queries and advisories are applied to main
   workflow_dispatch:
 
 permissions:
@@ -102,51 +104,59 @@ jobs:
           GOLDMARK_E2E_CHANNEL: chrome
         run: tests/smoke/compose-smoke.sh
 
-  # Informational probe: is dependency review / code scanning available on this
-  # private, personally owned repository? It never runs CodeQL. Its outcome is
-  # written to the job summary; it does not make CI pass or fail, and slice-1
-  # acceptance treats CodeQL + dependency review as UNMET until they run for real
-  # (see docs/DECISIONS.md DEC-018).
-  security-feature-probe:
-    name: "Probe (informational): dependency review / code scanning availability"
+  dependency-review:
+    # NFR-SEC-7 / NFR-SEC-9: block PRs that add dependencies with known
+    # vulnerabilities (npm and NuGet trees, via the dependency graph).
+    name: Dependency review
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    permissions:
-      contents: read
-      security-events: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Dependency review
-        id: dependency-review
-        continue-on-error: true
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-      - name: Empty SARIF for the upload probe
-        run: |
-          cat > "${RUNNER_TEMP}/empty.sarif" <<'EOF'
-          {"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":"goldmark-probe","rules":[]}},"results":[]}]}
-          EOF
-      - name: Code scanning upload
-        id: code-scanning
-        continue-on-error: true
-        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
-          sarif_file: ${{ runner.temp }}/empty.sarif
-          category: availability-probe
-      - name: Report
-        env:
-          DEPENDENCY_REVIEW: ${{ steps.dependency-review.outcome }}
-          CODE_SCANNING: ${{ steps.code-scanning.outcome }}
+          fail-on-severity: low
+          fail-on-scopes: runtime, development, unknown
+
+  codeql:
+    # NFR-SEC-7: CodeQL on every PR and on main.
+    name: CodeQL (${{ matrix.language }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+          - language: actions
+            build-mode: none
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: security-extended
+      - name: Build (C#)
+        if: matrix.language == 'csharp'
         run: |
-          verdict() { [[ "$1" == success ]] && echo "AVAILABLE" || echo "NOT AVAILABLE ($1) - see the step log"; }
-          {
-            echo "### Security feature availability (informational)"
-            echo "| Feature | Result |"
-            echo "|---|---|"
-            echo "| Dependency review | $(verdict "${DEPENDENCY_REVIEW}") |"
-            echo "| Code scanning (SARIF upload, prerequisite for CodeQL) | $(verdict "${CODE_SCANNING}") |"
-            echo
-            echo "Slice-1 acceptance for CodeQL and dependency review stays UNMET until both run as real gates."
-          } >> "${GITHUB_STEP_SUMMARY}"
+          dotnet restore Goldmark.slnx --locked-mode
+          dotnet build Goldmark.slnx -c Release --no-restore
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: /language:${{ matrix.language }}

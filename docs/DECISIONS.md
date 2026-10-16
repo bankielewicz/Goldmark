@@ -53,8 +53,10 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 ## DEC-003 Repository, branches and bootstrap commit
 
-- **Decision.** Target `bankielewicz/Goldmark`, **private** (deviation: the PRD
-  says public `Goldmark-cmdb`). `main` was created with a single README-only
+- **Decision.** Target `bankielewicz/Goldmark` (deviation: the PRD names it
+  `Goldmark-cmdb`). It was private during most of slice 1 and was made
+  **public** by the owner on 2026-10-16, which matches the PRD's visibility.
+  It remains unlicensed until the licensing decision (DEC-001). `main` was created with a single README-only
   commit (`git push` to `main` was permitted). All implementation is on
   `claude/slice-01-scaffold`, one PR, never auto-merged.
 - **Note.** No session id was exposed to the agent; pushing
@@ -282,17 +284,18 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
     `compose-smoke` (builds the committed Dockerfile; real stack; browser).
 - Dependabot covers npm, NuGet, the .NET SDK, Docker, Compose and Actions,
   with a 7-day cooldown.
-- **CodeQL and dependency review (NFR-SEC-7, slice 1):** **not running; this
-  acceptance criterion is UNMET.** For private repositories, both require
-  GitHub Code Security / Advanced Security, which a personal account cannot
-  enable. Visibility will not be changed and nothing purchased. CodeQL is not
-  run on this private code without that licence.
-  - An informational probe job (`security-feature-probe`) tries dependency
-    review and an empty SARIF upload and reports availability in the job summary.
-  - Supported substitutes that do run: NuGetAudit (restore fails on known
-    vulnerabilities), `pnpm audit`, Dependabot, the dependency policy check,
-    SHA-pinned actions and locked restores.
-  - Dependabot alerts need the dependency graph enabled in repository settings (owner action).
+- **CodeQL and dependency review (NFR-SEC-7, slice 1).** While the repository
+  was private (personal account, no GitHub Advanced Security), neither could
+  run, and CodeQL was not run on private code without a licence. After the
+  owner made the repository public, both were added as real gates:
+  - `dependency-review` (PRs): fails on any known vulnerability, severity
+    `low` or higher, in runtime, development or unknown scopes, across the npm
+    and NuGet lock files.
+  - `codeql`: C# (manual build with the pinned SDK), JavaScript/TypeScript
+    and GitHub Actions workflows, `security-extended` queries, on every PR,
+    on `main`, and weekly.
+  - These also keep running: NuGetAudit, `pnpm audit`, Dependabot, the
+    dependency policy check, SHA-pinned actions and locked restores.
 
 ## DEC-019 Deferred to later slices
 
@@ -309,8 +312,8 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 ## DEC-020 Constraints of the build sandbox (not of the product)
 
 The agent's sandbox sits behind a TLS-inspecting proxy, and some hosts (CRL
-endpoints, PowerShell Gallery, the GitHub API for this private repository) are
-unreachable. For **local verification only**:
+endpoints, PowerShell Gallery) are unreachable. While the repository was
+private, the agent's GitHub API token could not see it (public-repository scope only). For **local verification only**:
 
 - The image was built from a copy of the committed Dockerfile that mounts the
   proxy CA as a BuildKit secret on the two network steps. The committed
@@ -331,10 +334,10 @@ done; **Not executed** = implemented but the check has not run (and why).
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|
 | 1 | `docker compose up` serves the health endpoints and the empty SPA (PRD §11 slice 1) | **Met (local)**; CI not executed | Compose smoke test 36/36 |
-| 2 | CI green (PRD §11) | **Not executed**: the agent cannot see Actions runs on the private repo | Workflow committed |
+| 2 | CI green (PRD §11) | See the PR checks | Workflow committed |
 | 3 | An unlisted npm dependency fails CI (PRD §11) | **Met (local)**: checker test + CI step before install | `check-dependency-policy.test.mjs`; demonstrated in the PR |
 | 4 | CI: build, test (PRD §11) | Met (defined); run not executed | `ci.yml` |
-| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | **Unmet** | DEC-018 |
+| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | Gates added after the repository became public; see the PR checks | DEC-018 |
 | 6 | Dockerfile; Compose with SQL Server 2025 **Express** (PRD §11) | **Met (local)** | Smoke test: EngineEdition 4, major version 17 |
 | 7 | `/health/live`, `/health/ready` (US-01) | **Met** | 3 in-process tests + 5 smoke checks |
 | 8 | Serilog JSON; no credentials, auth headers or cookies in logs (PRD §11, NFR-LOG-1) | **Met** | `LoggingTests`; smoke: JSON lines, no secret in any container log |
