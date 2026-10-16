@@ -14,7 +14,9 @@ describe('production build', { skip: !existsSync(indexPath) && 'dist/ not built;
   const html = existsSync(indexPath) ? readFileSync(indexPath, 'utf8') : '';
 
   it('has no inline scripts: every <script> has a same-origin src', () => {
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
+    // End tags may carry whitespace or (ignored) attributes, e.g. "</script >".
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi)];
+    assert.equal(scripts.length, (html.match(/<script\b/gi) ?? []).length, 'unterminated or malformed script tag');
     assert.ok(scripts.length > 0, 'expected at least one script tag');
     for (const [, attrs, body] of scripts) {
       assert.match(attrs, /\bsrc="\/assets\/[^"]+\.js"/, `script without same-origin src: ${attrs}`);

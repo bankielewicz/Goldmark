@@ -49,15 +49,33 @@ compose=(docker compose -p "${project}" -f "${repo}/deploy/docker-compose.yml" -
 
 results=()
 failures=0
+# In GitHub Actions, failures also become annotations (readable without signing in
+# to view logs) and the results go to the job summary. No secret ever appears in
+# the reported text: the logs that are attached were checked for secrets above.
+gha_error() {
+  [[ -n "${GITHUB_ACTIONS:-}" ]] || return 0
+  local msg="${2//'%'/'%25'}"
+  msg="${msg//$'\r'/}"
+  msg="${msg//$'\n'/'%0A'}"
+  echo "::error title=Smoke - ${1//[:,]/ }::${msg}"
+}
 pass() { results+=("PASS  $1"); echo "PASS  $1"; }
-fail() { results+=("FAIL  $1${2:+ — $2}"); echo "FAIL  $1${2:+ — $2}"; failures=$((failures + 1)); }
+fail() {
+  results+=("FAIL  $1${2:+ — $2}"); echo "FAIL  $1${2:+ — $2}"; failures=$((failures + 1))
+  gha_error "$1" "${2:-check failed}"
+}
 skip() { results+=("SKIP  $1${2:+ — $2}"); echo "SKIP  $1${2:+ — $2}"; }
 check() { local name="$1"; shift; if "$@"; then pass "${name}"; else fail "${name}"; fi; }
 
 cleanup() {
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    { echo "### Compose smoke test"; echo '```'; printf '%s\n' "${results[@]}"; echo '```'; } >> "${GITHUB_STEP_SUMMARY}"
+  fi
   if ((failures > 0)); then
     echo "== Container logs (last 150 lines each)"
-    "${compose[@]}" logs --no-color --tail 150 2>&1
+    "${compose[@]}" logs --no-color --tail 150 > "${work}/failure.log" 2>&1
+    cat "${work}/failure.log"
+    gha_error "container logs (tail)" "$(tail -n 40 "${work}/failure.log" | cut -c1-300)"
   fi
   if [[ "${GOLDMARK_SMOKE_KEEP:-}" == 1 ]]; then
     echo "Stack left running (project ${project})."
@@ -98,8 +116,9 @@ fi
 
 # --- Build and start -------------------------------------------------------------
 if [[ "${GOLDMARK_SMOKE_NO_BUILD:-}" != 1 ]]; then
-  if ! "${compose[@]}" build app; then
-    fail "image builds"
+  if ! docker compose --progress plain -p "${project}" -f "${repo}/deploy/docker-compose.yml" --env-file "${work}/.env" build app > "${work}/build.log" 2>&1; then
+    cat "${work}/build.log"
+    fail "image builds" "$(tail -n 40 "${work}/build.log" | cut -c1-300)"
     printf '%s\n' "${results[@]}"
     exit 1
   fi
@@ -118,8 +137,7 @@ app_healthy() { [[ "$(docker inspect -f '{{.State.Health.Status}}' "${project}-a
 if wait_until 360 app_healthy; then
   pass "stack starts and the app container becomes healthy (bounded: 360 s)"
 else
-  fail "stack starts and the app container becomes healthy (bounded: 360 s)"
-  "${compose[@]}" ps -a
+  fail "stack starts and the app container becomes healthy (bounded: 360 s)" "$("${compose[@]}" ps -a 2>&1)"
   printf '%s\n' "${results[@]}"
   exit 1
 fi
