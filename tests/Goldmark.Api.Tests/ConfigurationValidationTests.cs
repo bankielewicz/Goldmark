@@ -94,6 +94,18 @@ public sealed class ConfigurationValidationTests
     }
 
     [Fact]
+    public async Task Relative_certificate_paths_resolve_against_the_content_root()
+    {
+        await using var factory = new GoldmarkFactory();
+        factory.Settings["Goldmark:Https:GeneratedCertificateDirectory"] = "state/tls";
+
+        var https = factory.Services.GetRequiredService<IOptions<HttpsOptions>>().Value;
+        var contentRoot = factory.Services.GetRequiredService<Microsoft.Extensions.Hosting.IHostEnvironment>().ContentRootPath;
+
+        Assert.Equal(Path.GetFullPath("state/tls", contentRoot), https.GeneratedCertificateDirectory);
+    }
+
+    [Fact]
     public async Task Validators_are_registered_with_the_host()
     {
         await using var factory = new GoldmarkFactory();

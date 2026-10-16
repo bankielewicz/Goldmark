@@ -18,7 +18,14 @@ internal static class GoldmarkApplication
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
         builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart();
         builder.Services.AddSingleton<IValidateOptions<HttpsOptions>, HttpsOptionsValidator>();
-        builder.Services.AddOptions<HttpsOptions>().BindConfiguration(HttpsOptions.SectionName).ValidateOnStart();
+        builder.Services.AddOptions<HttpsOptions>().BindConfiguration(HttpsOptions.SectionName).ValidateOnStart()
+            .PostConfigure<IHostEnvironment>((https, environment) =>
+            {
+                // Relative paths are relative to the content root, not the current directory.
+                https.GeneratedCertificateDirectory = Rooted(https.GeneratedCertificateDirectory, environment.ContentRootPath) ?? "";
+                https.CertificatePath = Rooted(https.CertificatePath, environment.ContentRootPath);
+                https.KeyPath = Rooted(https.KeyPath, environment.ContentRootPath);
+            });
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SqlConnectionFactory>();
@@ -51,6 +58,9 @@ internal static class GoldmarkApplication
 
         return builder;
     }
+
+    private static string? Rooted(string? path, string contentRoot) =>
+        string.IsNullOrWhiteSpace(path) || Path.IsPathRooted(path) ? path : Path.GetFullPath(path, contentRoot);
 
     public static WebApplication UseGoldmark(this WebApplication app)
     {
