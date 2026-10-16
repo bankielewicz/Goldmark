@@ -3,7 +3,6 @@
   <PropertyGroup>
     <RootNamespace>Goldmark.Api</RootNamespace>
     <AssemblyName>Goldmark.Api</AssemblyName>
-    <InvariantGlobalization>true</InvariantGlobalization>
     <UserSecretsId>goldmark-api-dev</UserSecretsId>
   </PropertyGroup>
 
