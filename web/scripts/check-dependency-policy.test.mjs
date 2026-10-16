@@ -58,7 +58,10 @@ describe('direct dependencies', () => {
       p.dependencies = { ...p.dependencies, 'left-pad': '1.3.0' };
     });
     const errors = checkPolicy(dir);
-    assert.ok(errors.some((e) => e.includes('"left-pad" is not in dependency-allowlist.json')), errors.join('\n'));
+    assert.ok(
+      errors.some((e) => e.includes('"left-pad" is not in dependency-allowlist.json')),
+      errors.join('\n'),
+    );
   });
 
   it('fails when a dev dependency is not allow-listed', () => {

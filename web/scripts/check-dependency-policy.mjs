@@ -284,8 +284,7 @@ export function checkPolicy(webDir) {
 
   // --- pnpm-lock.yaml ------------------------------------------------------
   const lockPath = join(webDir, 'pnpm-lock.yaml');
-  const hasDeps =
-    Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length > 0;
+  const hasDeps = Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length > 0;
   if (!existsSync(lockPath)) {
     if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
   } else {
