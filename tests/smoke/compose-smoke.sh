@@ -160,11 +160,20 @@ check "plain HTTP is not served" bash -c "[[ \"\$(curl -s -o /dev/null -w '%{htt
 check "container healthcheck command succeeds (loopback HTTPS pinned to the certificate)" \
   docker exec "${project}-app-1" dotnet /app/Goldmark.Api.dll healthcheck
 sql_image="$(docker inspect -f '{{.Config.Image}}' "${project}-sqlserver-1")"
-# Inspect as the app's uid: the directory is 0700, so no other user can even list it.
-key_mode="$(docker run --rm --network none --user 1654:1654 -v "${project}_goldmark-tls:/tls:ro" --entrypoint stat "${sql_image}" -c '%a %u' /tls/goldmark.key 2>&1)"
-other_user="$(docker run --rm --network none --user 10001:10001 -v "${project}_goldmark-tls:/tls:ro" --entrypoint stat "${sql_image}" -c '%a' /tls/goldmark.key 2>&1)"
-check "TLS key directory is closed to other users" bash -c "[[ '${other_user}' == *'Permission denied'* ]]"
-check "TLS private key in the volume is mode 600, owned by the app user (got ${key_mode})" [ "${key_mode}" == "600 1654" ]
+# Inspect as the app's uid; then prove another uid cannot read the key.
+key_mode="$(docker run --rm --network none --user 1654:1654 -v "${project}_goldmark-tls:/tls:ro" --entrypoint stat "${sql_image}" -c '%a %u' /tls /tls/goldmark.key 2>&1 | tr '\n' ' ' | sed 's/ $//')"
+other_read="$(docker run --rm --network none --user 10001:10001 -v "${project}_goldmark-tls:/tls:ro" --entrypoint cat "${sql_image}" /tls/goldmark.key 2>&1)"
+other_code=$?
+if [[ ${other_code} -ne 0 && "${other_read}" != *"PRIVATE KEY"* ]]; then
+  pass "another uid cannot read the TLS private key"
+else
+  fail "another uid cannot read the TLS private key" "cat exited ${other_code}"
+fi
+if [[ "${key_mode}" == "700 1654 600 1654" ]]; then
+  pass "TLS key dir 700 and key 600, both owned by the app user"
+else
+  fail "TLS key dir 700 and key 600, both owned by the app user" "got: ${key_mode}"
+fi
 
 # --- Health endpoints ------------------------------------------------------------
 check "/health/live returns 200 Healthy" bash -c "[[ \"\$(curl -s --max-time 10 --cacert '${work}/app-cert.pem' ${base}/health/live)\" == Healthy ]]"
