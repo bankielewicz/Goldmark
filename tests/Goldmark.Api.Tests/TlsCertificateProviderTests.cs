@@ -66,6 +66,40 @@ public sealed class TlsCertificateProviderTests : IDisposable
     }
 
     [Fact]
+    public void A_pre_existing_certificate_directory_is_tightened_to_owner_only()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Skip("POSIX permissions only");
+            return;
+        }
+
+        var options = Options();
+        // e.g. a volume mount point created 0755 by the image build or the runtime
+        Directory.CreateDirectory(options.GeneratedCertificateDirectory);
+        File.SetUnixFileMode(options.GeneratedCertificateDirectory,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+            UnixFileMode.GroupRead | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+
+        using (Get(options).Certificate)
+        {
+        }
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(options.GeneratedCertificateDirectory));
+
+        // Also on a restart that reuses the existing certificate.
+        File.SetUnixFileMode(options.GeneratedCertificateDirectory, UnixFileMode.UserRead | UnixFileMode.UserWrite |
+            UnixFileMode.UserExecute | UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
+        using (Get(options).Certificate)
+        {
+        }
+
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute,
+            File.GetUnixFileMode(options.GeneratedCertificateDirectory));
+    }
+
+    [Fact]
     public void Restarts_reuse_the_persisted_certificate()
     {
         var options = Options();

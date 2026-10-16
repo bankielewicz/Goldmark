@@ -53,6 +53,7 @@ internal sealed partial class TlsCertificateProvider(HttpsOptions options, TimeP
         var directory = options.GeneratedCertificateDirectory;
         var certPath = Path.Combine(directory, CertificateFileName);
         var keyPath = Path.Combine(directory, KeyFileName);
+        EnsurePrivateDirectory(directory);
 
         if (File.Exists(certPath) && File.Exists(keyPath))
         {
@@ -137,17 +138,37 @@ internal sealed partial class TlsCertificateProvider(HttpsOptions options, TimeP
         return request.CreateSelfSigned(now.AddMinutes(-5), now.Add(Validity));
     }
 
-    private static void Persist(X509Certificate2 certificate, string directory, string certPath, string keyPath)
+    /// <summary>
+    /// Creates the directory if needed and, on Unix, forces it to 0700 on every start: a
+    /// pre-existing directory (for example a volume mount point) may have been created with
+    /// a wider mode by the image build or the container runtime.
+    /// </summary>
+    private void EnsurePrivateDirectory(string directory)
     {
         if (OperatingSystem.IsWindows())
         {
             Directory.CreateDirectory(directory);
-        }
-        else
-        {
-            Directory.CreateDirectory(directory, DirectoryMode);
+            return;
         }
 
+        Directory.CreateDirectory(directory, DirectoryMode);
+        if (File.GetUnixFileMode(directory) == DirectoryMode)
+        {
+            return;
+        }
+
+        try
+        {
+            File.SetUnixFileMode(directory, DirectoryMode);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            LogDirectoryNotPrivate(logger);
+        }
+    }
+
+    private static void Persist(X509Certificate2 certificate, string directory, string certPath, string keyPath)
+    {
         using var key = certificate.GetECDsaPrivateKey()
             ?? throw new InvalidOperationException("Generated certificate has no private key.");
         // Key first: if the process dies between the two writes, the next start sees a
@@ -245,6 +266,10 @@ internal sealed partial class TlsCertificateProvider(HttpsOptions options, TimeP
     [LoggerMessage(EventId = 2005, Level = LogLevel.Warning,
         Message = "Generated a self-signed TLS certificate (SHA-256 {Fingerprint}, expires {NotAfter:O}). Browsers will warn until it is trusted or replaced; see docs/ops/tls-certificates.md")]
     private static partial void LogGenerated(ILogger logger, string fingerprint, DateTime notAfter);
+
+    [LoggerMessage(EventId = 2007, Level = LogLevel.Warning,
+        Message = "The TLS certificate directory is not owner-only (0700) and its mode cannot be changed by this process; restrict it")]
+    private static partial void LogDirectoryNotPrivate(ILogger logger);
 
     [LoggerMessage(EventId = 2006, Level = LogLevel.Debug, Message = "Self-signed TLS certificate host names: {Hostnames}")]
     private static partial void LogGeneratedHostnames(ILogger logger, string hostnames);
