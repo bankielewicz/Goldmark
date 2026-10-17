@@ -83,7 +83,8 @@ internal static class BootstrapDatabaseCommand
     /// <item>role memberships;</item>
     /// <item>explicit grants on the server, endpoints, logins, the database, schemas, objects and users;</item>
     /// <item>ownership of every securable catalog that records an owner, server and database;</item>
-    /// <item>linked-server, remote-login and credential mappings;</item>
+    /// <item>linked-server, remote-login and credential mappings, including wildcard mappings for all logins;</item>
+    /// <item>guest access enabled in any database other than master, tempdb and msdb;</item>
     /// <item>mappings into other databases;</item>
     /// <item>non-default grants to public, which every login inherits;</item>
     /// <item>a database user with the login's name but another SID.</item>
@@ -155,6 +156,34 @@ internal static class BootstrapDatabaseCommand
         WHERE sp.grantee_principal_id = @public_server AND sp.state IN ('G', 'W')
           AND NOT (sp.class = 100 AND sp.permission_name = N'VIEW ANY DATABASE')
           AND NOT (sp.class = 105 AND sp.permission_name = N'CONNECT' AND sp.major_id < 65536);
+
+        -- Wildcard mappings (local principal 0) apply to every login, including this one. Only
+        -- those that supply a shared remote credential add rights; self-credential mappings
+        -- (SQL Server's default for every linked server, including the local entry) do not.
+        INSERT @findings SELECT N'linked server login mapping', CONCAT(N'server #', l.server_id, N' (all logins)')
+        FROM sys.linked_logins AS l WHERE l.local_principal_id = 0 AND l.uses_self_credential = 0;
+        INSERT @findings SELECT N'remote login mapping', CONCAT(N'server #', l.server_id, N' (all logins)')
+        FROM sys.remote_logins AS l WHERE l.local_principal_id = 0;
+
+        -- guest access lets any login into a database without a mapping. It is enabled by
+        -- default only in master, tempdb and msdb; anywhere else (model, user databases) it is
+        -- a right this login would hold.
+        DECLARE @guest_db sysname, @guest_probe nvarchar(max), @guest int;
+        DECLARE guest_databases CURSOR LOCAL FAST_FORWARD FOR
+            SELECT name FROM sys.databases WHERE state = 0 AND database_id NOT IN (1, 2, 4);
+        OPEN guest_databases;
+        FETCH NEXT FROM guest_databases INTO @guest_db;
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            SET @guest_probe = N'SELECT @guest = COUNT(*) FROM ' + QUOTENAME(@guest_db)
+                + N'.sys.database_permissions WHERE grantee_principal_id = 2 AND class = 0'
+                + N' AND permission_name = N''CONNECT'' AND state IN (''G'', ''W'');';
+            EXEC sys.sp_executesql @guest_probe, N'@guest int OUTPUT', @guest = @guest OUTPUT;
+            IF @guest > 0 INSERT @findings VALUES (N'guest access enabled in database', @guest_db);
+            FETCH NEXT FROM guest_databases INTO @guest_db;
+        END;
+        CLOSE guest_databases;
+        DEALLOCATE guest_databases;
 
         IF @in_target = 1
         BEGIN
@@ -426,6 +455,10 @@ internal static class BootstrapDatabaseCommand
         {
             errors.Add($"{DatabaseOptions.SectionName}:Name must be a simple identifier.");
         }
+        else if (SqlIdentifier.IsSystemDatabase(db.Name))
+        {
+            errors.Add($"{DatabaseOptions.SectionName}:Name must not be a SQL Server system database.");
+        }
 
         if (!SqlIdentifier.IsValid(db.User) || string.Equals(db.User, "sa", StringComparison.OrdinalIgnoreCase))
         {
@@ -444,6 +477,11 @@ internal static class BootstrapDatabaseCommand
         if (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword))
         {
             errors.Add($"{BootstrapOptions.SectionName}:AdminUser and AdminPassword are required.");
+        }
+        else if (string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+        {
+            // The app container would hold a credential that also authenticates as the administrator.
+            errors.Add($"{DatabaseOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
         }
 
         if (db.Encrypt is not ("Strict" or "Mandatory"))

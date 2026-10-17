@@ -52,6 +52,10 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         {
             failures.Add($"{DatabaseOptions.SectionName}:Name must be a simple identifier (letters, digits, underscore).");
         }
+        else if (SqlIdentifier.IsSystemDatabase(options.Name))
+        {
+            failures.Add($"{DatabaseOptions.SectionName}:Name must not be a SQL Server system database.");
+        }
 
         if (string.IsNullOrWhiteSpace(options.User))
         {

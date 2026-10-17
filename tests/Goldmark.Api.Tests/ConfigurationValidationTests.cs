@@ -30,6 +30,9 @@ public sealed class ConfigurationValidationTests
         { o => o.Encrypt = "Optional", "must be 'Strict' or 'Mandatory'" },
         { o => o.Encrypt = "False", "must be 'Strict' or 'Mandatory'" },
         { o => o.Name = "Goldmark];DROP", "simple identifier" },
+        { o => o.Name = "master", "system database" },
+        { o => o.Name = "MODEL", "system database" },
+        { o => o.Name = "tempdb", "system database" },
         { o => o.ServerCertificatePath = "/nonexistent/sql.crt", "ServerCertificatePath does not point" },
         { o => o.Port = 0, "Port must be between" },
         { o => o.ConnectTimeoutSeconds = 0, "ConnectTimeoutSeconds must be between" },
@@ -257,7 +260,8 @@ public sealed class BootstrapValidationTests
                      "sys.database_role_members", "sys.schemas", "sys.objects", "sys.endpoints", "owner_sid",
                      "sys.certificates", "sys.asymmetric_keys", "sys.symmetric_keys", "sys.assemblies",
                      "sys.fulltext_catalogs", "sys.types", "sys.xml_schema_collections", "sys.linked_logins",
-                     "sys.server_principal_credentials", "user name collision" })
+                     "sys.server_principal_credentials", "user name collision", "local_principal_id = 0",
+                     "guest access enabled" })
         {
             Assert.Contains(view, catalog, StringComparison.Ordinal);
         }
@@ -266,6 +270,27 @@ public sealed class BootstrapValidationTests
     [Fact]
     public void Password_rotation_of_an_existing_login_is_off_by_default() =>
         Assert.False(new BootstrapOptions().RotatePassword);
+
+    [Fact]
+    public void Runtime_password_must_differ_from_the_admin_password()
+    {
+        var db = ValidDatabase();
+        var bootstrap = ValidBootstrap();
+        db.Password = bootstrap.AdminPassword;
+        Assert.Contains(BootstrapDatabaseCommand.Validate(db, bootstrap), e => e.Contains("must differ from Goldmark:Bootstrap:AdminPassword", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("master")]
+    [InlineData("Msdb")]
+    [InlineData("model")]
+    [InlineData("tempdb")]
+    public void Bootstrap_refuses_system_databases(string name)
+    {
+        var db = ValidDatabase();
+        db.Name = name;
+        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("system database", StringComparison.Ordinal));
+    }
 
     [Fact]
     public void Admin_password_is_required()

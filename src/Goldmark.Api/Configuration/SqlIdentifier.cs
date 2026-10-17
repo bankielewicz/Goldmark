@@ -12,4 +12,10 @@ internal static partial class SqlIdentifier
     private static partial Regex Pattern();
 
     public static bool IsValid(string? value) => value is not null && Pattern().IsMatch(value);
+
+    private static readonly HashSet<string> SystemDatabases =
+        new(["master", "model", "msdb", "tempdb", "distribution", "mssqlsystemresource"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Goldmark must get its own database, never a system database.</summary>
+    public static bool IsSystemDatabase(string value) => SystemDatabases.Contains(value);
 }
