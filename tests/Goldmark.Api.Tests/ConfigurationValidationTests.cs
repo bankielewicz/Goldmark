@@ -212,14 +212,26 @@ public sealed class BootstrapValidationTests
     [Fact]
     public void Least_privilege_verification_compares_against_the_measured_baseline()
     {
-        // The query must look at role memberships and effective permissions, not a fixed list of
-        // roles: securityadmin/db_securityadmin passed the previous check.
-        var sql = BootstrapDatabaseCommand.VerifySql;
-        Assert.Contains("sys.login_token", sql, StringComparison.Ordinal);
-        Assert.Contains("sys.user_token", sql, StringComparison.Ordinal);
-        Assert.Contains("fn_my_permissions(NULL, N'SERVER')", sql, StringComparison.Ordinal);
-        Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", sql, StringComparison.Ordinal);
+        // Effective permissions as the login: securityadmin/db_securityadmin passed a fixed-role check.
+        var effective = BootstrapDatabaseCommand.VerifySql;
+        Assert.Contains("sys.login_token", effective, StringComparison.Ordinal);
+        Assert.Contains("sys.user_token", effective, StringComparison.Ordinal);
+        Assert.Contains("fn_my_permissions(NULL, N'SERVER')", effective, StringComparison.Ordinal);
+        Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", effective, StringComparison.Ordinal);
+
+        // Catalog inspection by the administrator: grants below server/database scope, ownership,
+        // other databases and public. Behaviour is proven against SQL Server by the smoke test.
+        var catalog = BootstrapDatabaseCommand.InspectSql;
+        foreach (var view in new[] { "sys.server_permissions", "sys.database_permissions", "sys.server_role_members",
+                     "sys.database_role_members", "sys.schemas", "sys.objects", "sys.endpoints", "owner_sid" })
+        {
+            Assert.Contains(view, catalog, StringComparison.Ordinal);
+        }
     }
+
+    [Fact]
+    public void Password_rotation_of_an_existing_login_is_off_by_default() =>
+        Assert.False(new BootstrapOptions().RotatePassword);
 
     [Fact]
     public void Admin_password_is_required()
