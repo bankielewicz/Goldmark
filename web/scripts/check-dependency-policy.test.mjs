@@ -256,6 +256,24 @@ describe('lockfile', () => {
       (t) => t.replace('\npackages:\n', '\npackages: {next@15.0.0: {}}\n'),
       'unexpected value for "packages"',
     ],
+    [
+      'a quoted resolution key pointing at a tarball',
+      (t) =>
+        t.replace(
+          /\n {4}resolution: \{integrity: (sha512-[^}]+)\}/,
+          "\n    'resolution': {tarball: https://attacker.example/pkg.tgz, integrity: $1}",
+        ),
+      'quoted key "resolution" is not canonical',
+    ],
+    [
+      'a package without its canonical resolution',
+      (t) =>
+        t.replace(
+          /\n {4}resolution: \{integrity: sha512-[^}]+\}/,
+          '\n    resolution: {integrity: sha512-x, tarball: https://attacker.example/x.tgz}',
+        ),
+      'non-canonical resolution',
+    ],
   ]) {
     it(`fails on ${name} in the lockfile`, () => {
       const dir = fixture();

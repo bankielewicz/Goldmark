@@ -20,7 +20,8 @@
     "test:dist": "node --test \"tests/*.test.mjs\"",
     "test": "pnpm run test:policy && pnpm run test:dist",
     "e2e": "playwright test",
-    "dev": "vite"
+    "dev": "vite",
+    "policy:installed": "node scripts/check-installed-tree.mjs"
   },
   "dependencies": {
     "react": "19.3.0",

@@ -59,6 +59,8 @@ jobs:
       - name: Enable the pinned pnpm (Corepack verifies its sha512)
         run: corepack enable pnpm && pnpm --version
       - run: pnpm install --frozen-lockfile
+      - name: Verify the installed tree from pnpm's own resolution (before any tool runs)
+        run: pnpm run policy:installed
       - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm run format:check
@@ -98,7 +100,7 @@ jobs:
           node-version-file: .node-version
       - name: Install web test tooling (Playwright library only; uses the runner's Chrome)
         working-directory: web
-        run: corepack enable pnpm && pnpm install --frozen-lockfile
+        run: corepack enable pnpm && pnpm install --frozen-lockfile && pnpm run policy:installed
       - name: Run tests/smoke/compose-smoke.sh
         env:
           GOLDMARK_E2E_CHANNEL: chrome

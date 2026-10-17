@@ -194,12 +194,48 @@ export function lockfileStructureErrors(text) {
       }
       return;
     }
+    // Only package-like keys (they contain "@") may be quoted; a quoted plain key such as
+    // 'resolution' is a YAML-equivalent spelling this reader would otherwise skip.
+    const quotedKey = raw.match(/^\s*(['"])([^'"]*)\1:(\s|$)/);
+    if (quotedKey && !quotedKey[2].includes('@')) {
+      errors.push(`${at}: quoted key "${quotedKey[2]}" is not canonical`);
+    }
     if (section === 'packages' || section === 'snapshots') {
       if (indent === 2 && !/^ {2}(['"]?)[^\s'"].*\1:( \{\})?$/.test(raw)) {
         errors.push(`${at}: malformed ${section} entry`);
       }
     }
   });
+
+  // Every package entry carries exactly one resolution, in pnpm's canonical form.
+  let entry = null;
+  let resolutions = 0;
+  const closeEntry = () => {
+    if (entry && resolutions !== 1) {
+      errors.push(`pnpm-lock.yaml: package ${entry} must have exactly one canonical resolution (found ${resolutions})`);
+    }
+  };
+  section = null;
+  for (const raw of lines) {
+    if (/^\S/.test(raw)) {
+      closeEntry();
+      entry = null;
+      section = raw.replace(/:.*$/, '');
+      continue;
+    }
+    if (section !== 'packages') continue;
+    const key = raw.match(/^ {2}(['"]?)([^\s'"].*?)\1:\s*$/);
+    if (key) {
+      closeEntry();
+      entry = key[2];
+      resolutions = 0;
+    } else if (/^ {4}resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/.test(raw)) {
+      resolutions += 1;
+    } else if (/resolution/.test(raw)) {
+      errors.push(`pnpm-lock.yaml: non-canonical resolution in ${entry}: ${raw.trim().slice(0, 80)}`);
+    }
+  }
+  closeEntry();
   return errors;
 }
 
