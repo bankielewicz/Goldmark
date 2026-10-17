@@ -319,6 +319,25 @@ else
   fail "a database user with the login's name but another SID is refused" "exit ${refused_code}, login ${probe_login}"
 fi
 
+# A password SQL Server's policy rejects fails before any database is created.
+weak="$(db_init -e Goldmark__Database__User=smoke_weak -e Goldmark__Database__Name=GoldmarkWeakProbe -e Goldmark__Database__Password=aaaaaaaaaaaaaaaa)"; weak_code=$?
+weak_state="$(sql_as sa "${sa_password}" "SELECT CONCAT(CASE WHEN DB_ID('GoldmarkWeakProbe') IS NULL THEN 'no-db' ELSE 'db' END, ',', CASE WHEN SUSER_ID('smoke_weak') IS NULL THEN 'no-login' ELSE 'login' END);")"
+if [[ ${weak_code} -ne 0 && "${weak_state}" == "no-db,no-login" ]]; then
+  pass "a password rejected by SQL Server policy leaves no database or login behind"
+else
+  fail "a password rejected by SQL Server policy leaves no database or login behind" "exit ${weak_code}, ${weak_state}"
+fi
+
+# An existing login that can stop working on its own (expiration policy) is refused.
+sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_expiring WITH PASSWORD = N'${other_password}', CHECK_POLICY = ON, CHECK_EXPIRATION = ON;" >/dev/null
+refused="$(db_init -e Goldmark__Database__User=smoke_expiring -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
+sql_as sa "${sa_password}" "USE master; DROP LOGIN smoke_expiring;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"can stop working on its own"* ]]; then
+  pass "an existing login with CHECK_EXPIRATION = ON is refused"
+else
+  fail "an existing login with CHECK_EXPIRATION = ON is refused" "exit ${refused_code}"
+fi
+
 accepted="$(db_init)"
 if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
   pass "db-init accepts the login again once the extra rights are removed"

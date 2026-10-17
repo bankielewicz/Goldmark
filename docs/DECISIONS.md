@@ -185,7 +185,23 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
     section keys, unknown top-level keys, anchors, aliases, tags, flow-style
     sections, tabs and extra documents.
 
-  It has 33 tests.
+- **Two stages (review findings).** The pre-install check reads the
+  lockfile as text, and two Codex rounds showed that a hand-written reader
+  can be bypassed by YAML-equivalent spellings. So:
+  1. Pre-install (`check-dependency-policy.mjs`) rejects any lockfile that is
+     not in pnpm's canonical layout (quoted plain keys, non-canonical or
+     missing resolutions, re-indentation, anchors and so on), so equivalent
+     spellings fail rather than slip through.
+  2. Post-install, pre-build (`check-installed-tree.mjs`) asks pnpm itself
+     (`pnpm list --json --depth Infinity`) what it installed. Every package
+     must resolve to the npm registry tarball for its own name and version,
+     and no banned name may appear anywhere, including behind an alias. This
+     removes the parser gap: it checks what pnpm actually resolved. Install
+     scripts are disabled, so no fetched code has run before this check.
+     It runs in CI before lint, build and tests, before the smoke test uses
+     Playwright, and in the Docker web stage before the build.
+
+  Together they have 43 tests.
 - **Banned packages:** the PRD's `next`, `react-server-dom-*`, `@remix-run/*`,
   extended with `@react-router/*` (framework/server packages; `react-router`
   stays allowed for library mode) and `@vitejs/plugin-rsc`.
@@ -288,6 +304,14 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   system endpoints; in the database, the user's `CONNECT`, and public's two
   `VIEW ANY COLUMN … KEY DEFINITION` grants and `SELECT` on system objects.
   DENYs are ignored because they only remove rights.
+- An existing login is also refused if it can stop working on its own:
+  `CHECK_EXPIRATION = ON`, expired, locked out, or must change its password.
+  Goldmark creates its login with `CHECK_EXPIRATION = OFF` (review finding).
+- Provisioning order: the login is created or rotated **before** the
+  database, so SQL Server's password policy can still reject the password
+  without leaving an empty database behind. A new login starts with master as
+  its default database; it is switched to the Goldmark database once that
+  exists (review finding).
 - **An existing login's password is never changed** unless
   `GOLDMARK_DB_ROTATE_PASSWORD=true` (`Goldmark:Bootstrap:RotatePassword`) is
   set for that run, and never for a login that fails inspection. A name that

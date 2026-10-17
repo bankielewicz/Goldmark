@@ -36,11 +36,16 @@ internal static class BootstrapDatabaseCommand
         ELSE SELECT 0;
         """;
 
-    // Type ('S' = SQL login), disabled flag and whether the configured password already matches.
+    // Type ('S' = SQL login), disabled, password match, and whether the login can stop working
+    // on its own (expiration policy, expired, locked out, must change password).
     private const string LoginStateSql = """
         SET NOCOUNT ON;
         SELECT CAST(p.type AS nvarchar(2)), CAST(p.is_disabled AS int),
-            CAST(ISNULL(PWDCOMPARE(@password, l.password_hash), 0) AS int)
+            CAST(ISNULL(PWDCOMPARE(@password, l.password_hash), 0) AS int),
+            CAST(ISNULL(l.is_expiration_checked, 0) AS int),
+            CAST(ISNULL(LOGINPROPERTY(p.name, 'IsExpired'), 0) AS int),
+            CAST(ISNULL(LOGINPROPERTY(p.name, 'IsLocked'), 0) AS int),
+            CAST(ISNULL(LOGINPROPERTY(p.name, 'IsMustChange'), 0) AS int)
         FROM sys.server_principals AS p LEFT JOIN sys.sql_logins AS l ON l.principal_id = p.principal_id
         WHERE p.name = @login;
         """;
@@ -48,8 +53,13 @@ internal static class BootstrapDatabaseCommand
     private const string CreateLoginSql = """
         DECLARE @sql nvarchar(max) = N'CREATE LOGIN ' + QUOTENAME(@login)
             + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
-            + N', DEFAULT_DATABASE = ' + QUOTENAME(@db)
-            + N', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;';
+            + N', DEFAULT_DATABASE = [master], CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;';
+        EXEC sys.sp_executesql @sql;
+        """;
+
+    // Run after the database exists, for a login created by this run only.
+    private const string SetDefaultDatabaseSql = """
+        DECLARE @sql nvarchar(max) = N'ALTER LOGIN ' + QUOTENAME(@login) + N' WITH DEFAULT_DATABASE = ' + QUOTENAME(@db) + N';';
         EXEC sys.sp_executesql @sql;
         """;
 
@@ -303,6 +313,14 @@ internal static class BootstrapDatabaseCommand
                 return await RefuseAsync($"the existing login '{db.User}' is disabled; Goldmark does not re-enable logins. Nothing was changed.");
             }
 
+            if (state is { } lifecycle && (lifecycle.ExpirationChecked || lifecycle.Expired || lifecycle.Locked || lifecycle.MustChange))
+            {
+                return await RefuseAsync(
+                    $"the existing login '{db.User}' can stop working on its own (expiration policy {lifecycle.ExpirationChecked}, " +
+                    $"expired {lifecycle.Expired}, locked {lifecycle.Locked}, must change password {lifecycle.MustChange}). " +
+                    "Nothing was changed. Goldmark's runtime login uses CHECK_EXPIRATION = OFF.");
+            }
+
             var databaseExists = await ScalarAsync(connection, DatabaseExistsSql, db) == 1;
             if (databaseExists)
             {
@@ -325,13 +343,8 @@ internal static class BootstrapDatabaseCommand
                     "To rotate it, run once with GOLDMARK_DB_ROTATE_PASSWORD=true (Goldmark:Bootstrap:RotatePassword).");
             }
 
-            // 2. Provision.
-            if (!databaseExists)
-            {
-                await ScalarAsync(connection, EnsureDatabaseSql, db);
-                Report("created database");
-            }
-
+            // 2. Provision. The login comes first: SQL Server's password policy can still reject
+            //    the password, and that must not leave an empty database behind.
             if (state is null)
             {
                 await ExecuteAsync(connection, CreateLoginSql, db);
@@ -341,6 +354,17 @@ internal static class BootstrapDatabaseCommand
             {
                 await ExecuteAsync(connection, RotatePasswordSql, db);
                 Report("rotated login password");
+            }
+
+            if (!databaseExists)
+            {
+                await ScalarAsync(connection, EnsureDatabaseSql, db);
+                Report("created database");
+            }
+
+            if (state is null)
+            {
+                await ExecuteAsync(connection, SetDefaultDatabaseSql, db);
             }
 
             await connection.ChangeDatabaseAsync(db.Name);
@@ -417,8 +441,10 @@ internal static class BootstrapDatabaseCommand
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private static async Task<(string Type, bool Disabled, bool PasswordMatches)?> LoginStateAsync(
-        SqlConnection connection, DatabaseOptions db)
+    private readonly record struct LoginState(
+        string Type, bool Disabled, bool PasswordMatches, bool ExpirationChecked, bool Expired, bool Locked, bool MustChange);
+
+    private static async Task<LoginState?> LoginStateAsync(SqlConnection connection, DatabaseOptions db)
     {
         await using var command = Command(connection, LoginStateSql, db);
         await using var reader = await command.ExecuteReaderAsync();
@@ -427,7 +453,8 @@ internal static class BootstrapDatabaseCommand
             return null;
         }
 
-        return (reader.GetString(0).Trim(), reader.GetInt32(1) == 1, reader.GetInt32(2) == 1);
+        return new LoginState(reader.GetString(0).Trim(), reader.GetInt32(1) == 1, reader.GetInt32(2) == 1,
+            reader.GetInt32(3) == 1, reader.GetInt32(4) == 1, reader.GetInt32(5) == 1, reader.GetInt32(6) == 1);
     }
 
     private static async Task<List<string>> FindingsAsync(SqlConnection connection, string sql, DatabaseOptions db)
