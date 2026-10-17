@@ -266,6 +266,11 @@ describe('lockfile', () => {
       'quoted key "resolution" is not canonical',
     ],
     [
+      'a double-quoted, escaped package key',
+      (t) => t.replace("\n  '@cacheable/memory@2.2.0':", '\n  "\\x6eext@15.0.0":'),
+      'double-quoted or escaped keys',
+    ],
+    [
       'a package without its canonical resolution',
       (t) =>
         t.replace(

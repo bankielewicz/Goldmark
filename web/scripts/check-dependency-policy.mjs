@@ -196,6 +196,11 @@ export function lockfileStructureErrors(text) {
     }
     // Only package-like keys (they contain "@") may be quoted; a quoted plain key such as
     // 'resolution' is a YAML-equivalent spelling this reader would otherwise skip.
+    // pnpm quotes keys with single quotes and no escapes; double quotes allow escapes
+    // ("\x6eext") that would hide the real name from this reader.
+    if (/^\s*"/.test(raw) || /^\s*'[^']*''/.test(raw)) {
+      errors.push(`${at}: double-quoted or escaped keys are not canonical`);
+    }
     const quotedKey = raw.match(/^\s*(['"])([^'"]*)\1:(\s|$)/);
     if (quotedKey && !quotedKey[2].includes('@')) {
       errors.push(`${at}: quoted key "${quotedKey[2]}" is not canonical`);
