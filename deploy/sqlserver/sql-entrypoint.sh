@@ -27,6 +27,11 @@ elif ! openssl x509 -checkend 2592000 -noout -in "${cert}" >/dev/null; then
 elif ! openssl x509 -noout -ext subjectAltName -in "${cert}" | grep -q "DNS:${host}\$"; then
   echo "goldmark: SQL Server TLS host name changed; regenerating"
   needs_cert=true
+elif [[ "$(openssl x509 -noout -pubkey -in "${cert}" 2>/dev/null | openssl sha256)" != \
+        "$(openssl pkey -in "${key}" -pubout 2>/dev/null | openssl sha256)" ]]; then
+  # e.g. a renewal interrupted between writing the new key and the new certificate
+  echo "goldmark: SQL Server TLS certificate and key do not match; regenerating"
+  needs_cert=true
 fi
 
 if [[ "${needs_cert}" == true ]]; then

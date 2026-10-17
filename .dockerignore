@@ -14,8 +14,17 @@ web/node_modules/
 web/dist/
 web/playwright-report/
 web/test-results/
+
+# Secrets: the re-includes above (!src/, !web/) would otherwise bring back
+# files that .gitignore excludes. Keep this list in step with the secrets
+# section of .gitignore. These rules come last so they win.
 **/.env
 **/.env.*
 **/*.pfx
+**/*.p12
 **/*.key
 **/*.pem
+**/*.crt
+**/appsettings.*.local.json
+**/secrets.json
+**/.goldmark/
