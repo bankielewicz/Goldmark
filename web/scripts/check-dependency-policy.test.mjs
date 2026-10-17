@@ -6,7 +6,13 @@ import { dirname, join } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { checkPolicy, nameFromLockKey, parseWorkspaceYaml, readLockfile } from './check-dependency-policy.mjs';
+import {
+  checkPolicy,
+  lockfileStructureErrors,
+  nameFromLockKey,
+  parseWorkspaceYaml,
+  readLockfile,
+} from './check-dependency-policy.mjs';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const scratch = [];
@@ -221,6 +227,45 @@ describe('lockfile', () => {
     assert.ok(names.has('react-server-dom-webpack'));
     assert.ok(names.has('next'));
   });
+
+  it('accepts the committed lockfile as canonical', () => {
+    assert.deepEqual(lockfileStructureErrors(readFileSync(join(webDir, 'pnpm-lock.yaml'), 'utf8')), []);
+  });
+
+  for (const [name, mutate, expected] of [
+    [
+      'quoted section keys',
+      (t) => t.replace('\npackages:', "\n'packages':").replace('\nsnapshots:', "\n'snapshots':"),
+      'unexpected top-level entry',
+    ],
+    [
+      're-indented entries',
+      (t) => t.replace("\n  '@cacheable/memory@2.2.0':", "\n   '@cacheable/memory@2.2.0':"),
+      'odd indentation',
+    ],
+    ['an extra top-level key', (t) => `${t}\noverrides:\n  react: 19.0.0\n`, 'unexpected top-level entry'],
+    [
+      'anchors and aliases',
+      (t) => t.replace('autoInstallPeers: true', 'autoInstallPeers: &x true'),
+      'anchors, aliases',
+    ],
+    ['a second YAML document', (t) => `${t}\n---\npackages: {}\n`, 'multiple YAML documents'],
+    ['tabs', (t) => t.replace('  autoInstallPeers', '\tautoInstallPeers'), 'tabs'],
+    [
+      'a flow-style packages section',
+      (t) => t.replace('\npackages:\n', '\npackages: {next@15.0.0: {}}\n'),
+      'unexpected value for "packages"',
+    ],
+  ]) {
+    it(`fails on ${name} in the lockfile`, () => {
+      const dir = fixture();
+      editText(dir, 'pnpm-lock.yaml', mutate);
+      assert.ok(
+        checkPolicy(dir).some((e) => e.includes(expected)),
+        checkPolicy(dir).join('\n'),
+      );
+    });
+  }
 
   it('fails on banned transitive packages and non-registry resolutions', () => {
     const dir = fixture();

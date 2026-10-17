@@ -147,6 +147,62 @@ export function nameFromLockKey(key) {
   return at > 0 ? key.slice(0, at) : key;
 }
 
+/** Top-level keys pnpm 11 writes for this project, in canonical (unquoted) form. */
+const LOCKFILE_SECTIONS = new Set(['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
+
+/**
+ * The lockfile is read line by line, so it must be in pnpm's canonical layout. YAML
+ * allows equivalent spellings (quoted or re-indented section keys, anchors and
+ * aliases, tags, flow collections, extra documents) that pnpm would read but this
+ * reader would skip. Any of those fails the check instead of being ignored.
+ */
+export function lockfileStructureErrors(text) {
+  const errors = [];
+  const lines = text.split('\n');
+  let section = null;
+  lines.forEach((raw, index) => {
+    const at = `pnpm-lock.yaml line ${index + 1}`;
+    if (raw.includes('\r') || raw.includes('\t')) {
+      errors.push(`${at}: tabs and carriage returns are not allowed`);
+      return;
+    }
+    if (raw.trim() === '') return;
+    if (/^(---|\.\.\.)(\s|$)/.test(raw)) {
+      errors.push(`${at}: multiple YAML documents are not allowed`);
+      return;
+    }
+    if (/(^|[\s:[{,])[&*!][\w!-]/.test(raw.replace(/'[^']*'|"[^"]*"/g, "''")) || /^\s*\?(\s|$)/.test(raw)) {
+      errors.push(`${at}: YAML anchors, aliases, tags and complex keys are not allowed`);
+      return;
+    }
+    const indent = raw.length - raw.trimStart().length;
+    if (indent % 2 !== 0) {
+      errors.push(`${at}: odd indentation`);
+      return;
+    }
+    if (indent === 0) {
+      const top = raw.match(/^([A-Za-z]+):(?: (.*))?$/);
+      if (!top || !LOCKFILE_SECTIONS.has(top[1])) {
+        errors.push(`${at}: unexpected top-level entry "${raw.slice(0, 60)}"`);
+        section = null;
+        return;
+      }
+      section = top[1];
+      const value = top[2] ?? '';
+      if (section === 'lockfileVersion' ? !/^'9\.0'$/.test(value) : value !== '' && value !== '{}') {
+        errors.push(`${at}: unexpected value for "${section}"`);
+      }
+      return;
+    }
+    if (section === 'packages' || section === 'snapshots') {
+      if (indent === 2 && !/^ {2}(['"]?)[^\s'"].*\1:( \{\})?$/.test(raw)) {
+        errors.push(`${at}: malformed ${section} entry`);
+      }
+    }
+  });
+  return errors;
+}
+
 /** Package names and resolution lines from the packages/snapshots sections. */
 export function readLockfile(text) {
   const names = new Set();
@@ -302,7 +358,9 @@ export function checkPolicy(webDir) {
   if (!existsSync(lockPath)) {
     if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
   } else {
-    const { names, badResolutions } = readLockfile(readFileSync(lockPath, 'utf8'));
+    const lockText = readFileSync(lockPath, 'utf8');
+    errors.push(...lockfileStructureErrors(lockText));
+    const { names, badResolutions } = readLockfile(lockText);
     for (const name of names) checkForbidden(name, 'pnpm-lock.yaml', errors);
     for (const entry of badResolutions) {
       errors.push(`pnpm-lock.yaml: non-registry resolution is not allowed: ${entry}`);
