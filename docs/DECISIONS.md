@@ -250,18 +250,29 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - `bootstrap-db` (one-shot `db-init` container) idempotently creates the
   `Goldmark` database and the runtime login with **CONNECT only**. DDL takes
   QUOTENAME'd parameters.
-- **An existing login is inspected before anything is changed** (review
-  finding). It must be an enabled SQL login with nothing beyond the baseline
-  measured for a fresh login on SQL Server 2025. Otherwise bootstrap
+- **Everything is inspected before anything is changed** (review findings).
+  No database, login or user is created or altered on a run that refuses.
+  An existing login must be an enabled SQL login with nothing beyond the
+  baseline measured for a fresh login on SQL Server 2025. Otherwise bootstrap
   **refuses (exit 3) and changes nothing**. The inspection runs as the
-  administrator and covers:
+  administrator, in the Goldmark database or in master while that database
+  does not exist yet, and covers:
   - server and database role memberships;
   - explicit grants at every scope (server, endpoints, logins, database,
     schemas, objects, users), so for example `CONTROL ON SCHEMA` and
     `IMPERSONATE ON LOGIN` are caught;
-  - ownership of databases, schemas, objects, principals or endpoints;
+  - ownership of every catalog that records an owner: databases, endpoints,
+    server principals, audits and event notifications on the server; objects,
+    schemas, principals, types, XML schema collections, assemblies,
+    certificates, asymmetric and symmetric keys, scoped credentials, full-text
+    catalogs and stoplists, search property lists, Service Broker objects,
+    event notifications and external languages, libraries and models in the
+    database;
+  - linked-server, remote-login and credential mappings of the login;
   - mappings into other databases;
-  - non-default grants to `public`.
+  - non-default grants to `public`;
+  - a database user with the login's name but another SID (for example a
+    restored database). It is refused, never silently remapped.
 
   The baseline is the measured set for a fresh login: on the server, the
   login's `CONNECT SQL`, and public's `VIEW ANY DATABASE` and `CONNECT` on
@@ -283,6 +294,8 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - The connect timeout must be 1–120 s (0 means "forever" to SqlClient), and
   the whole wait is cancelled at `WaitSeconds` plus one connect timeout, so
   `db-init` cannot hang the stack.
+- A pinned SQL certificate (`ServerCertificatePath`) must parse as PEM or
+  DER at startup, not merely exist (review finding).
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.

@@ -289,6 +289,25 @@ else
   fail "explicit rotation changes the password" "exit ${rotated_code}/${restored_code}"
 fi
 
+# Refusals change nothing: no database (here: the login is already mapped into Goldmark,
+# so using it for another database is refused) and no login (name collision) is created.
+refused="$(db_init -e Goldmark__Database__Name=GoldmarkSmokeProbe)"; refused_code=$?
+probe_db="$(sql_as sa "${sa_password}" "SELECT CASE WHEN DB_ID('GoldmarkSmokeProbe') IS NULL THEN 'absent' ELSE 'present' END;")"
+if [[ ${refused_code} -eq 3 && "${refused}" == *"mapped into database Goldmark"* && "${probe_db}" == absent ]]; then
+  pass "a refused run creates no database (login already mapped elsewhere)"
+else
+  fail "a refused run creates no database" "exit ${refused_code}, database ${probe_db}"
+fi
+sql_as sa "${sa_password}" "CREATE USER smoke_collision WITHOUT LOGIN;" >/dev/null
+refused="$(db_init -e Goldmark__Database__User=smoke_collision -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
+probe_login="$(sql_as sa "${sa_password}" "SELECT CASE WHEN SUSER_ID('smoke_collision') IS NULL THEN 'absent' ELSE 'present' END;")"
+sql_as sa "${sa_password}" "DROP USER smoke_collision;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"belongs to a different login"* && "${probe_login}" == absent ]]; then
+  pass "a database user with the login's name but another SID is refused before the login is created"
+else
+  fail "a database user with the login's name but another SID is refused" "exit ${refused_code}, login ${probe_login}"
+fi
+
 accepted="$(db_init)"
 if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
   pass "db-init accepts the login again once the extra rights are removed"
