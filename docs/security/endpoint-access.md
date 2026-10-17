@@ -8,8 +8,8 @@ without a classification here and in the test.
 
 | Endpoint | Policy | Why anonymous | What it can reveal |
 |---|---|---|---|
-| `GET /health/live` | Anonymous | Container orchestrators, load balancers and the image `HEALTHCHECK` call it without credentials | `Healthy` only; `Cache-Control: no-store` |
-| `GET /health/ready` | Anonymous | As above; readiness gates traffic | `Healthy` / `Unhealthy` only. No component names, versions, host names or error text; failure details go to the log (exception text at Debug only) |
+| `GET, HEAD /health/live` | Anonymous | Container orchestrators, load balancers and the image `HEALTHCHECK` call it without credentials | `Healthy` only; `Cache-Control: no-store` |
+| `GET, HEAD /health/ready` | Anonymous | As above; readiness gates traffic | `Healthy` / `Unhealthy` only. No component names, versions, host names or error text; failure details go to the log (exception text at Debug only) |
 | `* /api/{**path}` (unmatched API routes) | Anonymous | Catch-all that returns a Problem Details `404` so unknown API paths never return the SPA shell | Nothing: a generic 404 |
 | `GET, HEAD {**path:nonfile}` (SPA shell) | Anonymous | The browser must load the sign-in screen before the user is authenticated | Static HTML with no data |
 | Static files (`/assets/*`, `/favicon.svg`) | Anonymous (static file middleware, not an endpoint) | Same as the SPA shell | Compiled front-end code; no data or secrets |

@@ -55,14 +55,29 @@ internal static class BootstrapDatabaseCommand
             THROW 50001, N'The runtime login is a sysadmin; refusing to continue.', 1;
         """;
 
-    // Executed as the runtime login. Every column must be 0.
-    private const string VerifySql = """
-        SELECT
-            ISNULL(IS_SRVROLEMEMBER(N'sysadmin'), 0) AS IsSysadmin,
-            ISNULL(IS_MEMBER(N'db_owner'), 0) AS IsDbOwner,
-            ISNULL(IS_MEMBER(N'db_ddladmin'), 0) AS IsDdlAdmin,
-            ISNULL(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'CREATE TABLE'), 0) AS CanCreateTable,
-            ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, N'CONTROL SERVER'), 0) AS HasControlServer;
+    // Executed as the runtime login. Returns one row per role membership or effective
+    // permission beyond the baseline that a fresh CONNECT-only login has on SQL Server 2025
+    // (measured: server CONNECT SQL + VIEW ANY DATABASE; database CONNECT + the two VIEW ANY
+    // COLUMN ... KEY DEFINITION grants that public holds). No rows = least privilege.
+    // Slice 2 extends the database allow-list with the runtime DML grants.
+    // System views differ in collation, so every column is collated to the database default.
+    internal const string VerifySql = """
+        SET NOCOUNT ON;
+        SELECT CAST(N'server role' AS nvarchar(32)) AS Kind, r.name COLLATE DATABASE_DEFAULT AS Name
+        FROM sys.login_token AS t JOIN sys.server_principals AS r ON r.sid = t.sid
+        WHERE t.type = N'SERVER ROLE' AND r.name <> N'public'
+        UNION ALL
+        SELECT N'database role', name COLLATE DATABASE_DEFAULT
+        FROM sys.user_token WHERE type = N'ROLE' AND name <> N'public'
+        UNION ALL
+        SELECT N'server permission', permission_name COLLATE DATABASE_DEFAULT
+        FROM sys.fn_my_permissions(NULL, N'SERVER')
+        WHERE permission_name NOT IN (N'CONNECT SQL', N'VIEW ANY DATABASE')
+        UNION ALL
+        SELECT N'database permission', permission_name COLLATE DATABASE_DEFAULT
+        FROM sys.fn_my_permissions(NULL, N'DATABASE')
+        WHERE permission_name NOT IN (N'CONNECT', N'VIEW ANY COLUMN ENCRYPTION KEY DEFINITION',
+            N'VIEW ANY COLUMN MASTER KEY DEFINITION');
         """;
 
     public static async Task<int> RunAsync()
@@ -113,24 +128,33 @@ internal static class BootstrapDatabaseCommand
             await using var verify = appConnection.CreateCommand();
             verify.CommandText = VerifySql;
             await using var result = await verify.ExecuteReaderAsync();
-            await result.ReadAsync();
-            var privileged = Enumerable.Range(0, result.FieldCount)
-                .Where(i => Convert.ToInt32(result.GetValue(i), System.Globalization.CultureInfo.InvariantCulture) != 0)
-                .Select(result.GetName)
-                .ToList();
-            if (privileged.Count > 0)
+            var excess = new List<string>();
+            while (await result.ReadAsync())
             {
+                excess.Add($"{result.GetString(0)} {result.GetString(1)}");
+            }
+
+            if (excess.Count > 0)
+            {
+                // Refuse rather than revoke: these rights were granted outside Goldmark.
                 await Console.Error.WriteLineAsync(
-                    $"bootstrap-db: the runtime login '{db.User}' is over-privileged ({string.Join(", ", privileged)}). Remove those rights.");
+                    $"bootstrap-db: refusing to continue: the runtime login '{db.User}' has rights beyond CONNECT: " +
+                    $"{string.Join("; ", excess)}. Remove them, or use a different login.");
                 return 3;
             }
 
-            Console.WriteLine($"bootstrap-db: verified runtime login '{db.User}' can connect and has no elevated rights.");
+            Console.WriteLine($"bootstrap-db: verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT.");
             return 0;
         }
         catch (SqlException ex)
         {
             await Console.Error.WriteLineAsync($"bootstrap-db: SQL Server error {ex.Number}: {ex.Message}");
+            return 1;
+        }
+        catch (OperationCanceledException)
+        {
+            await Console.Error.WriteLineAsync(
+                $"bootstrap-db: SQL Server did not accept connections within {bootstrap.WaitSeconds} s.");
             return 1;
         }
     }
@@ -172,6 +196,12 @@ internal static class BootstrapDatabaseCommand
             errors.Add($"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.");
         }
 
+        if (db.ConnectTimeoutSeconds is < 1 or > 120)
+        {
+            // 0 would mean "wait forever" to SqlClient.
+            errors.Add($"{DatabaseOptions.SectionName}:ConnectTimeoutSeconds must be between 1 and 120.");
+        }
+
         if (bootstrap.WaitSeconds is < 0 or > 900)
         {
             errors.Add($"{BootstrapOptions.SectionName}:WaitSeconds must be between 0 and 900.");
@@ -180,22 +210,33 @@ internal static class BootstrapDatabaseCommand
         return errors;
     }
 
+    /// <summary>
+    /// Retries until SQL Server accepts the connection. The whole wait, including each
+    /// connection attempt, is bounded by <paramref name="wait"/> plus one connect timeout.
+    /// </summary>
     private static async Task<SqlConnection> OpenWithRetryAsync(string connectionString, TimeSpan wait)
     {
+        var connectTimeout = TimeSpan.FromSeconds(new SqlConnectionStringBuilder(connectionString).ConnectTimeout);
+        using var overall = new CancellationTokenSource(wait + connectTimeout);
         var deadline = DateTime.UtcNow + wait;
         while (true)
         {
             var connection = new SqlConnection(connectionString);
             try
             {
-                await connection.OpenAsync();
+                await connection.OpenAsync(overall.Token);
                 return connection;
             }
             catch (SqlException ex) when (DateTime.UtcNow < deadline)
             {
                 await connection.DisposeAsync();
                 Console.WriteLine($"bootstrap-db: SQL Server not ready yet (error {ex.Number}); retrying");
-                await Task.Delay(TimeSpan.FromSeconds(3));
+                await Task.Delay(TimeSpan.FromSeconds(3), overall.Token);
+            }
+            catch
+            {
+                await connection.DisposeAsync();
+                throw;
             }
         }
     }

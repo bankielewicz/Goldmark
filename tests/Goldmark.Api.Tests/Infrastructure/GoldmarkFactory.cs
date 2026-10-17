@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -48,6 +49,14 @@ public class GoldmarkFactory : WebApplicationFactory<Program>
     }
 
     public string WebRoot { get; }
+
+    /// <summary>Writes a valid PEM certificate and key (an operator-supplied pair) and returns their paths.</summary>
+    public (string Certificate, string Key) CreateCertificatePair(string name = "server")
+    {
+        using var certificate = Goldmark.Api.Security.TlsCertificateProvider.Create(["goldmark.example.com"], DateTimeOffset.UtcNow);
+        using var key = certificate.GetECDsaPrivateKey()!;
+        return (CreateFile($"{name}.crt", certificate.ExportCertificatePem()), CreateFile($"{name}.key", key.ExportPkcs8PrivateKeyPem()));
+    }
 
     /// <summary>Creates a file with the given content in this factory's temporary directory.</summary>
     public string CreateFile(string name, string content = "placeholder")

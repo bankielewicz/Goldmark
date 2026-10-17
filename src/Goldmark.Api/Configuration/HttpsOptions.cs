@@ -1,5 +1,7 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using Goldmark.Api.Security;
 using Microsoft.Extensions.Options;
 
 namespace Goldmark.Api.Configuration;
@@ -73,6 +75,11 @@ internal sealed partial class HttpsOptionsValidator : IValidateOptions<HttpsOpti
         {
             failures.Add($"{HttpsOptions.SectionName}:CertificatePath or KeyPath does not point to a readable file.");
         }
+        else if (hasCert && !CanLoad(options.CertificatePath!, options.KeyPath!))
+        {
+            failures.Add($"{HttpsOptions.SectionName}:CertificatePath/KeyPath could not be loaded as a PEM certificate " +
+                "and matching unencrypted private key (malformed, encrypted or mismatched).");
+        }
 
         if (!hasCert)
         {
@@ -102,5 +109,20 @@ internal sealed partial class HttpsOptionsValidator : IValidateOptions<HttpsOpti
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    // Loading here turns operator mistakes into a clean startup failure instead of an
+    // unhandled exception while Kestrel is being configured.
+    private static bool CanLoad(string certificatePath, string keyPath)
+    {
+        try
+        {
+            using var certificate = TlsCertificateProvider.LoadPem(certificatePath, keyPath);
+            return certificate.HasPrivateKey;
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
     }
 }

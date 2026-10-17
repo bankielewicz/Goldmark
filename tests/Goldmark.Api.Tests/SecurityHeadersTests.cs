@@ -125,8 +125,9 @@ public sealed class HstsTests
     public async Task Hsts_turns_on_automatically_with_an_operator_supplied_certificate()
     {
         await using var factory = new GoldmarkFactory();
-        factory.Settings["Goldmark:Https:CertificatePath"] = factory.CreateFile("server.crt");
-        factory.Settings["Goldmark:Https:KeyPath"] = factory.CreateFile("server.key");
+        var (certificate, key) = factory.CreateCertificatePair();
+        factory.Settings["Goldmark:Https:CertificatePath"] = certificate;
+        factory.Settings["Goldmark:Https:KeyPath"] = key;
         factory.Settings["Goldmark:Https:Hsts:MaxAgeDays"] = "30";
         factory.Settings["Goldmark:Https:Hsts:IncludeSubDomains"] = "true";
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://goldmark.example.com") });
@@ -140,8 +141,9 @@ public sealed class HstsTests
     public async Task Hsts_can_be_disabled_explicitly_with_an_operator_supplied_certificate()
     {
         await using var factory = new GoldmarkFactory();
-        factory.Settings["Goldmark:Https:CertificatePath"] = factory.CreateFile("server.crt");
-        factory.Settings["Goldmark:Https:KeyPath"] = factory.CreateFile("server.key");
+        var (certificate, key) = factory.CreateCertificatePair();
+        factory.Settings["Goldmark:Https:CertificatePath"] = certificate;
+        factory.Settings["Goldmark:Https:KeyPath"] = key;
         factory.Settings["Goldmark:Https:Hsts:Enabled"] = "false";
         using var client = factory.CreateClient(new() { BaseAddress = new Uri("https://goldmark.example.com") });
 

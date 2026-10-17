@@ -30,6 +30,32 @@ public sealed class HealthEndpointTests(GoldmarkFactory factory) : IClassFixture
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString(), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("POST", "/health/live")]
+    [InlineData("PUT", "/health/live")]
+    [InlineData("DELETE", "/health/ready")]
+    [InlineData("POST", "/health/ready")]
+    public async Task Health_endpoints_only_answer_GET_and_HEAD(string method, string path)
+    {
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(new HttpMethod(method), new Uri(path, UriKind.Relative));
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Health_endpoints_answer_HEAD()
+    {
+        using var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Head, new Uri("/health/live", UriKind.Relative));
+
+        using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task Readiness_failure_is_logged_without_exception_text_above_debug()
     {

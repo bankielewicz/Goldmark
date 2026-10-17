@@ -1,3 +1,4 @@
+using System.Security.Cryptography.X509Certificates;
 using Goldmark.Api.Commands;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Tests.Infrastructure;
@@ -63,6 +64,43 @@ public sealed class ConfigurationValidationTests
         { o => o.Hsts.MaxAgeDays = 0, "MaxAgeDays must be between" },
         { o => o.Port = 70000, "Port must be between" },
     };
+
+    [Fact]
+    public void Operator_certificate_files_must_load_as_a_matching_PEM_pair()
+    {
+        var dir = Directory.CreateTempSubdirectory("goldmark-pem-").FullName;
+        try
+        {
+            using var first = Goldmark.Api.Security.TlsCertificateProvider.Create(["a.example"], DateTimeOffset.UtcNow);
+            using var second = Goldmark.Api.Security.TlsCertificateProvider.Create(["b.example"], DateTimeOffset.UtcNow);
+            using var secondKey = second.GetECDsaPrivateKey()!;
+            var cert = Path.Combine(dir, "server.crt");
+            var key = Path.Combine(dir, "server.key");
+            var garbage = Path.Combine(dir, "garbage.pem");
+            var encrypted = Path.Combine(dir, "encrypted.key");
+            File.WriteAllText(cert, first.ExportCertificatePem());
+            File.WriteAllText(key, secondKey.ExportPkcs8PrivateKeyPem());
+            File.WriteAllText(garbage, "not a certificate");
+            File.WriteAllText(encrypted, secondKey.ExportEncryptedPkcs8PrivateKeyPem("pw",
+                new System.Security.Cryptography.PbeParameters(System.Security.Cryptography.PbeEncryptionAlgorithm.Aes256Cbc,
+                    System.Security.Cryptography.HashAlgorithmName.SHA256, 10_000)));
+
+            foreach (var (c, k) in new[] { (cert, key), (garbage, key), (cert, garbage), (cert, encrypted) })
+            {
+                var result = new HttpsOptionsValidator().Validate(null, new HttpsOptions { CertificatePath = c, KeyPath = k });
+                Assert.True(result.Failed, $"{c} + {k} should fail");
+                Assert.Contains(result.Failures!, f => f.Contains("could not be loaded", StringComparison.Ordinal));
+            }
+
+            using var firstKey = first.GetECDsaPrivateKey()!;
+            File.WriteAllText(key, firstKey.ExportPkcs8PrivateKeyPem());
+            Assert.True(new HttpsOptionsValidator().Validate(null, new HttpsOptions { CertificatePath = cert, KeyPath = key }).Succeeded);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 
     [Fact]
     public void Default_https_settings_pass() =>
@@ -159,6 +197,28 @@ public sealed class BootstrapValidationTests
         var db = ValidDatabase();
         db.Password = new string('a', length);
         Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains(":Password", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(121)]
+    public void Connect_timeout_must_be_bounded_so_bootstrap_cannot_hang(int seconds)
+    {
+        var db = ValidDatabase();
+        db.ConnectTimeoutSeconds = seconds;
+        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("ConnectTimeoutSeconds", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Least_privilege_verification_compares_against_the_measured_baseline()
+    {
+        // The query must look at role memberships and effective permissions, not a fixed list of
+        // roles: securityadmin/db_securityadmin passed the previous check.
+        var sql = BootstrapDatabaseCommand.VerifySql;
+        Assert.Contains("sys.login_token", sql, StringComparison.Ordinal);
+        Assert.Contains("sys.user_token", sql, StringComparison.Ordinal);
+        Assert.Contains("fn_my_permissions(NULL, N'SERVER')", sql, StringComparison.Ordinal);
+        Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", sql, StringComparison.Ordinal);
     }
 
     [Fact]
