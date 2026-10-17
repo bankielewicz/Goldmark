@@ -1,0 +1,30 @@
+# Allow-list build context: only what the Dockerfile needs is sent to the
+# builder, so local secrets (.env, keys) can never end up in an image layer.
+*
+!global.json
+!NuGet.config
+!Directory.Build.props
+!Directory.Packages.props
+!.editorconfig
+!src/
+!web/
+src/**/bin/
+src/**/obj/
+web/node_modules/
+web/dist/
+web/playwright-report/
+web/test-results/
+
+# Secrets: the re-includes above (!src/, !web/) would otherwise bring back
+# files that .gitignore excludes. Keep this list in step with the secrets
+# section of .gitignore. These rules come last so they win.
+**/.env
+**/.env.*
+**/*.pfx
+**/*.p12
+**/*.key
+**/*.pem
+**/*.crt
+**/appsettings.*.local.json
+**/secrets.json
+**/.goldmark/

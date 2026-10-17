@@ -1,0 +1,424 @@
+#!/usr/bin/env node
+// Dependency policy check for the Goldmark SPA (PRD NFR-SEC-9, DEC-011).
+//
+// Runs with plain Node.js and no dependencies, so CI can run it BEFORE any
+// package is installed. It fails when:
+//   - a direct dependency is not in dependency-allowlist.json (or is in the
+//     wrong section, or is not pinned to an exact registry version);
+//   - a banned SSR/RSC package appears in package.json or pnpm-lock.yaml;
+//   - a lockfile entry resolves from anywhere other than the registry;
+//   - a pnpm/npm supply-chain setting is missing or weakened, or any setting
+//     outside the reviewed allow-lists appears (e.g. a scoped registry);
+//   - package.json declares install lifecycle scripts.
+//
+// Usage: node scripts/check-dependency-policy.mjs [webDir]
+
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/** Packages that must never appear anywhere in the dependency tree (D1). */
+export const FORBIDDEN = [
+  { test: (n) => n === 'next', reason: 'Next.js (SSR/RSC framework) is banned by D1 / NFR-SEC-9' },
+  {
+    test: (n) => n.startsWith('react-server-dom-'),
+    reason: 'React Server Components runtimes are banned by D1 / NFR-SEC-9',
+  },
+  { test: (n) => n.startsWith('@remix-run/'), reason: 'Remix (SSR) packages are banned by D1 / NFR-SEC-9' },
+  {
+    test: (n) => n.startsWith('@react-router/'),
+    reason: 'React Router framework/server packages are banned; use react-router in library mode (DEC-011)',
+  },
+  { test: (n) => n === '@vitejs/plugin-rsc', reason: 'The Vite RSC plugin is banned by D1 (DEC-011)' },
+];
+
+/** pnpm-workspace.yaml settings that must be present with a compliant value. */
+const REQUIRED_PNPM_SETTINGS = {
+  minimumReleaseAge: { ok: (v) => Number(v) >= 10080, expect: '>= 10080 (7 days, in minutes)' },
+  minimumReleaseAgeStrict: { ok: (v) => v === 'true', expect: 'true' },
+  trustPolicy: { ok: (v) => v === 'no-downgrade', expect: 'no-downgrade' },
+  blockExoticSubdeps: { ok: (v) => v === 'true', expect: 'true' },
+  ignoreScripts: { ok: (v) => v === 'true', expect: 'true' },
+  strictDepBuilds: { ok: (v) => v === 'true', expect: 'true' },
+  engineStrict: { ok: (v) => v === 'true', expect: 'true' },
+};
+
+/**
+ * The only settings pnpm-workspace.yaml may contain. Anything else (registries,
+ * overrides, policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or
+ * weaken installs and must be reviewed by changing this list.
+ */
+const ALLOWED_PNPM_SETTINGS = new Set([...Object.keys(REQUIRED_PNPM_SETTINGS), 'allowBuilds', 'savePrefix']);
+
+/**
+ * The only keys .npmrc may contain, with their required values. Scoped
+ * registries ("@scope:registry"), auth tokens, proxies, custom CAs or
+ * strict-ssl overrides are rejected: they could point an allow-listed
+ * name@version at another source.
+ */
+const REQUIRED_NPMRC = {
+  registry: 'https://registry.npmjs.org/',
+  'ignore-scripts': 'true',
+};
+const ALLOWED_NPMRC = new Map([...Object.entries(REQUIRED_NPMRC), ['engine-strict', 'true']]);
+
+const LIFECYCLE_SCRIPTS = [
+  'preinstall',
+  'install',
+  'postinstall',
+  'prepare',
+  'preprepare',
+  'postprepare',
+  'prepublish',
+  'prepack',
+  'postpack',
+];
+
+const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+const PACKAGE_MANAGER_PIN = /^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/;
+
+function stripComment(line) {
+  const hash = line.indexOf(' #');
+  const cut = line.startsWith('#') ? 0 : hash;
+  return (cut >= 0 ? line.slice(0, cut) : line).trimEnd();
+}
+
+function unquote(value) {
+  const v = value.trim();
+  if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
+    return v.slice(1, -1);
+  }
+  return v;
+}
+
+/**
+ * Minimal reader for the flat pnpm-workspace.yaml we own: top-level scalars and
+ * one level of block or empty-inline maps. Anything fancier is reported, so the
+ * file stays simple enough for this check to reason about.
+ */
+export function parseWorkspaceYaml(text) {
+  const settings = {};
+  const errors = [];
+  let currentMap = null;
+  for (const raw of text.split(/\r?\n/)) {
+    const line = stripComment(raw);
+    if (line.trim() === '') continue;
+    const indented = /^\s/.test(line);
+    if (indented) {
+      const m = line.match(/^\s+(['"]?)([^'":]+)\1:\s*(.*)$/);
+      if (!currentMap || !m) {
+        errors.push(`pnpm-workspace.yaml: unsupported structure near "${raw.trim()}"`);
+        continue;
+      }
+      settings[currentMap][m[2]] = unquote(m[3]);
+      continue;
+    }
+    const m = line.match(/^([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
+    if (!m) {
+      errors.push(`pnpm-workspace.yaml: unsupported line "${raw.trim()}"`);
+      continue;
+    }
+    const [, key, value] = m;
+    if (value === '' || value === '{}') {
+      settings[key] = {};
+      currentMap = value === '' ? key : null;
+    } else {
+      settings[key] = unquote(value);
+      currentMap = null;
+    }
+  }
+  return { settings, errors };
+}
+
+export function parseNpmrc(text) {
+  const out = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (line === '' || line.startsWith('#') || line.startsWith(';')) continue;
+    const eq = line.indexOf('=');
+    if (eq > 0) out[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+  }
+  return out;
+}
+
+/** Package name from a pnpm v9 lockfile key such as "@scope/name@1.2.3(peer@1.0.0)". */
+export function nameFromLockKey(key) {
+  const at = key.indexOf('@', key.startsWith('@') ? 1 : 0);
+  return at > 0 ? key.slice(0, at) : key;
+}
+
+/** Top-level keys pnpm 11 writes for this project, in canonical (unquoted) form. */
+const LOCKFILE_SECTIONS = new Set(['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
+
+/**
+ * The lockfile is read line by line, so it must be in pnpm's canonical layout. YAML
+ * allows equivalent spellings (quoted or re-indented section keys, anchors and
+ * aliases, tags, flow collections, extra documents) that pnpm would read but this
+ * reader would skip. Any of those fails the check instead of being ignored.
+ */
+export function lockfileStructureErrors(text) {
+  const errors = [];
+  const lines = text.split('\n');
+  let section = null;
+  lines.forEach((raw, index) => {
+    const at = `pnpm-lock.yaml line ${index + 1}`;
+    if (raw.includes('\r') || raw.includes('\t')) {
+      errors.push(`${at}: tabs and carriage returns are not allowed`);
+      return;
+    }
+    if (raw.trim() === '') return;
+    if (/^(---|\.\.\.)(\s|$)/.test(raw)) {
+      errors.push(`${at}: multiple YAML documents are not allowed`);
+      return;
+    }
+    if (/(^|[\s:[{,])[&*!][\w!-]/.test(raw.replace(/'[^']*'|"[^"]*"/g, "''")) || /^\s*\?(\s|$)/.test(raw)) {
+      errors.push(`${at}: YAML anchors, aliases, tags and complex keys are not allowed`);
+      return;
+    }
+    const indent = raw.length - raw.trimStart().length;
+    if (indent % 2 !== 0) {
+      errors.push(`${at}: odd indentation`);
+      return;
+    }
+    if (indent === 0) {
+      const top = raw.match(/^([A-Za-z]+):(?: (.*))?$/);
+      if (!top || !LOCKFILE_SECTIONS.has(top[1])) {
+        errors.push(`${at}: unexpected top-level entry "${raw.slice(0, 60)}"`);
+        section = null;
+        return;
+      }
+      section = top[1];
+      const value = top[2] ?? '';
+      if (section === 'lockfileVersion' ? !/^'9\.0'$/.test(value) : value !== '' && value !== '{}') {
+        errors.push(`${at}: unexpected value for "${section}"`);
+      }
+      return;
+    }
+    // Only package-like keys (they contain "@") may be quoted; a quoted plain key such as
+    // 'resolution' is a YAML-equivalent spelling this reader would otherwise skip.
+    // pnpm quotes keys with single quotes and no escapes; double quotes allow escapes
+    // ("\x6eext") that would hide the real name from this reader.
+    if (/^\s*"/.test(raw) || /^\s*'[^']*''/.test(raw)) {
+      errors.push(`${at}: double-quoted or escaped keys are not canonical`);
+    }
+    const quotedKey = raw.match(/^\s*(['"])([^'"]*)\1:(\s|$)/);
+    if (quotedKey && !quotedKey[2].includes('@')) {
+      errors.push(`${at}: quoted key "${quotedKey[2]}" is not canonical`);
+    }
+    if (section === 'packages' || section === 'snapshots') {
+      if (indent === 2 && !/^ {2}(['"]?)[^\s'"].*\1:( \{\})?$/.test(raw)) {
+        errors.push(`${at}: malformed ${section} entry`);
+      }
+    }
+  });
+
+  // Every package entry carries exactly one resolution, in pnpm's canonical form.
+  let entry = null;
+  let resolutions = 0;
+  const closeEntry = () => {
+    if (entry && resolutions !== 1) {
+      errors.push(`pnpm-lock.yaml: package ${entry} must have exactly one canonical resolution (found ${resolutions})`);
+    }
+  };
+  section = null;
+  for (const raw of lines) {
+    if (/^\S/.test(raw)) {
+      closeEntry();
+      entry = null;
+      section = raw.replace(/:.*$/, '');
+      continue;
+    }
+    if (section !== 'packages') continue;
+    const key = raw.match(/^ {2}(['"]?)([^\s'"].*?)\1:\s*$/);
+    if (key) {
+      closeEntry();
+      entry = key[2];
+      resolutions = 0;
+    } else if (/^ {4}resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/.test(raw)) {
+      resolutions += 1;
+    } else if (/resolution/.test(raw)) {
+      errors.push(`pnpm-lock.yaml: non-canonical resolution in ${entry}: ${raw.trim().slice(0, 80)}`);
+    }
+  }
+  closeEntry();
+  return errors;
+}
+
+/** Package names and resolution lines from the packages/snapshots sections. */
+export function readLockfile(text) {
+  const names = new Set();
+  const badResolutions = [];
+  let section = null;
+  let currentKey = null;
+  for (const raw of text.split(/\r?\n/)) {
+    if (/^\S/.test(raw)) {
+      section = raw.replace(/:.*$/, '');
+      currentKey = null;
+      continue;
+    }
+    if (section !== 'packages' && section !== 'snapshots') continue;
+    const keyMatch = raw.match(/^ {2}(['"]?)(.+?)\1:\s*(\{\})?\s*$/);
+    if (keyMatch) {
+      currentKey = keyMatch[2];
+      names.add(nameFromLockKey(currentKey));
+      continue;
+    }
+    const res = raw.match(/^ {4}resolution:\s*(.*)$/);
+    if (res && section === 'packages') {
+      const value = res[1];
+      const registryOnly = /integrity:\s*sha512-/.test(value) && !/(tarball|repo|directory|type):/.test(value);
+      if (!registryOnly) badResolutions.push(`${currentKey}: ${value}`);
+    }
+  }
+  return { names, badResolutions };
+}
+
+function readJson(path, errors) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    errors.push(`${path}: cannot read JSON (${err.message})`);
+    return null;
+  }
+}
+
+function checkForbidden(name, where, errors) {
+  for (const rule of FORBIDDEN) {
+    if (rule.test(name)) errors.push(`${where}: banned package "${name}" — ${rule.reason}`);
+  }
+}
+
+/** Returns a list of policy violations for the web project in `webDir`. */
+export function checkPolicy(webDir) {
+  const errors = [];
+  const pkgPath = join(webDir, 'package.json');
+  const allowPath = join(webDir, 'dependency-allowlist.json');
+  const pkg = readJson(pkgPath, errors);
+  const allow = readJson(allowPath, errors);
+  if (!pkg || !allow) return errors;
+
+  // --- package.json -------------------------------------------------------
+  if (!PACKAGE_MANAGER_PIN.test(pkg.packageManager ?? '')) {
+    errors.push('package.json: "packageManager" must pin pnpm to an exact version with a sha512 hash');
+  }
+  for (const field of ['optionalDependencies', 'peerDependencies', 'bundleDependencies', 'bundledDependencies']) {
+    if (pkg[field] && Object.keys(pkg[field]).length > 0) {
+      errors.push(`package.json: "${field}" is not allowed (NFR-SEC-9); use dependencies or devDependencies`);
+    }
+  }
+  for (const script of LIFECYCLE_SCRIPTS) {
+    if (pkg.scripts?.[script] !== undefined) {
+      errors.push(`package.json: lifecycle script "${script}" is not allowed`);
+    }
+  }
+  const sections = [
+    ['dependencies', 'runtime'],
+    ['devDependencies', 'dev'],
+  ];
+  for (const [field, allowSection] of sections) {
+    for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+      checkForbidden(name, `package.json ${field}`, errors);
+      const entry = allow[allowSection]?.[name];
+      if (!entry) {
+        const other = allowSection === 'runtime' ? 'dev' : 'runtime';
+        errors.push(
+          allow[other]?.[name]
+            ? `package.json: "${name}" is allow-listed as ${other}, not ${allowSection}; move it or update the allow-list in a reviewed PR`
+            : `package.json: "${name}" is not in dependency-allowlist.json (${allowSection}); adding a dependency requires a reviewed allow-list entry`,
+        );
+      } else if (typeof entry.justification !== 'string' || entry.justification.trim().length < 10) {
+        errors.push(`dependency-allowlist.json: "${name}" needs a justification`);
+      }
+      if (!EXACT_VERSION.test(spec)) {
+        errors.push(`package.json: "${name}" must be pinned to an exact registry version (found "${spec}")`);
+      }
+    }
+  }
+  for (const section of ['runtime', 'dev']) {
+    for (const [name, entry] of Object.entries(allow[section] ?? {})) {
+      checkForbidden(name, `dependency-allowlist.json ${section}`, errors);
+      if (typeof entry?.justification !== 'string' || entry.justification.trim().length < 10) {
+        errors.push(`dependency-allowlist.json: "${name}" needs a justification`);
+      }
+    }
+  }
+
+  // --- pnpm-workspace.yaml -------------------------------------------------
+  const wsPath = join(webDir, 'pnpm-workspace.yaml');
+  if (!existsSync(wsPath)) {
+    errors.push('pnpm-workspace.yaml is missing (it carries the pnpm supply-chain settings)');
+  } else {
+    const { settings, errors: yamlErrors } = parseWorkspaceYaml(readFileSync(wsPath, 'utf8'));
+    errors.push(...yamlErrors);
+    for (const [key, rule] of Object.entries(REQUIRED_PNPM_SETTINGS)) {
+      const value = settings[key];
+      if (value === undefined || typeof value !== 'string' || !rule.ok(value)) {
+        errors.push(`pnpm-workspace.yaml: "${key}" must be ${rule.expect} (found ${JSON.stringify(value)})`);
+      }
+    }
+    for (const key of Object.keys(settings)) {
+      if (!ALLOWED_PNPM_SETTINGS.has(key)) {
+        errors.push(
+          `pnpm-workspace.yaml: "${key}" is not on the reviewed settings list; settings such as registries, overrides or policy exclusions can redirect or weaken installs`,
+        );
+      }
+    }
+    const builds = settings.allowBuilds;
+    if (typeof builds !== 'object' || builds === null) {
+      errors.push('pnpm-workspace.yaml: "allowBuilds" must be present as a map (use {} when empty)');
+    } else {
+      for (const [name, value] of Object.entries(builds)) {
+        if (value === 'true' && !allow.allowBuilds?.[name]) {
+          errors.push(
+            `pnpm-workspace.yaml: build scripts for "${name}" are allowed but not approved in dependency-allowlist.json "allowBuilds"`,
+          );
+        } else if (value !== 'true' && value !== 'false') {
+          errors.push(`pnpm-workspace.yaml: allowBuilds "${name}" must be true or false (found "${value}")`);
+        }
+      }
+    }
+  }
+
+  // --- .npmrc -------------------------------------------------------------
+  const npmrcPath = join(webDir, '.npmrc');
+  const npmrc = existsSync(npmrcPath) ? parseNpmrc(readFileSync(npmrcPath, 'utf8')) : {};
+  for (const [key, expected] of Object.entries(REQUIRED_NPMRC)) {
+    if (npmrc[key] !== expected) errors.push(`.npmrc: "${key}" must be "${expected}"`);
+  }
+  for (const [key, value] of Object.entries(npmrc)) {
+    if (!ALLOWED_NPMRC.has(key)) {
+      errors.push(`.npmrc: "${key}" is not allowed; only ${[...ALLOWED_NPMRC.keys()].join(', ')} may be set`);
+    } else if (!(key in REQUIRED_NPMRC) && ALLOWED_NPMRC.get(key) !== value) {
+      errors.push(`.npmrc: "${key}" must be "${ALLOWED_NPMRC.get(key)}"`);
+    }
+  }
+
+  // --- pnpm-lock.yaml ------------------------------------------------------
+  const lockPath = join(webDir, 'pnpm-lock.yaml');
+  const hasDeps = Object.keys(pkg.dependencies ?? {}).length + Object.keys(pkg.devDependencies ?? {}).length > 0;
+  if (!existsSync(lockPath)) {
+    if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
+  } else {
+    const lockText = readFileSync(lockPath, 'utf8');
+    errors.push(...lockfileStructureErrors(lockText));
+    const { names, badResolutions } = readLockfile(lockText);
+    for (const name of names) checkForbidden(name, 'pnpm-lock.yaml', errors);
+    for (const entry of badResolutions) {
+      errors.push(`pnpm-lock.yaml: non-registry resolution is not allowed: ${entry}`);
+    }
+  }
+
+  return errors;
+}
+
+const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (isMain) {
+  const webDir = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..'));
+  const errors = checkPolicy(webDir);
+  if (errors.length > 0) {
+    console.error(`Dependency policy check FAILED (${errors.length} problem(s)):`);
+    for (const e of errors) console.error(`  - ${e}`);
+    process.exit(1);
+  }
+  console.log('Dependency policy check passed.');
+}
