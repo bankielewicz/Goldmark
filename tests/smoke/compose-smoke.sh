@@ -249,21 +249,51 @@ else
   fail "db-init is idempotent (re-run succeeds without re-creating the database)" "exit ${rerun_code}"
 fi
 
-# A pre-existing runtime login with extra rights must be refused, not accepted.
+# A pre-existing runtime login is inspected before anything is changed.
+db_init() { "${compose[@]}" run --rm --no-deps "$@" db-init 2>&1; }
+app_password_works() { [[ "$(sql_as goldmark_app "$1" "SELECT 42;")" == 42 ]]; }
+other_password="$(secret)"
+
 sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin ADD MEMBER goldmark_app; ALTER ROLE db_securityadmin ADD MEMBER goldmark_app;" >/dev/null
-refused="$("${compose[@]}" run --rm --no-deps db-init 2>&1)"
-refused_code=$?
-sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin DROP MEMBER goldmark_app; ALTER ROLE db_securityadmin DROP MEMBER goldmark_app;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"server role securityadmin"* && "${refused}" == *"database role db_securityadmin"* ]]; then
-  pass "db-init refuses a runtime login holding securityadmin / db_securityadmin (exit 3)"
+refused="$(db_init -e Goldmark__Database__Password="${other_password}" -e Goldmark__Bootstrap__RotatePassword=true)"; refused_code=$?
+if [[ ${refused_code} -eq 3 && "${refused}" == *"server role securityadmin"* && "${refused}" == *"database role db_securityadmin"* && "${refused}" == *"Nothing was changed"* ]] \
+   && app_password_works "${app_password}"; then
+  pass "db-init refuses a privileged existing login (securityadmin/db_securityadmin) without touching its password, even with rotation on"
 else
-  fail "db-init refuses a runtime login holding securityadmin / db_securityadmin" "exit ${refused_code}"
+  fail "db-init refuses a privileged existing login without touching its password" "exit ${refused_code}"
 fi
-accepted="$("${compose[@]}" run --rm --no-deps db-init 2>&1)"
-if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
-  pass "db-init accepts the login again once the extra roles are removed"
+sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin DROP MEMBER goldmark_app; ALTER ROLE db_securityadmin DROP MEMBER goldmark_app;" >/dev/null
+
+# Server-scoped grants must be issued from master.
+sql_as sa "${sa_password}" "GRANT CONTROL ON SCHEMA::dbo TO goldmark_app; USE master; GRANT IMPERSONATE ON LOGIN::sa TO goldmark_app;" >/dev/null
+refused="$(db_init)"; refused_code=$?
+sql_as sa "${sa_password}" "REVOKE CONTROL ON SCHEMA::dbo FROM goldmark_app; USE master; REVOKE IMPERSONATE ON LOGIN::sa FROM goldmark_app;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"CONTROL ON SCHEMA"* && "${refused}" == *"IMPERSONATE ON SERVER_PRINCIPAL"* ]]; then
+  pass "db-init refuses schema- and login-scoped grants (CONTROL ON SCHEMA, IMPERSONATE ON LOGIN)"
 else
-  fail "db-init accepts the login again once the extra roles are removed"
+  fail "db-init refuses schema- and login-scoped grants" "exit ${refused_code}: ${refused:0:600}"
+fi
+
+refused="$(db_init -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
+if [[ ${refused_code} -eq 3 && "${refused}" == *"different password"* ]] && app_password_works "${app_password}"; then
+  pass "db-init does not change an existing login's password unless rotation is requested"
+else
+  fail "db-init does not change an existing login's password unless rotation is requested" "exit ${refused_code}"
+fi
+
+rotated="$(db_init -e Goldmark__Database__Password="${other_password}" -e Goldmark__Bootstrap__RotatePassword=true)"; rotated_code=$?
+restored="$(db_init -e Goldmark__Bootstrap__RotatePassword=true)"; restored_code=$?
+if [[ ${rotated_code} -eq 0 && "${rotated}" == *"rotated login password"* && ${restored_code} -eq 0 ]] && app_password_works "${app_password}"; then
+  pass "explicit rotation changes the password (rotated and rotated back)"
+else
+  fail "explicit rotation changes the password" "exit ${rotated_code}/${restored_code}"
+fi
+
+accepted="$(db_init)"
+if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
+  pass "db-init accepts the login again once the extra rights are removed"
+else
+  fail "db-init accepts the login again once the extra rights are removed"
 fi
 
 # --- Readiness failure and recovery ----------------------------------------------
@@ -317,7 +347,7 @@ for n, line in enumerate(lines, 1):
 PY
 )"
 if [[ -z "${json_result}" ]]; then pass "app logs are JSON lines"; else fail "app logs are JSON lines" "${json_result}"; fi
-check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' '${work}/app.log' '${work}/other.log' '${work}/compose-stderr.log'"
+check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' -e '${other_password}' '${work}/app.log' '${work}/other.log' '${work}/compose-stderr.log'"
 
 # --- Browser: SPA renders under the served CSP / Trusted Types ---------------------
 if [[ "${GOLDMARK_SMOKE_SKIP_BROWSER:-}" == 1 ]]; then

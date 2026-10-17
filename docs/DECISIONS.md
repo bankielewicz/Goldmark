@@ -249,19 +249,37 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 - `bootstrap-db` (one-shot `db-init` container) idempotently creates the
   `Goldmark` database and the runtime login with **CONNECT only**. DDL takes
-  QUOTENAME'd parameters. It updates the password on re-run (rotation) and
-  refuses a `sysadmin` runtime login.
-- It then connects *as the runtime login* and **refuses (exit 3)** if the login
-  has any server or database role besides `public`, or any effective permission
-  beyond the baseline measured for a fresh login on SQL Server 2025:
-  - server: `CONNECT SQL`, `VIEW ANY DATABASE`;
-  - database: `CONNECT`, `VIEW ANY COLUMN ENCRYPTION KEY DEFINITION`,
-    `VIEW ANY COLUMN MASTER KEY DEFINITION`.
+  QUOTENAME'd parameters.
+- **An existing login is inspected before anything is changed** (review
+  finding). It must be an enabled SQL login with nothing beyond the baseline
+  measured for a fresh login on SQL Server 2025. Otherwise bootstrap
+  **refuses (exit 3) and changes nothing**. The inspection runs as the
+  administrator and covers:
+  - server and database role memberships;
+  - explicit grants at every scope (server, endpoints, logins, database,
+    schemas, objects, users), so for example `CONTROL ON SCHEMA` and
+    `IMPERSONATE ON LOGIN` are caught;
+  - ownership of databases, schemas, objects, principals or endpoints;
+  - mappings into other databases;
+  - non-default grants to `public`.
 
-  It refuses rather than revokes, because such rights were granted outside
-  Goldmark. The original check (fixed role list) passed a login holding
-  `securityadmin` and `db_securityadmin` (review finding). Slice 2 adds the
-  runtime DML grants to the database allow-list.
+  The baseline is the measured set for a fresh login: on the server, the
+  login's `CONNECT SQL`, and public's `VIEW ANY DATABASE` and `CONNECT` on
+  system endpoints; in the database, the user's `CONNECT`, and public's two
+  `VIEW ANY COLUMN … KEY DEFINITION` grants and `SELECT` on system objects.
+  DENYs are ignored because they only remove rights.
+- **An existing login's password is never changed** unless
+  `GOLDMARK_DB_ROTATE_PASSWORD=true` (`Goldmark:Bootstrap:RotatePassword`) is
+  set for that run, and never for a login that fails inspection. A name that
+  collides with another account is therefore left alone. If the configured
+  password already matches, nothing is changed.
+- After provisioning, the login is checked twice and bootstrap refuses on any
+  excess: from the catalog (above), and as itself through its effective
+  permissions (`sys.login_token`, `sys.user_token`, `fn_my_permissions`). The
+  first fixed-role check passed a login holding `securityadmin` and
+  `db_securityadmin` (review finding).
+- Refuse rather than revoke: such rights were granted outside Goldmark.
+  Slice 2 adds the runtime DML grants to the baseline.
 - The connect timeout must be 1–120 s (0 means "forever" to SqlClient), and
   the whole wait is cancelled at `WaitSeconds` plus one connect timeout, so
   `db-init` cannot hang the stack.
@@ -365,10 +383,10 @@ done; **Not executed** = implemented but the check has not run (and why).
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|
 | 1 | `docker compose up` serves the health endpoints and the empty SPA (PRD §11 slice 1) | **Met** (local and CI) | Compose smoke test 36/36 locally and on GitHub Actions (PR #1, run 38981505549) |
-| 2 | CI green (PRD §11) | **Met except dependency review** | PR #1 run 38981505549: policy, web, .NET, CodeQL ×3, code scanning, Compose smoke all pass; dependency review needs the owner to enable the dependency graph |
+| 2 | CI green (PRD §11) | **Met** | PR #1: all nine checks pass, including dependency review once the dependency graph was enabled |
 | 3 | An unlisted npm dependency fails CI (PRD §11) | **Met (local)**: checker test + CI step before install | `check-dependency-policy.test.mjs`; demonstrated in the PR |
 | 4 | CI: build, test (PRD §11) | Met (defined); run not executed | `ci.yml` |
-| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | **CodeQL met**: C#, JS/TS and Actions pass; its first run found a real issue, which was fixed. **Dependency review blocked**: "Dependency graph is not enabled" (owner setting) | DEC-018 |
+| 5 | CI: CodeQL, dependency review (PRD §11, NFR-SEC-7) | **CodeQL met**: C#, JS/TS and Actions pass; its first run found a real issue, which was fixed. **Dependency review met** once the owner enabled the dependency graph | DEC-018 |
 | 6 | Dockerfile; Compose with SQL Server 2025 **Express** (PRD §11) | **Met (local)** | Smoke test: EngineEdition 4, major version 17 |
 | 7 | `/health/live`, `/health/ready` (US-01) | **Met** | 3 in-process tests + 5 smoke checks |
 | 8 | Serilog JSON; no credentials, auth headers or cookies in logs (PRD §11, NFR-LOG-1) | **Met** | `LoggingTests`; smoke: JSON lines, no secret in any container log |

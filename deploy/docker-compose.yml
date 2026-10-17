@@ -66,6 +66,7 @@ services:
       Goldmark__Database__ServerCertificatePath: /run/goldmark/sql-tls/sqlserver.crt
       Goldmark__Bootstrap__AdminUser: sa
       Goldmark__Bootstrap__AdminPassword: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in deploy/.env}
+      Goldmark__Bootstrap__RotatePassword: ${GOLDMARK_DB_ROTATE_PASSWORD:-false}
     volumes:
       - sql-tls-public:/run/goldmark/sql-tls:ro
     networks: [backend]
