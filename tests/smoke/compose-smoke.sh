@@ -84,7 +84,7 @@ cleanup() {
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1
   fi
 }
-trap cleanup EXIT
+trap 'remove_decoys 2>/dev/null; cleanup' EXIT
 
 # Polls `$@` once a second until it succeeds or `timeout` seconds pass.
 wait_until() {
@@ -116,6 +116,37 @@ else
   fail "compose refuses to run without required secrets" "${missing_output:0:200}"
 fi
 
+# --- Build context never contains git-ignored secrets ------------------------------
+decoys=(
+  "src/Goldmark.Api/appsettings.Production.local.json"
+  "src/Goldmark.Api/secrets.json"
+  "src/Goldmark.Api/smoke-decoy.p12"
+  "src/Goldmark.Api/smoke-decoy.pfx"
+  "src/Goldmark.Api/smoke-decoy.key"
+  "src/Goldmark.Api/.goldmark/smoke-decoy.key"
+  "web/.env"
+  "web/smoke-decoy.pem"
+)
+remove_decoys() { for d in "${decoys[@]}"; do rm -f "${repo}/${d}"; done; rmdir "${repo}/src/Goldmark.Api/.goldmark" 2>/dev/null || true; }
+for d in "${decoys[@]}"; do
+  if [[ -e "${repo}/${d}" ]]; then echo "refusing to overwrite existing ${d}"; exit 1; fi
+done
+for d in "${decoys[@]}"; do mkdir -p "$(dirname "${repo}/${d}")"; echo "goldmark-smoke-decoy" > "${repo}/${d}"; done
+context_dir="${work}/build-context"
+printf 'FROM scratch\nCOPY . /\n' > "${work}/Dockerfile.context"
+if docker build -q -f "${work}/Dockerfile.context" --output "type=local,dest=${context_dir}" "${repo}" >/dev/null 2>&1; then
+  leaked="$(cd "${context_dir}" && for d in "${decoys[@]}"; do [[ -e "${d}" ]] && echo "${d}"; done)"
+  if [[ -z "${leaked}" && -f "${context_dir}/src/Goldmark.Api/Program.cs" ]]; then
+    pass "Docker build context excludes git-ignored secret files (${#decoys[@]} decoys)"
+  else
+    fail "Docker build context excludes git-ignored secret files" "leaked: ${leaked:-context export incomplete}"
+  fi
+else
+  fail "Docker build context excludes git-ignored secret files" "context export failed"
+fi
+remove_decoys
+rm -rf "${context_dir}"
+
 # --- Build and start -------------------------------------------------------------
 if [[ "${GOLDMARK_SMOKE_NO_BUILD:-}" != 1 ]]; then
   if ! docker compose --progress plain -p "${project}" -f "${repo}/deploy/docker-compose.yml" --env-file "${work}/.env" build app > "${work}/build.log" 2>&1; then
@@ -136,7 +167,16 @@ fi
 
 "${compose[@]}" up -d --no-build
 app_healthy() { [[ "$(docker inspect -f '{{.State.Health.Status}}' "${project}-app-1" 2>/dev/null)" == healthy ]]; }
-if wait_until 360 app_healthy; then
+# Stop waiting early if a one-shot dependency already failed.
+init_failed() {
+  local c
+  for c in sql-volume-init db-init; do
+    [[ "$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "${project}-${c}-1" 2>/dev/null)" =~ ^exited\ [1-9] ]] && return 0
+  done
+  return 1
+}
+app_healthy_or_init_failed() { app_healthy || init_failed; }
+if wait_until 360 app_healthy_or_init_failed && app_healthy; then
   pass "stack starts and the app container becomes healthy (bounded: 360 s)"
 else
   fail "stack starts and the app container becomes healthy (bounded: 360 s)" "$("${compose[@]}" ps -a 2>&1)"
@@ -209,6 +249,23 @@ else
   fail "db-init is idempotent (re-run succeeds without re-creating the database)" "exit ${rerun_code}"
 fi
 
+# A pre-existing runtime login with extra rights must be refused, not accepted.
+sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin ADD MEMBER goldmark_app; ALTER ROLE db_securityadmin ADD MEMBER goldmark_app;" >/dev/null
+refused="$("${compose[@]}" run --rm --no-deps db-init 2>&1)"
+refused_code=$?
+sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin DROP MEMBER goldmark_app; ALTER ROLE db_securityadmin DROP MEMBER goldmark_app;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"server role securityadmin"* && "${refused}" == *"database role db_securityadmin"* ]]; then
+  pass "db-init refuses a runtime login holding securityadmin / db_securityadmin (exit 3)"
+else
+  fail "db-init refuses a runtime login holding securityadmin / db_securityadmin" "exit ${refused_code}"
+fi
+accepted="$("${compose[@]}" run --rm --no-deps db-init 2>&1)"
+if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
+  pass "db-init accepts the login again once the extra roles are removed"
+else
+  fail "db-init accepts the login again once the extra roles are removed"
+fi
+
 # --- Readiness failure and recovery ----------------------------------------------
 "${compose[@]}" stop sqlserver >/dev/null 2>&1
 if wait_until 60 is_status /health/ready 503; then pass "readiness turns 503 after SQL Server stops (bounded: 60 s)"; else fail "readiness turns 503 after SQL Server stops (bounded: 60 s)"; fi
@@ -216,6 +273,23 @@ check "liveness stays 200 while SQL Server is down" is_status /health/live 200
 check "readiness body discloses nothing while failing" bash -c "[[ \"\$(curl -s --max-time 15 --cacert '${work}/app-cert.pem' ${base}/health/ready)\" == Unhealthy ]]"
 "${compose[@]}" start sqlserver >/dev/null 2>&1
 if wait_until 240 is_status /health/ready 200; then pass "readiness recovers to 200 after SQL Server restarts (bounded: 240 s)"; else fail "readiness recovers to 200 after SQL Server restarts (bounded: 240 s)"; fi
+
+# --- SQL Server certificate: an interrupted renewal (new key, old certificate) heals --
+old_sql_fp="$(docker exec "${project}-sqlserver-1" openssl x509 -noout -fingerprint -sha256 -in /goldmark/sql-tls-private/sqlserver.crt | cut -d= -f2)"
+docker exec "${project}-sqlserver-1" bash -c 'umask 077; openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /goldmark/sql-tls-private/sqlserver.key 2>/dev/null'
+"${compose[@]}" restart sqlserver >/dev/null 2>&1
+sql_healthy() { [[ "$(docker inspect -f '{{.State.Health.Status}}' "${project}-sqlserver-1" 2>/dev/null)" == healthy ]]; }
+if wait_until 240 sql_healthy; then
+  new_sql_fp="$(docker exec "${project}-sqlserver-1" openssl x509 -noout -fingerprint -sha256 -in /goldmark/sql-tls-private/sqlserver.crt | cut -d= -f2)"
+  check "SQL Server regenerates a mismatched certificate/key pair and starts healthy" [ "${new_sql_fp}" != "${old_sql_fp}" ]
+  if wait_until 120 is_status /health/ready 200; then
+    pass "readiness recovers with the regenerated SQL certificate (pin re-read from the shared volume)"
+  else
+    fail "readiness recovers with the regenerated SQL certificate (pin re-read from the shared volume)"
+  fi
+else
+  fail "SQL Server regenerates a mismatched certificate/key pair and starts healthy" "not healthy within 240 s"
+fi
 
 # --- Certificate persists across container re-creation ---------------------------
 "${compose[@]}" up -d --no-build --no-deps --force-recreate app >/dev/null 2>&1
