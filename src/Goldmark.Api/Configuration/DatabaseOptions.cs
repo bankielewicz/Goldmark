@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
 
 namespace Goldmark.Api.Configuration;
@@ -70,9 +72,16 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
             failures.Add($"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.");
         }
 
-        if (options.ServerCertificatePath is { Length: > 0 } path && !File.Exists(path))
+        if (options.ServerCertificatePath is { Length: > 0 } path)
         {
-            failures.Add($"{DatabaseOptions.SectionName}:ServerCertificatePath does not point to a readable file.");
+            if (!File.Exists(path))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:ServerCertificatePath does not point to a readable file.");
+            }
+            else if (!CanLoadCertificate(path))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:ServerCertificatePath could not be read as a PEM or DER certificate.");
+            }
         }
 
         if (options.ConnectTimeoutSeconds is < 1 or > 120)
@@ -81,5 +90,20 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    // A pinned certificate that cannot be parsed would make every connection fail later;
+    // report it at startup instead.
+    private static bool CanLoadCertificate(string path)
+    {
+        try
+        {
+            using var certificate = X509CertificateLoader.LoadCertificateFromFile(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 }

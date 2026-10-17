@@ -103,6 +103,37 @@ public sealed class ConfigurationValidationTests
     }
 
     [Fact]
+    public void A_pinned_SQL_certificate_must_parse()
+    {
+        var dir = Directory.CreateTempSubdirectory("goldmark-sqlpin-").FullName;
+        try
+        {
+            var garbage = Path.Combine(dir, "garbage.crt");
+            File.WriteAllText(garbage, "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----\n");
+            var options = ValidDatabase();
+            options.ServerCertificatePath = garbage;
+            var result = new DatabaseOptionsValidator().Validate(null, options);
+            Assert.True(result.Failed);
+            Assert.Contains(result.Failures!, f => f.Contains("could not be read as a PEM or DER certificate", StringComparison.Ordinal));
+
+            using var certificate = Goldmark.Api.Security.TlsCertificateProvider.Create(["sqlserver"], DateTimeOffset.UtcNow);
+            var pem = Path.Combine(dir, "sqlserver.crt");
+            var der = Path.Combine(dir, "sqlserver.cer");
+            File.WriteAllText(pem, certificate.ExportCertificatePem());
+            File.WriteAllBytes(der, certificate.RawData);
+            foreach (var good in new[] { pem, der })
+            {
+                options.ServerCertificatePath = good;
+                Assert.True(new DatabaseOptionsValidator().Validate(null, options).Succeeded, good);
+            }
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Default_https_settings_pass() =>
         Assert.True(new HttpsOptionsValidator().Validate(null, new HttpsOptions()).Succeeded);
 
@@ -223,7 +254,10 @@ public sealed class BootstrapValidationTests
         // other databases and public. Behaviour is proven against SQL Server by the smoke test.
         var catalog = BootstrapDatabaseCommand.InspectSql;
         foreach (var view in new[] { "sys.server_permissions", "sys.database_permissions", "sys.server_role_members",
-                     "sys.database_role_members", "sys.schemas", "sys.objects", "sys.endpoints", "owner_sid" })
+                     "sys.database_role_members", "sys.schemas", "sys.objects", "sys.endpoints", "owner_sid",
+                     "sys.certificates", "sys.asymmetric_keys", "sys.symmetric_keys", "sys.assemblies",
+                     "sys.fulltext_catalogs", "sys.types", "sys.xml_schema_collections", "sys.linked_logins",
+                     "sys.server_principal_credentials", "user name collision" })
         {
             Assert.Contains(view, catalog, StringComparison.Ordinal);
         }

@@ -59,67 +59,83 @@ internal static class BootstrapDatabaseCommand
         EXEC sys.sp_executesql @sql;
         """;
 
-    // Runs in the Goldmark database.
+    // Runs in the Goldmark database. Matches the user by SID, not name: 0 = already mapped,
+    // 1 = created, 2 = a user with this name belongs to a different login (never remapped).
     private const string EnsureUserSql = """
         SET NOCOUNT ON;
-        IF USER_ID(@login) IS NULL
+        IF EXISTS (SELECT 1 FROM sys.database_principals WHERE sid = SUSER_SID(@login)) SELECT 0;
+        ELSE IF EXISTS (SELECT 1 FROM sys.database_principals WHERE name = @login) SELECT 2;
+        ELSE
         BEGIN
             DECLARE @sql nvarchar(max) = N'CREATE USER ' + QUOTENAME(@login) + N' FOR LOGIN ' + QUOTENAME(@login) + N';';
             EXEC sys.sp_executesql @sql;
             SELECT 1;
-        END
-        ELSE SELECT 0;
+        END;
         """;
 
+    private const string DatabaseExistsSql = "SELECT CASE WHEN DB_ID(@db) IS NULL THEN 0 ELSE 1 END;";
+
     /// <summary>
-    /// Catalog inspection, run by the administrator in the Goldmark database. Returns one row
-    /// per right the login holds beyond the baseline measured for a fresh CONNECT-only login on
-    /// SQL Server 2025, at every scope:
+    /// Catalog inspection, run by the administrator in the Goldmark database (or in master while
+    /// that database does not exist yet). Returns one row per right the login holds beyond the
+    /// baseline measured for a fresh CONNECT-only login on SQL Server 2025, at every scope:
     /// <list type="bullet">
     /// <item>role memberships;</item>
     /// <item>explicit grants on the server, endpoints, logins, the database, schemas, objects and users;</item>
-    /// <item>ownership of anything;</item>
+    /// <item>ownership of every securable catalog that records an owner, server and database;</item>
+    /// <item>linked-server, remote-login and credential mappings;</item>
     /// <item>mappings into other databases;</item>
-    /// <item>non-default grants to public, which every login inherits.</item>
+    /// <item>non-default grants to public, which every login inherits;</item>
+    /// <item>a database user with the login's name but another SID.</item>
     /// </list>
     /// DENYs are ignored because they only remove rights. Slice 2 adds the runtime DML grants
-    /// to the baseline.
+    /// to the baseline. The query was validated against SQL Server 2025 (see the smoke test).
     /// </summary>
     internal const string InspectSql = """
         SET NOCOUNT ON;
         DECLARE @sid varbinary(85) = SUSER_SID(@login);
-        DECLARE @uid int = (SELECT principal_id FROM sys.database_principals WHERE sid = @sid);
+        DECLARE @in_target bit = CASE WHEN DB_NAME() = @db THEN 1 ELSE 0 END;
+        DECLARE @uid int = CASE WHEN @in_target = 1 THEN (SELECT principal_id FROM sys.database_principals WHERE sid = @sid) END;
         DECLARE @public_server int = (SELECT principal_id FROM sys.server_principals WHERE name = N'public' AND type = N'R');
         DECLARE @findings TABLE (Kind nvarchar(64), Detail nvarchar(512));
 
         IF @sid IS NOT NULL
         BEGIN
+            DECLARE @pid int = (SELECT principal_id FROM sys.server_principals WHERE sid = @sid);
+
             INSERT @findings SELECT N'server role', r.name
-            FROM sys.server_role_members AS m
-            JOIN sys.server_principals AS r ON r.principal_id = m.role_principal_id
-            JOIN sys.server_principals AS p ON p.principal_id = m.member_principal_id
-            WHERE p.sid = @sid;
+            FROM sys.server_role_members AS m JOIN sys.server_principals AS r ON r.principal_id = m.role_principal_id
+            WHERE m.member_principal_id = @pid;
 
             INSERT @findings SELECT N'server permission',
                 CONCAT(sp.state_desc, N' ', sp.permission_name, N' ON ', sp.class_desc, N' #', sp.major_id)
             FROM sys.server_permissions AS sp
-            JOIN sys.server_principals AS p ON p.principal_id = sp.grantee_principal_id
-            WHERE p.sid = @sid AND sp.state IN ('G', 'W')
+            WHERE sp.grantee_principal_id = @pid AND sp.state IN ('G', 'W')
               AND NOT (sp.class = 100 AND sp.permission_name = N'CONNECT SQL');
 
-            INSERT @findings SELECT N'owns', CONCAT(N'server principal ', o.name)
-            FROM sys.server_principals AS o JOIN sys.server_principals AS p ON p.principal_id = o.owning_principal_id
-            WHERE p.sid = @sid;
-
-            INSERT @findings SELECT N'owns', CONCAT(N'endpoint ', e.name)
-            FROM sys.endpoints AS e JOIN sys.server_principals AS p ON p.principal_id = e.principal_id
-            WHERE p.sid = @sid;
-
+            -- Ownership of, or mappings from, server-level securables.
+            INSERT @findings SELECT N'owns', CONCAT(owned.kind, N' ', owned.name) FROM (
+                SELECT N'server principal' AS kind, name COLLATE DATABASE_DEFAULT AS name, owning_principal_id AS owner FROM sys.server_principals
+                UNION ALL SELECT N'endpoint', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.endpoints
+                UNION ALL SELECT N'server event notification', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.server_event_notifications
+                UNION ALL SELECT N'server audit', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.server_audits
+            ) AS owned WHERE owned.owner = @pid;
             INSERT @findings SELECT N'owns', CONCAT(N'database ', d.name) FROM sys.databases AS d WHERE d.owner_sid = @sid;
+            INSERT @findings SELECT N'owns', CONCAT(N'availability replica ', r.replica_server_name)
+            FROM sys.availability_replicas AS r WHERE r.owner_sid = @sid;
+            INSERT @findings SELECT N'linked server login mapping', CONCAT(N'server #', l.server_id)
+            FROM sys.linked_logins AS l WHERE l.local_principal_id = @pid;
+            INSERT @findings SELECT N'remote login mapping', CONCAT(N'server #', l.server_id)
+            FROM sys.remote_logins AS l WHERE l.local_principal_id = @pid;
+            INSERT @findings SELECT N'credential mapping', CONCAT(N'credential #', c.credential_id)
+            FROM sys.server_principal_credentials AS c WHERE c.principal_id = @pid;
+            INSERT @findings SELECT N'credential mapping', CONCAT(N'credential #', l.credential_id)
+            FROM sys.sql_logins AS l WHERE l.principal_id = @pid AND l.credential_id IS NOT NULL;
 
+            -- Mappings into any other database (the target database is inspected below).
             DECLARE @other sysname, @probe nvarchar(max), @mapped int;
             DECLARE databases CURSOR LOCAL FAST_FORWARD FOR
-                SELECT name FROM sys.databases WHERE state = 0 AND database_id <> DB_ID();
+                SELECT name FROM sys.databases WHERE state = 0 AND name <> @db;
             OPEN databases;
             FETCH NEXT FROM databases INTO @other;
             WHILE @@FETCH_STATUS = 0
@@ -140,6 +156,21 @@ internal static class BootstrapDatabaseCommand
           AND NOT (sp.class = 100 AND sp.permission_name = N'VIEW ANY DATABASE')
           AND NOT (sp.class = 105 AND sp.permission_name = N'CONNECT' AND sp.major_id < 65536);
 
+        IF @in_target = 1
+        BEGIN
+            -- A user with the login's name but another SID (e.g. a restored database) is a collision.
+            INSERT @findings SELECT N'user name collision', CONCAT(N'database user ', name, N' belongs to a different login')
+            FROM sys.database_principals WHERE name = @login AND (@sid IS NULL OR sid <> @sid);
+
+            INSERT @findings SELECT N'database permission (public)',
+                CONCAT(dp.state_desc, N' ', dp.permission_name, N' ON ', dp.class_desc, N' #', dp.major_id)
+            FROM sys.database_permissions AS dp
+            WHERE dp.grantee_principal_id = DATABASE_PRINCIPAL_ID(N'public') AND dp.state IN ('G', 'W')
+              AND NOT (dp.class = 0 AND dp.permission_name IN
+                  (N'VIEW ANY COLUMN ENCRYPTION KEY DEFINITION', N'VIEW ANY COLUMN MASTER KEY DEFINITION'))
+              AND NOT (dp.class = 1 AND dp.major_id < 0 AND dp.permission_name = N'SELECT');
+        END;
+
         IF @uid IS NOT NULL
         BEGIN
             INSERT @findings SELECT N'database role', r.name
@@ -152,19 +183,32 @@ internal static class BootstrapDatabaseCommand
             WHERE dp.grantee_principal_id = @uid AND dp.state IN ('G', 'W')
               AND NOT (dp.class = 0 AND dp.permission_name = N'CONNECT');
 
-            INSERT @findings SELECT N'owns', CONCAT(N'schema ', s.name) FROM sys.schemas AS s WHERE s.principal_id = @uid;
-            INSERT @findings SELECT N'owns', CONCAT(N'database principal ', o.name)
-            FROM sys.database_principals AS o WHERE o.owning_principal_id = @uid;
-            INSERT @findings SELECT N'owns', CONCAT(N'object ', o.name) FROM sys.objects AS o WHERE o.principal_id = @uid;
+            -- Ownership of every database securable that records an owner.
+            INSERT @findings SELECT N'owns', CONCAT(owned.kind, N' ', owned.name) FROM (
+                SELECT N'object' AS kind, name COLLATE DATABASE_DEFAULT AS name, principal_id AS owner FROM sys.objects
+                UNION ALL SELECT N'schema', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.schemas
+                UNION ALL SELECT N'database principal', name COLLATE DATABASE_DEFAULT, owning_principal_id FROM sys.database_principals
+                UNION ALL SELECT N'type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.types
+                UNION ALL SELECT N'xml schema collection', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.xml_schema_collections
+                UNION ALL SELECT N'assembly', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.assemblies
+                UNION ALL SELECT N'certificate', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.certificates
+                UNION ALL SELECT N'asymmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.asymmetric_keys
+                UNION ALL SELECT N'symmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.symmetric_keys
+                UNION ALL SELECT N'database scoped credential', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.database_scoped_credentials
+                UNION ALL SELECT N'full-text catalog', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_catalogs
+                UNION ALL SELECT N'full-text stoplist', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_stoplists
+                UNION ALL SELECT N'search property list', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.registered_search_property_lists
+                UNION ALL SELECT N'message type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_message_types
+                UNION ALL SELECT N'contract', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_contracts
+                UNION ALL SELECT N'service', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.services
+                UNION ALL SELECT N'route', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.routes
+                UNION ALL SELECT N'remote service binding', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.remote_service_bindings
+                UNION ALL SELECT N'event notification', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.event_notifications
+                UNION ALL SELECT N'external language', language COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_languages
+                UNION ALL SELECT N'external library', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_libraries
+                UNION ALL SELECT N'external model', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_models
+            ) AS owned WHERE owned.owner = @uid;
         END;
-
-        INSERT @findings SELECT N'database permission (public)',
-            CONCAT(dp.state_desc, N' ', dp.permission_name, N' ON ', dp.class_desc, N' #', dp.major_id)
-        FROM sys.database_permissions AS dp
-        WHERE dp.grantee_principal_id = DATABASE_PRINCIPAL_ID(N'public') AND dp.state IN ('G', 'W')
-          AND NOT (dp.class = 0 AND dp.permission_name IN
-              (N'VIEW ANY COLUMN ENCRYPTION KEY DEFINITION', N'VIEW ANY COLUMN MASTER KEY DEFINITION'))
-          AND NOT (dp.class = 1 AND dp.major_id < 0 AND dp.permission_name = N'SELECT');
 
         SELECT Kind, Detail FROM @findings;
         """;
@@ -217,59 +261,69 @@ internal static class BootstrapDatabaseCommand
         {
             await using var connection = await OpenWithRetryAsync(admin.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds));
 
-            if (await ScalarAsync(connection, EnsureDatabaseSql, db) == 1)
+            // 1. Inspect everything before changing anything (no database, login or user is
+            //    created or altered if bootstrap is going to refuse).
+            var state = await LoginStateAsync(connection, db);
+            if (state is { Type: not "S" } nonSql)
             {
+                return await RefuseAsync($"'{db.User}' exists but is not a SQL Server login (type {nonSql.Type}). Nothing was changed.");
+            }
+
+            if (state is { Disabled: true })
+            {
+                return await RefuseAsync($"the existing login '{db.User}' is disabled; Goldmark does not re-enable logins. Nothing was changed.");
+            }
+
+            var databaseExists = await ScalarAsync(connection, DatabaseExistsSql, db) == 1;
+            if (databaseExists)
+            {
+                await connection.ChangeDatabaseAsync(db.Name);
+            }
+
+            var findings = await FindingsAsync(connection, InspectSql, db);
+            await connection.ChangeDatabaseAsync("master");
+            if (findings.Count > 0)
+            {
+                return await RefuseAsync(
+                    $"the login '{db.User}' or its environment has rights beyond CONNECT: {string.Join("; ", findings.Distinct())}. " +
+                    "Nothing was changed. Remove those rights, or configure a different login.");
+            }
+
+            if (state is { PasswordMatches: false } && !bootstrap.RotatePassword)
+            {
+                return await RefuseAsync(
+                    $"the existing login '{db.User}' has a different password. Nothing was changed. " +
+                    "To rotate it, run once with GOLDMARK_DB_ROTATE_PASSWORD=true (Goldmark:Bootstrap:RotatePassword).");
+            }
+
+            // 2. Provision.
+            if (!databaseExists)
+            {
+                await ScalarAsync(connection, EnsureDatabaseSql, db);
                 Report("created database");
             }
 
-            // 1. An existing login is inspected before anything about it is changed.
-            var state = await LoginStateAsync(connection, db);
-            if (state is { } existing)
-            {
-                if (existing.Type != "S")
-                {
-                    return await RefuseAsync($"'{db.User}' exists but is not a SQL Server login (type {existing.Type}). Nothing was changed.");
-                }
-
-                if (existing.Disabled)
-                {
-                    return await RefuseAsync($"the existing login '{db.User}' is disabled; Goldmark does not re-enable logins. Nothing was changed.");
-                }
-
-                await connection.ChangeDatabaseAsync(db.Name);
-                var findings = await FindingsAsync(connection, InspectSql, db);
-                await connection.ChangeDatabaseAsync("master");
-                if (findings.Count > 0)
-                {
-                    return await RefuseAsync(
-                        $"the existing login '{db.User}' has rights beyond CONNECT: {string.Join("; ", findings)}. " +
-                        "Nothing was changed. Remove those rights, or configure a different login.");
-                }
-
-                if (!existing.PasswordMatches)
-                {
-                    if (!bootstrap.RotatePassword)
-                    {
-                        return await RefuseAsync(
-                            $"the existing login '{db.User}' has a different password. Nothing was changed. " +
-                            "To rotate it, run once with GOLDMARK_DB_ROTATE_PASSWORD=true (Goldmark:Bootstrap:RotatePassword).");
-                    }
-
-                    await ExecuteAsync(connection, RotatePasswordSql, db);
-                    Report("rotated login password");
-                }
-            }
-            else
+            if (state is null)
             {
                 await ExecuteAsync(connection, CreateLoginSql, db);
                 Report("created login");
             }
-
-            // 2. Map the login into the Goldmark database.
-            await connection.ChangeDatabaseAsync(db.Name);
-            if (await ScalarAsync(connection, EnsureUserSql, db) == 1)
+            else if (!state.Value.PasswordMatches)
             {
-                Report("created database user");
+                await ExecuteAsync(connection, RotatePasswordSql, db);
+                Report("rotated login password");
+            }
+
+            await connection.ChangeDatabaseAsync(db.Name);
+            switch (await ScalarAsync(connection, EnsureUserSql, db))
+            {
+                case 1:
+                    Report("created database user");
+                    break;
+                case 2:
+                    return await RefuseAsync(
+                        $"database user '{db.User}' exists but belongs to a different login (e.g. a restored database). " +
+                        "Remap it with ALTER USER ... WITH LOGIN, or drop it.");
             }
 
             // 3. Verify the result from the catalog and from the login's own effective permissions.
