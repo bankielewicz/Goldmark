@@ -338,6 +338,19 @@ else
   fail "an existing login with CHECK_EXPIRATION = ON is refused" "exit ${refused_code}"
 fi
 
+# Logins without password policy, or with a denied connection, are refused before any change.
+sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_nopolicy WITH PASSWORD = N'${other_password}', CHECK_POLICY = OFF;" >/dev/null
+refused="$(db_init -e Goldmark__Database__User=smoke_nopolicy -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
+sql_as sa "${sa_password}" "USE master; DROP LOGIN smoke_nopolicy;" >/dev/null
+sql_as sa "${sa_password}" "USE master; DENY CONNECT SQL TO goldmark_app;" >/dev/null
+denied="$(db_init)"; denied_code=$?
+sql_as sa "${sa_password}" "USE master; REVOKE CONNECT SQL FROM goldmark_app; GRANT CONNECT SQL TO goldmark_app;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"CHECK_POLICY = OFF"* && ${denied_code} -eq 3 && "${denied}" == *"connection denied"* ]]; then
+  pass "logins without password policy or with DENY CONNECT SQL are refused before any change"
+else
+  fail "logins without password policy or with DENY CONNECT SQL are refused" "exit ${refused_code}/${denied_code}"
+fi
+
 accepted="$(db_init)"
 if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
   pass "db-init accepts the login again once the extra rights are removed"

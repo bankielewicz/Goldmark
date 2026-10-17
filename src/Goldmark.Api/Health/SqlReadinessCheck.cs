@@ -9,12 +9,18 @@ namespace Goldmark.Api.Health;
 /// executes a real query. Slice 2 extends this with a schema-version compatibility check.
 /// Failure details are logged (exception text only at Debug) and never returned to the caller.
 /// </summary>
-internal sealed partial class SqlReadinessCheck(SqlConnectionFactory connections, ILogger<SqlReadinessCheck> logger)
+internal sealed partial class SqlReadinessCheck(
+    SqlConnectionFactory connections, ReadinessGate gate, ILogger<SqlReadinessCheck> logger)
     : IHealthCheck
 {
     public const string Name = "sql";
 
-    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
+    // The endpoint is anonymous; the gate coalesces concurrent probes and caches the result
+    // briefly so request floods cannot turn into SQL Server connection floods.
+    public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+        gate.GetAsync(ProbeAsync, cancellationToken);
+
+    private async Task<HealthCheckResult> ProbeAsync(CancellationToken cancellationToken)
     {
         var builder = connections.CreateBuilder();
         builder.Pooling = false;

@@ -111,6 +111,10 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 ## DEC-008 Health endpoints and their access policy
 
 - Both endpoints answer `GET` and `HEAD` only; other methods get `405` (review finding).
+- Readiness is anonymous, so it is coalesced: concurrent requests share one
+  in-flight probe and a result is reused for 5 s. However many requests
+  arrive, SQL Server sees at most one probe connection every 5 s (review
+  finding).
 - `GET /health/live`: no dependencies (SQL Server down does not affect it).
 - `GET /health/ready`: opens a fresh, **unpooled**, TDS 8 strict-encrypted
   connection as the least-privilege runtime login and runs `SELECT 1`. A 10 s
@@ -201,7 +205,8 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
      It runs in CI before lint, build and tests, before the smoke test uses
      Playwright, and in the Docker web stage before the build.
 
-  Together they have 43 tests.
+  Double-quoted or escaped keys are rejected too, since pnpm writes neither.
+  Together they have 44 tests.
 - **Banned packages:** the PRD's `next`, `react-server-dom-*`, `@remix-run/*`,
   extended with `@react-router/*` (framework/server packages; `react-router`
   stays allowed for library mode) and `@vitejs/plugin-rsc`.
@@ -304,9 +309,12 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   system endpoints; in the database, the user's `CONNECT`, and public's two
   `VIEW ANY COLUMN … KEY DEFINITION` grants and `SELECT` on system objects.
   DENYs are ignored because they only remove rights.
-- An existing login is also refused if it can stop working on its own:
-  `CHECK_EXPIRATION = ON`, expired, locked out, or must change its password.
-  Goldmark creates its login with `CHECK_EXPIRATION = OFF` (review finding).
+- An existing login is also refused if it can stop working on its own
+  (`CHECK_EXPIRATION = ON`, expired, locked out, must change its password),
+  if it does not enforce the password policy (`CHECK_POLICY = OFF`), or if
+  its connection is denied (`DENY CONNECT SQL` on the login or public, or
+  `DENY CONNECT` in the Goldmark database). Goldmark creates its login with
+  `CHECK_POLICY = ON, CHECK_EXPIRATION = OFF` (review findings).
 - Provisioning order: the login is created or rotated **before** the
   database, so SQL Server's password policy can still reject the password
   without leaving an empty database behind. A new login starts with master as
@@ -337,6 +345,10 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   a dedicated instance. It does not try to prove a shared, long-lived
   enterprise instance is safe; the external-SQL deployment in slice 2 will
   document the DBA-side requirements instead.
+- **Open (owner decision):** grants added to `guest` or `public` in master,
+  msdb or tempdb are inherited by every login and are not inspected yet.
+  Checking them needs per-database baselines (msdb has many default public
+  grants that vary by CU). See the PR for the options.
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.

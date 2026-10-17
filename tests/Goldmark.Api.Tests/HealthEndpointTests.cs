@@ -57,6 +57,23 @@ public sealed class HealthEndpointTests(GoldmarkFactory factory) : IClassFixture
     }
 
     [Fact]
+    public async Task A_burst_of_readiness_requests_opens_at_most_one_SQL_probe()
+    {
+        await using var isolated = new GoldmarkFactory();
+        using var client = isolated.CreateClient();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 25).Select(_ =>
+            client.GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken)));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.ServiceUnavailable, r.StatusCode));
+        Assert.Single(isolated.Logs.Events, e => e.EventId() == 1001);
+        foreach (var response in responses)
+        {
+            response.Dispose();
+        }
+    }
+
+    [Fact]
     public async Task Readiness_failure_is_logged_without_exception_text_above_debug()
     {
         await using var isolated = new GoldmarkFactory();

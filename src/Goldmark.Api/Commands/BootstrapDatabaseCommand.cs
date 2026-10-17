@@ -43,6 +43,7 @@ internal static class BootstrapDatabaseCommand
         SELECT CAST(p.type AS nvarchar(2)), CAST(p.is_disabled AS int),
             CAST(ISNULL(PWDCOMPARE(@password, l.password_hash), 0) AS int),
             CAST(ISNULL(l.is_expiration_checked, 0) AS int),
+            CAST(ISNULL(l.is_policy_checked, 0) AS int),
             CAST(ISNULL(LOGINPROPERTY(p.name, 'IsExpired'), 0) AS int),
             CAST(ISNULL(LOGINPROPERTY(p.name, 'IsLocked'), 0) AS int),
             CAST(ISNULL(LOGINPROPERTY(p.name, 'IsMustChange'), 0) AS int)
@@ -123,6 +124,13 @@ internal static class BootstrapDatabaseCommand
             FROM sys.server_permissions AS sp
             WHERE sp.grantee_principal_id = @pid AND sp.state IN ('G', 'W')
               AND NOT (sp.class = 100 AND sp.permission_name = N'CONNECT SQL');
+
+            -- Most DENYs only remove rights and are ignored, but a denied connection would make
+            -- the run fail after provisioning; refuse it up front instead.
+            INSERT @findings SELECT N'connection denied', CONCAT(N'DENY ', sp.permission_name, N' ON ', sp.class_desc)
+            FROM sys.server_permissions AS sp
+            WHERE sp.grantee_principal_id IN (@pid, @public_server) AND sp.state = 'D'
+              AND sp.class = 100 AND sp.permission_name = N'CONNECT SQL';
 
             -- Ownership of, or mappings from, server-level securables.
             INSERT @findings SELECT N'owns', CONCAT(owned.kind, N' ', owned.name) FROM (
@@ -222,6 +230,11 @@ internal static class BootstrapDatabaseCommand
             WHERE dp.grantee_principal_id = @uid AND dp.state IN ('G', 'W')
               AND NOT (dp.class = 0 AND dp.permission_name = N'CONNECT');
 
+            INSERT @findings SELECT N'connection denied', CONCAT(N'DENY ', dp.permission_name, N' ON ', dp.class_desc)
+            FROM sys.database_permissions AS dp
+            WHERE dp.grantee_principal_id IN (@uid, DATABASE_PRINCIPAL_ID(N'public')) AND dp.state = 'D'
+              AND dp.class = 0 AND dp.permission_name = N'CONNECT';
+
             -- Ownership of every database securable that records an owner.
             INSERT @findings SELECT N'owns', CONCAT(owned.kind, N' ', owned.name) FROM (
                 SELECT N'object' AS kind, name COLLATE DATABASE_DEFAULT AS name, principal_id AS owner FROM sys.objects
@@ -311,6 +324,13 @@ internal static class BootstrapDatabaseCommand
             if (state is { Disabled: true })
             {
                 return await RefuseAsync($"the existing login '{db.User}' is disabled; Goldmark does not re-enable logins. Nothing was changed.");
+            }
+
+            if (state is { PolicyChecked: false })
+            {
+                return await RefuseAsync(
+                    $"the existing login '{db.User}' does not enforce SQL Server's password policy (CHECK_POLICY = OFF). " +
+                    "Nothing was changed. Goldmark's runtime login uses CHECK_POLICY = ON.");
             }
 
             if (state is { } lifecycle && (lifecycle.ExpirationChecked || lifecycle.Expired || lifecycle.Locked || lifecycle.MustChange))
@@ -442,7 +462,8 @@ internal static class BootstrapDatabaseCommand
     }
 
     private readonly record struct LoginState(
-        string Type, bool Disabled, bool PasswordMatches, bool ExpirationChecked, bool Expired, bool Locked, bool MustChange);
+        string Type, bool Disabled, bool PasswordMatches, bool ExpirationChecked, bool PolicyChecked,
+        bool Expired, bool Locked, bool MustChange);
 
     private static async Task<LoginState?> LoginStateAsync(SqlConnection connection, DatabaseOptions db)
     {
@@ -454,7 +475,8 @@ internal static class BootstrapDatabaseCommand
         }
 
         return new LoginState(reader.GetString(0).Trim(), reader.GetInt32(1) == 1, reader.GetInt32(2) == 1,
-            reader.GetInt32(3) == 1, reader.GetInt32(4) == 1, reader.GetInt32(5) == 1, reader.GetInt32(6) == 1);
+            reader.GetInt32(3) == 1, reader.GetInt32(4) == 1, reader.GetInt32(5) == 1, reader.GetInt32(6) == 1,
+            reader.GetInt32(7) == 1);
     }
 
     private static async Task<List<string>> FindingsAsync(SqlConnection connection, string sql, DatabaseOptions db)
