@@ -7,7 +7,8 @@
 //     wrong section, or is not pinned to an exact registry version);
 //   - a banned SSR/RSC package appears in package.json or pnpm-lock.yaml;
 //   - a lockfile entry resolves from anywhere other than the registry;
-//   - a pnpm/npm supply-chain setting is missing or weakened;
+//   - a pnpm/npm supply-chain setting is missing or weakened, or any setting
+//     outside the reviewed allow-lists appears (e.g. a scoped registry);
 //   - package.json declares install lifecycle scripts.
 //
 // Usage: node scripts/check-dependency-policy.mjs [webDir]
@@ -42,20 +43,24 @@ const REQUIRED_PNPM_SETTINGS = {
   engineStrict: { ok: (v) => v === 'true', expect: 'true' },
 };
 
-/** Settings that weaken the policy and must not be used without changing this script. */
-const FORBIDDEN_PNPM_SETTINGS = [
-  'dangerouslyAllowAllBuilds',
-  'minimumReleaseAgeExclude',
-  'trustPolicyExclude',
-  'trustPolicyIgnoreAfter',
-  'neverBuiltDependencies',
-  'onlyBuiltDependencies',
-];
+/**
+ * The only settings pnpm-workspace.yaml may contain. Anything else (registries,
+ * overrides, policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or
+ * weaken installs and must be reviewed by changing this list.
+ */
+const ALLOWED_PNPM_SETTINGS = new Set([...Object.keys(REQUIRED_PNPM_SETTINGS), 'allowBuilds', 'savePrefix']);
 
+/**
+ * The only keys .npmrc may contain, with their required values. Scoped
+ * registries ("@scope:registry"), auth tokens, proxies, custom CAs or
+ * strict-ssl overrides are rejected: they could point an allow-listed
+ * name@version at another source.
+ */
 const REQUIRED_NPMRC = {
   registry: 'https://registry.npmjs.org/',
   'ignore-scripts': 'true',
 };
+const ALLOWED_NPMRC = new Map([...Object.entries(REQUIRED_NPMRC), ['engine-strict', 'true']]);
 
 const LIFECYCLE_SCRIPTS = [
   'preinstall',
@@ -254,9 +259,11 @@ export function checkPolicy(webDir) {
         errors.push(`pnpm-workspace.yaml: "${key}" must be ${rule.expect} (found ${JSON.stringify(value)})`);
       }
     }
-    for (const key of FORBIDDEN_PNPM_SETTINGS) {
-      if (settings[key] !== undefined) {
-        errors.push(`pnpm-workspace.yaml: "${key}" weakens the supply-chain policy and is not allowed`);
+    for (const key of Object.keys(settings)) {
+      if (!ALLOWED_PNPM_SETTINGS.has(key)) {
+        errors.push(
+          `pnpm-workspace.yaml: "${key}" is not on the reviewed settings list; settings such as registries, overrides or policy exclusions can redirect or weaken installs`,
+        );
       }
     }
     const builds = settings.allowBuilds;
@@ -280,6 +287,13 @@ export function checkPolicy(webDir) {
   const npmrc = existsSync(npmrcPath) ? parseNpmrc(readFileSync(npmrcPath, 'utf8')) : {};
   for (const [key, expected] of Object.entries(REQUIRED_NPMRC)) {
     if (npmrc[key] !== expected) errors.push(`.npmrc: "${key}" must be "${expected}"`);
+  }
+  for (const [key, value] of Object.entries(npmrc)) {
+    if (!ALLOWED_NPMRC.has(key)) {
+      errors.push(`.npmrc: "${key}" is not allowed; only ${[...ALLOWED_NPMRC.keys()].join(', ')} may be set`);
+    } else if (!(key in REQUIRED_NPMRC) && ALLOWED_NPMRC.get(key) !== value) {
+      errors.push(`.npmrc: "${key}" must be "${ALLOWED_NPMRC.get(key)}"`);
+    }
   }
 
   // --- pnpm-lock.yaml ------------------------------------------------------

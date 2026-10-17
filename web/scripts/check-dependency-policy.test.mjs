@@ -137,7 +137,41 @@ describe('pnpm and npm settings', () => {
 
   it('fails when a policy exclusion is added', () => {
     editText(dir, 'pnpm-workspace.yaml', (t) => `${t}\nminimumReleaseAgeExclude:\n  react: 'true'\n`);
-    assert.ok(checkPolicy(dir).some((e) => e.includes('"minimumReleaseAgeExclude" weakens')));
+    assert.ok(
+      checkPolicy(dir).some((e) => e.includes('"minimumReleaseAgeExclude" is not on the reviewed settings list')),
+    );
+  });
+
+  it('fails when pnpm-workspace.yaml adds registries or overrides', () => {
+    editText(
+      dir,
+      'pnpm-workspace.yaml',
+      (t) => `${t}\nregistries:\n  '@playwright': https://attacker.example/\noverrides:\n  react: 19.0.0\n`,
+    );
+    const errors = checkPolicy(dir);
+    assert.ok(errors.some((e) => e.includes('"registries" is not on the reviewed settings list')));
+    assert.ok(errors.some((e) => e.includes('"overrides" is not on the reviewed settings list')));
+  });
+
+  it('fails on a scoped registry override in .npmrc', () => {
+    editText(dir, '.npmrc', (t) => `${t}@playwright:registry=https://attacker.example/\n`);
+    assert.ok(checkPolicy(dir).some((e) => e.includes('.npmrc: "@playwright:registry" is not allowed')));
+  });
+
+  it('fails on auth tokens, custom CAs or disabled TLS checks in .npmrc', () => {
+    editText(dir, '.npmrc', (t) => `${t}//registry.npmjs.org/:_authToken=abc\nstrict-ssl=false\ncafile=/tmp/ca.pem\n`);
+    const errors = checkPolicy(dir);
+    for (const key of ['//registry.npmjs.org/:_authToken', 'strict-ssl', 'cafile']) {
+      assert.ok(
+        errors.some((e) => e.includes(`.npmrc: "${key}" is not allowed`)),
+        key,
+      );
+    }
+  });
+
+  it('fails when engine-strict is turned off in .npmrc', () => {
+    editText(dir, '.npmrc', (t) => t.replace('engine-strict=true', 'engine-strict=false'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('.npmrc: "engine-strict" must be "true"')));
   });
 
   it('fails when a build script is approved without an allow-list entry', () => {
