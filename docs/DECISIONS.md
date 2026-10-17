@@ -178,9 +178,14 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   - a lockfile entry not resolved from the registry with an integrity hash;
   - a missing or weakened pnpm/npm setting, or any policy exclusion;
   - an unapproved build script;
-  - install lifecycle scripts in `package.json`.
+  - install lifecycle scripts in `package.json`;
+  - a lockfile not in pnpm's canonical layout (review finding). The check
+    reads the lockfile line by line, so YAML-equivalent spellings that pnpm
+    would accept are rejected rather than skipped: quoted or re-indented
+    section keys, unknown top-level keys, anchors, aliases, tags, flow-style
+    sections, tabs and extra documents.
 
-  It has 25 tests.
+  It has 33 tests.
 - **Banned packages:** the PRD's `next`, `react-server-dom-*`, `@remix-run/*`,
   extended with `@react-router/*` (framework/server packages; `react-router`
   stays allowed for library mode) and `@vitejs/plugin-rsc`.
@@ -268,7 +273,11 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
     catalogs and stoplists, search property lists, Service Broker objects,
     event notifications and external languages, libraries and models in the
     database;
-  - linked-server, remote-login and credential mappings of the login;
+  - linked-server, remote-login and credential mappings of the login, and
+    wildcard mappings for all logins that supply a shared remote credential
+    (SQL Server's default self-credential mappings are not counted);
+  - `guest` access enabled in any database other than master, tempdb and
+    msdb (their defaults), including `model`;
   - mappings into other databases;
   - non-default grants to `public`;
   - a database user with the login's name but another SID (for example a
@@ -296,6 +305,14 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   `db-init` cannot hang the stack.
 - A pinned SQL certificate (`ServerCertificatePath`) must parse as PEM or
   DER at startup, not merely exist (review finding).
+- The runtime password must differ from the administrator password, and the
+  database name must not be a system database (master, model, msdb, tempdb,
+  distribution, mssqlsystemresource) (review findings).
+- **Scope boundary.** Bootstrap certifies the runtime login and the server
+  conditions every login inherits, for the bundled SQL Server Express and for
+  a dedicated instance. It does not try to prove a shared, long-lived
+  enterprise instance is safe; the external-SQL deployment in slice 2 will
+  document the DBA-side requirements instead.
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.

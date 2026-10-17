@@ -289,6 +289,17 @@ else
   fail "explicit rotation changes the password" "exit ${rotated_code}/${restored_code}"
 fi
 
+# Rights every login inherits from the environment are refused as well.
+sql_as sa "${sa_password}" "USE master; CREATE DATABASE SmokeGuest; EXEC sp_addlinkedserver N'SMOKE_LS'; EXEC sp_addlinkedsrvlogin N'SMOKE_LS', 'false', NULL, N'shared', N'${other_password}';" >/dev/null
+sql_as sa "${sa_password}" "USE SmokeGuest; GRANT CONNECT TO guest;" >/dev/null
+refused="$(db_init)"; refused_code=$?
+sql_as sa "${sa_password}" "USE master; EXEC sp_droplinkedsrvlogin N'SMOKE_LS', NULL; EXEC sp_dropserver N'SMOKE_LS'; DROP DATABASE SmokeGuest;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"guest access enabled in database SmokeGuest"* && "${refused}" == *"(all logins)"* ]]; then
+  pass "db-init refuses guest access in another database and shared wildcard linked-server mappings"
+else
+  fail "db-init refuses guest access in another database and shared wildcard linked-server mappings" "exit ${refused_code}"
+fi
+
 # Refusals change nothing: no database (here: the login is already mapped into Goldmark,
 # so using it for another database is refused) and no login (name collision) is created.
 refused="$(db_init -e Goldmark__Database__Name=GoldmarkSmokeProbe)"; refused_code=$?
