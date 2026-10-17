@@ -91,6 +91,12 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   the files are unreadable; each regeneration is logged as a warning with the
   new SHA-256 fingerprint.
 - Relative paths resolve against the content root.
+- The certificate directory is forced to `0700` on every start. CI showed that
+  the image's `COPY --chmod` on a directory is not applied consistently across
+  BuildKit versions (the mount point was `0755`).
+- An operator certificate/key pair is loaded during startup validation, so a
+  malformed, encrypted or mismatched pair fails cleanly with the setting names
+  instead of an exception during Kestrel setup (review finding).
 - Docs: `docs/ops/tls-certificates.md` (trust and replacement).
 
 ## DEC-007 HSTS: automatic (clarifies NFR-SEC-2)
@@ -104,6 +110,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 ## DEC-008 Health endpoints and their access policy
 
+- Both endpoints answer `GET` and `HEAD` only; other methods get `405` (review finding).
 - `GET /health/live`: no dependencies (SQL Server down does not affect it).
 - `GET /health/ready`: opens a fresh, **unpooled**, TDS 8 strict-encrypted
   connection as the least-privilege runtime login and runs `SELECT 1`. A 10 s
@@ -157,6 +164,12 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   `minimumReleaseAgeStrict: true`, `trustPolicy: no-downgrade`,
   `blockExoticSubdeps: true`, `ignoreScripts: true`, `strictDepBuilds: true`
   with an empty `allowBuilds`, `engineStrict: true`, exact versions.
+- **Settings allow-lists (review finding).** `.npmrc` may contain only
+  `registry`, `ignore-scripts` and `engine-strict`, and `pnpm-workspace.yaml`
+  only the settings above. Scoped registries (`@scope:registry`), auth tokens,
+  custom CAs, `strict-ssl`, `registries`, `overrides` and policy exclusions are
+  rejected; otherwise an allow-listed name@version could be fetched from
+  another source.
 - **`scripts/check-dependency-policy.mjs`** (no dependencies; runs before
   install in CI and in the Docker build) fails on any of the following:
   - a direct dependency that is not allow-listed, or is listed in the wrong section;
@@ -167,7 +180,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   - an unapproved build script;
   - install lifecycle scripts in `package.json`.
 
-  It has 21 tests.
+  It has 25 tests.
 - **Banned packages:** the PRD's `next`, `react-server-dom-*`, `@remix-run/*`,
   extended with `@react-router/*` (framework/server packages; `react-router`
   stays allowed for library mode) and `@vitejs/plugin-rsc`.
@@ -208,7 +221,10 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   `-extra` variant adds ICU because Microsoft.Data.SqlClient throws
   `Globalization Invariant Mode is not supported` (found by the smoke test).
 - Only `web/dist` is copied from the web-build stage; that stage receives no
-  secrets. `.dockerignore` is an allow-list.
+  secrets. `.dockerignore` is an allow-list. It also re-excludes every
+  git-ignored secret pattern (keys, certificates, `.env`, `*.local.json`,
+  `.goldmark/`) after the `!src/` and `!web/` re-includes (review finding).
+  The smoke test plants decoy files and proves none reaches the build context.
 - Container healthcheck: `dotnet Goldmark.Api.dll healthcheck` calls
   `/health/live` over loopback HTTPS and pins the certificate on disk.
 
@@ -218,7 +234,9 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   (Goldmark cannot accept the licence for the operator). SQL Server is on an
   internal network and not published to the host.
 - On every start the SQL Server container (as the mssql user) ensures a
-  certificate for `sqlserver`. It publishes only the public certificate to a
+  certificate for `sqlserver`, and regenerates it if it is expiring, has the
+  wrong host name, or does not match its key (for example after a renewal was
+  interrupted; review finding). It publishes only the public certificate to a
   shared volume and sets `forceencryption=1` and **`forcestrict=1`**, so only
   TDS 8 strict clients can connect. This is stricter than NFR-SEC-4's
   "supported". The private key stays in a volume that only SQL Server mounts.
@@ -232,9 +250,21 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - `bootstrap-db` (one-shot `db-init` container) idempotently creates the
   `Goldmark` database and the runtime login with **CONNECT only**. DDL takes
   QUOTENAME'd parameters. It updates the password on re-run (rotation) and
-  refuses a `sysadmin` runtime login. It then connects *as the runtime login*
-  and fails unless it is not `sysadmin`, `db_owner` or `db_ddladmin`, and has
-  neither `CREATE TABLE` nor `CONTROL SERVER`.
+  refuses a `sysadmin` runtime login.
+- It then connects *as the runtime login* and **refuses (exit 3)** if the login
+  has any server or database role besides `public`, or any effective permission
+  beyond the baseline measured for a fresh login on SQL Server 2025:
+  - server: `CONNECT SQL`, `VIEW ANY DATABASE`;
+  - database: `CONNECT`, `VIEW ANY COLUMN ENCRYPTION KEY DEFINITION`,
+    `VIEW ANY COLUMN MASTER KEY DEFINITION`.
+
+  It refuses rather than revokes, because such rights were granted outside
+  Goldmark. The original check (fixed role list) passed a login holding
+  `securityadmin` and `db_securityadmin` (review finding). Slice 2 adds the
+  runtime DML grants to the database allow-list.
+- The connect timeout must be 1–120 s (0 means "forever" to SqlClient), and
+  the whole wait is cancelled at `WaitSeconds` plus one connect timeout, so
+  `db-init` cannot hang the stack.
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.
