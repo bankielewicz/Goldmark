@@ -39,3 +39,6 @@ Thumbs.db
 
 # --- Smoke test scratch ---
 tests/smoke/.work/
+
+# --- Local design references and scratch ---
+tmp/
