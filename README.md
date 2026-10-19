@@ -1,9 +1,10 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slice 1 of the MVP is the application skeleton: an HTTPS host with health
-> endpoints, an empty web UI and a Docker Compose deployment with SQL Server
-> 2025 Express. There are no CMDB features yet.
+> Slices 1–2 of the MVP: an HTTPS host with health endpoints, an empty web UI,
+> a Docker Compose deployment with SQL Server 2025 Express, and the baseline
+> database schema with separate migration and runtime logins. There are no
+> CMDB features yet.
 
 Goldmark (a working codename) is a planned self-hosted configuration
 management database (CMDB) for Windows- and VMware-heavy IT estates:
@@ -29,7 +30,8 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 # Edit deploy/.env and fill in every REQUIRED value (there are no defaults):
 #   SQLSERVER_ACCEPT_EULA=Y   (accepts the SQL Server Express license terms)
-#   SQLSERVER_SA_PASSWORD=... GOLDMARK_DB_PASSWORD=...   e.g. from: openssl rand -base64 30
+#   SQLSERVER_SA_PASSWORD=... GOLDMARK_DB_PASSWORD=... GOLDMARK_DB_MIGRATION_PASSWORD=...
+#   (three different passwords, e.g. each from: openssl rand -base64 30)
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
@@ -42,7 +44,7 @@ replace it with your own.
 | URL | Meaning |
 |---|---|
 | `https://localhost:8443/health/live` | `Healthy` when the app process is serving requests |
-| `https://localhost:8443/health/ready` | `Healthy` when the app can query its database, otherwise `503 Unhealthy` |
+| `https://localhost:8443/health/ready` | `Healthy` when the app can query its database and the schema version matches this build, otherwise `503 Unhealthy` |
 
 What starts:
 
@@ -50,8 +52,8 @@ What starts:
 |---|---|
 | `sql-volume-init` | One-shot: prepares the SQL Server TLS volumes (no network, `CAP_CHOWN` only) |
 | `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict) |
-| `db-init` | One-shot: creates the `Goldmark` database and the least-privilege runtime login. It refuses, changing nothing, if that login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
-| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem |
+| `db-init` | One-shot, on every start: creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only), then applies the schema migrations as the migration login. It refuses, changing nothing, if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
+| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log |
 
 Stop with `docker compose -f deploy/docker-compose.yml down`. Add `-v` to also
 delete all data, including the database and certificates.
@@ -75,9 +77,29 @@ Pinned toolchain (CI and the Dockerfile use exactly these):
 ```sh
 dotnet restore Goldmark.slnx --locked-mode
 dotnet build Goldmark.slnx -c Release
-dotnet test --solution Goldmark.slnx -c Release
+dotnet test --project tests/Goldmark.Api.Tests -c Release              # in-process, no Docker
+dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release   # needs Docker (SQL Server 2025)
 dotnet format Goldmark.slnx --verify-no-changes   # lint / format check
 ```
+
+The integration tests start one SQL Server 2025 container (the image pinned in
+`deploy/docker-compose.yml`, with the same TLS entrypoint) and remove it
+afterwards; the first run pulls about 1.5 GB.
+
+### Database migrations
+
+Schema changes are forward-only T-SQL scripts in `db/migrations/`
+(`NNNN_lower_snake.sql`), embedded in the API and applied by the `migrate`
+command in `db-init` (DbUp, one transaction per script). **Never edit a
+merged script**: add a new one and record its hash, which CI checks:
+
+```sh
+sha256sum db/migrations/0003_example.sql >> db/migrations.sha256
+db/check-migrations.sh origin/main
+```
+
+The app's readiness turns `503` until the database has exactly the schema
+version the build expects.
 
 To run the API locally (`dotnet run --project src/Goldmark.Api`), give it a
 database password, e.g. `dotnet user-secrets --project src/Goldmark.Api set
@@ -129,7 +151,9 @@ it, and ask first if the PRD did not anticipate it.
 
 ```
 src/Goldmark.Api/        ASP.NET Core host: HTTPS, health, logging, SPA hosting, container commands
+db/migrations/            forward-only schema migrations (DbUp) and their hash manifest
 tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
+tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
 tests/smoke/              Compose smoke test (real containers + browser)
 web/                      React + TypeScript + Vite SPA, browser-only; dependency policy
 deploy/                   docker-compose.yml, .env.example, SQL Server scripts
