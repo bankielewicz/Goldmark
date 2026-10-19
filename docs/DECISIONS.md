@@ -315,7 +315,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   The first fixed-role check passed a login holding `securityadmin` and
   `db_securityadmin` (review finding). Slice 2 adds the runtime DML grants to
   the baseline.
-- **Removed and deferred to slice 2** (issues labelled `slice-2`): the
+- **Removed and deferred to slice 2b** (DEC-021; issues labelled `slice-2`): the
   administrator-side audit of pre-existing principals. That covered explicit
   grants below database scope, ownership of securables, linked-server, remote
   and credential mappings including wildcard mappings, `guest` access in
@@ -446,7 +446,12 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      migration vs runtime logins) plus the readiness schema-version check
      (DEC-008) and #7. New **slice 2b** covers US-01 "use an existing SQL
      Server" (`docker-compose.external-sql.yml`) and the audit of adopted and
-     shared-instance principals (#2, #3, #4). PRD numbering is unchanged.
+     shared-instance principals (#2, #3, #4). The audit runs whenever
+     `bootstrap-db` adopts or revalidates a principal, in **both** the bundled
+     and the external-SQL deployment (adoption with
+     `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true` and out-of-band changes to a
+     managed login apply to the bundled SQL Server too; DEC-015). PRD
+     numbering is unchanged.
   2. **Screens without a slice:** UI #14 (Types & attributes admin) gets its
      own **slice 5b** (`slice/05b-types-admin`), after slice 5. UI #20
      (Settings) becomes **P1**, built with the P1 slices.
@@ -457,7 +462,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      options to the owner before building any screen (DEC-017).
 - **Rationale.** Slice 2 as written plus the deferred bootstrap work was too
   large to review as one PR; the existing-SQL work and the principal audit
-  belong together (both only matter on a shared instance). The two screens
+  belong together (pre-existing principals are the main case on an existing
+  instance), and neither blocks the baseline schema. The two screens
   and the TLS items needed an owner so they are not lost. Slice 3 builds the
   first screens, so Fluent must be proven there, before any screen depends
   on it. Slice 5b and Settings as P1 are owner decisions (2026-10-19).
@@ -499,4 +505,4 @@ done; **Not executed** = implemented but the check has not run (and why).
 | 23 | Least-privilege workflow permissions | **Met** (static) | `ci.yml` |
 | 24 | `SECURITY.md` | **Met** | `SECURITY.md` |
 | 25 | US-01: DbUp migrations on start with a separate migration login; runtime login DML-only | **Unmet in slice 1** (slice 2) | DEC-015 |
-| 26 | US-01: option to use an existing SQL Server | **Unmet in slice 1** (slice 2) | DEC-019 |
+| 26 | US-01: option to use an existing SQL Server | **Unmet in slice 1** (slice 2b, DEC-021) | DEC-019 |

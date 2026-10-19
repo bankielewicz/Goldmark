@@ -19,7 +19,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 |---|---|---|---|---|---|
 | 1 | **done** (PR #1) | `claude/slice-01-scaffold` | Skeleton, CI, Dockerfile, Compose (SQL Server 2025 Express), `/health/*`, Serilog JSON, web skeleton with NFR-SEC-9 controls | `docker compose up` serves health + empty SPA; CI green; unlisted npm dependency fails CI | — |
 | 2 | **next** | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. Decisions in §3 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
-| 2b | pending | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4) | US-01 existing-SQL criteria; #2–#4 closed | — |
+| 2b | pending | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments | US-01 existing-SQL criteria; #2–#4 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log writes + screen | US-07 | 16 |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/search?q=`); Dapper introduced here | US-10/11/53; search p95 on 25k synthetic CIs | 4, 5 |
@@ -43,7 +43,13 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
 | 23 | pending | `slice/23-data-quality-history` | Data quality + global change history | Screens 11, 15 | 11, 15 |
 | 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6 | US-60, NFR-SEC-7 | — |
-| 25–30 | pending (P1) | `slice/<nn>-<name>` | OIDC, Ethernet neighbors, FC HBA/RDM, backup job/replay, app registrations/annotations, change feed (PRD §11); Settings screen | PRD §11 | 1 (OIDC), 17, 20, 21 |
+| 25 | pending (P1) | `slice/25-oidc` | OIDC sign-in (Entra) + group→role mapping | US-05 | 1 (Microsoft sign-in), 17 (group mappings) |
+| 26 | pending (P1) | `slice/26-ethernet-neighbors` | Ethernet neighbor links (ID-CDP) + NetworkDevice placeholders | US-36; M3 | — |
+| 27 | pending (P1) | `slice/27-fc-hba-rdm` | FC HBA inventory + RDM→VM links | US-37 | — |
+| 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52 | 7 (saved scenarios), 19 (replay) |
+| 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3 | 5 and 6 (badges, links), 21 |
+| 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2 | — |
+| P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28 | Screen 20 | 20 |
 
 P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
@@ -248,8 +254,10 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
   cannot build as-is locally. Build from a copy that mounts the proxy CA as a
   BuildKit secret on the two network steps (`pnpm install`, `dotnet restore`):
   `--mount=type=secret,id=sandbox_ca,target=/tmp/sandbox-ca.pem` plus
-  `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE`, and
-  `docker build --secret id=sandbox_ca,src=/etc/ssl/certs/ca-certificates.crt -t goldmark:local`.
+  `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE`. Keep the copy **outside the repo**
+  (e.g. `/tmp/Dockerfile.sandbox`) and pass it with `-f`, using the repo as
+  the build context:
+  `docker build -f /tmp/Dockerfile.sandbox --secret id=sandbox_ca,src=/etc/ssl/certs/ca-certificates.crt -t goldmark:local /workspace/repo`.
   Regenerate the copy whenever the Dockerfile changes. Never commit it
   (DEC-020).
 - The Docker daemon dies often. Restart:
