@@ -27,8 +27,8 @@ or `HANDOFF.md` differs from a mockup, those documents win.
 
 Checked against `DECISIONS.md` and `HANDOFF.md` on 2026-10-19:
 
-- DEC-021 moved Settings (#20) to P1. The Settings mockup still shows it as
-  P0 with P1 sections.
+- DEC-021 moved Settings (#20) to P1. The mockups now tag the whole Settings
+  screen and its nav item P1, like Apps & integrations.
 - Fluent UI v9 is unverified under the served CSP (DEC-017; first step of
   slice 3). The mockups imitate Fluent styling in plain markup; if Fluent
   fails, the component choices change.
