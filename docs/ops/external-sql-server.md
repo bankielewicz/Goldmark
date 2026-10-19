@@ -160,7 +160,7 @@ Acceptable kinds (about the shared instance):
 | `remote-login-all-logins:<server>` | A remote-login mapping for every login (#3) |
 | `system-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in master, msdb, tempdb or model beyond SQL Server 2025's own (#4; measured baseline in `src/Goldmark.Api/Commands/Audit/`) |
 | `cross-db-chaining` | The server option `cross db ownership chaining` is on |
-| `database-unreadable:<db>:<error>` | A database could not be read (for example a non-readable secondary), so it was not checked |
+| `database-unreadable:<db>:<error or state>` | A database could not be checked: it is not online (`OFFLINE`, `RESTORING`, …) or could not be read (for example a non-readable secondary). It may come online later with rights nobody checked |
 
 Kinds that must be fixed (about Goldmark's logins or database):
 
@@ -168,7 +168,8 @@ Kinds that must be fixed (about Goldmark's logins or database):
 |---|---|
 | `goldmark-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in the Goldmark database beyond a new database's default (a grant in `model` is copied into new databases) |
 | `goldmark-database-owner:<db>:<owner>` | The Goldmark database is owned by a login without CONTROL SERVER (for example one that created it before Goldmark did): its owner controls everything in it |
-| `goldmark-database-principal:<db>:<principal>` | Another user or application role in the Goldmark database holds a role, a permission beyond `CONNECT`, or owns a schema or object |
+| `goldmark-database-principal:<db>:<principal>` | Another user or application role in the Goldmark database holds a role, a permission beyond a plain `CONNECT`, or owns anything (a role it owns can be altered to give it Goldmark's rights) |
+| `runtime-role-grant:<db>:<permission>:<class>[:<target>]` | The `goldmark_runtime` role holds a grant that Goldmark's migrations do not make (including on system objects) |
 | `goldmark-database-option:<db>:<option>` | `TRUSTWORTHY` or `DB_CHAINING` is on for the Goldmark database |
 | `public-server-grant:<permission>:<class>[:<target>]` | A server-level grant to `public`: every login, Goldmark's included, holds it |
 | `login-disabled`, `login-policy-off`, `login-expiration-on`, `login-expired`, `login-locked`, `login-must-change` `:<login>` | Login state that weakens the password or makes Goldmark stop working on its own |

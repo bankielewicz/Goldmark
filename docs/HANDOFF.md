@@ -258,7 +258,10 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   the sandbox (errno 11 in lsass); the fixture starts containers one at a time.
   Once, in the sandbox, a container also crashed a minute into startup
   (`AppLoader.exe` fatal error 0xC0000001) and every test of its collection
-  failed in `InitializeAsync`; the rerun passed. Rerun before debugging.
+  failed in `InitializeAsync`; the rerun passed. Rerun before debugging. During
+  slice 2b this happened four times in all, once to the smoke test's
+  `sqlserver` ("dependency failed to start: … unhealthy"); stopping `dockerd`,
+  pruning containers, volumes and networks and starting it again fixed it each time.
 - Effective permissions: an object-level `DENY` on a role beats a user-level
   `GRANT`, so `GRANT UPDATE ON cmdb.AuditLog TO goldmark_app` changes nothing
   (correctly accepted by `migrate`); removing the role's `DENY` is what grants

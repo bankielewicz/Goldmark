@@ -474,6 +474,16 @@ public sealed class BootstrapValidationTests
     }
 
     [Fact]
+    public void An_unknown_finding_kind_is_not_echoed() // Codex on #17: a lowercase secret matches the ID grammar
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AcceptedFindings = "guest-connect:Sales lowercasesecret42";
+        var errors = Validate(ValidDatabase(), bootstrap);
+        Assert.Contains(errors, e => e.Contains("entry 2 of 2 is not a known finding kind", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, e => e.Contains("lowercasesecret42", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Migrate_validates_accepted_findings_too()
     {
         var bootstrap = ValidBootstrap();
@@ -528,11 +538,12 @@ public sealed class AuditFindingTests
         [
             "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
             "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
-            "goldmark-database-principal", "login-disabled", "login-policy-off",
+            "goldmark-database-principal", "runtime-role-grant", "login-disabled", "login-policy-off",
             "login-expiration-on", "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential",
             "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
             "database-grant", "database-connect-denied", "server-securable", "database-securable",
         ];
+        Assert.True(PrincipalAudit.KnownKinds.SetEquals(kinds));
         foreach (var kind in kinds)
         {
             var description = new AuditFinding(kind, ["a", "b", "c", "d"]).Description;

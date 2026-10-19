@@ -129,6 +129,16 @@ public sealed class InstanceAuditTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task A_database_that_is_not_online_is_reported_as_unreadable() // Codex on #17
+    {
+        await RefusedAcceptedAndFixedAsync(
+            "CREATE DATABASE ItOffline; ALTER DATABASE ItOffline SET OFFLINE;",
+            "ALTER DATABASE ItOffline SET ONLINE; DROP DATABASE ItOffline;",
+            "database-unreadable:ItOffline:OFFLINE",
+            "database 'ItOffline' could not be checked (OFFLINE)");
+    }
+
+    [Fact]
     public async Task A_wildcard_linked_server_mapping_to_a_remote_login_is_refused() // #3
     {
         await RefusedAcceptedAndFixedAsync(

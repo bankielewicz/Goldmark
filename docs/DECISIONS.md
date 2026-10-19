@@ -784,6 +784,17 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     created it first and stayed its dbo (security review). `goldmark-database-principal`:
     another user or application role in it holds a role, a permission beyond
     `CONNECT`, or owns a schema or object.
+- **Review round 2 (Codex on #17), fixed:**
+  - the owner check follows server-role membership at any depth (CONTROL SERVER
+    through a custom role is accepted);
+  - `goldmark-database-principal` also covers ownership of roles and every other
+    securable, and `CONNECT WITH GRANT OPTION`;
+  - new must-fix `runtime-role-grant`: explicit grants to `goldmark_runtime` beyond
+    migration 0002's, including on system objects, which the as-the-login layer
+    skips. Keep it in step with new migrations, like `VerifyRuntimeSql`;
+  - databases that are not online are reported as `database-unreadable`;
+  - grant targets resolve every securable class to its quoted name;
+  - an unknown finding kind in `AcceptedFindings` is not echoed.
 - **Rights come only through the role.** A direct grant to a Goldmark user other
   than `CONNECT` is a finding even when a role's `DENY` currently overrides it
   (for example `GRANT UPDATE ON cmdb.AuditLog` to the runtime user). `migrate`'s
@@ -947,8 +958,8 @@ Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.Integrati
 
 ## Slice 2b acceptance mapping
 
-Same status vocabulary as slice 1. Local runs (agent's sandbox), after review round 1: 207
-in-process tests, 125 integration tests (two SQL Server 2025 containers), 72 smoke checks (63
+Same status vocabulary as slice 1. Local runs (agent's sandbox), after review round 2: 208
+in-process tests, 132 integration tests (two SQL Server 2025 containers), 72 smoke checks (63
 before), all passing.
 
 | # | Criterion (source) | Status | Evidence |
@@ -965,4 +976,5 @@ before), all passing.
 | 10 | The audit runs whenever a principal is adopted or revalidated, for both logins, in both deployments (DEC-021) | **Met** | Every `bootstrap-db` run; both Compose files; integration covers both logins; smoke covers both files |
 | 11 | Findings accepted by ID (owner) | **Met** | `FindingPolicyTests`, validation tests (exit 2 for malformed or must-fix IDs), integration accept-and-warn cycle, smoke |
 | 12 | Codex round 1 (#17): securable class in baseline keys, older servers refused, adopted same-name user audited first, quoted fixes, exact ID matching, database owner and other principals | **Met** | Unit tests (quoting, exact matching); integration: schema named like a baseline view, adopted `db_owner` user refused with nothing changed, database created first by a `dbcreator` login refused, extra principal with a role refused. The version check has no test: it would need a pre-2025 image |
-| 13 | CI green | **Met** on the first push (PR #17, 12 checks); round 1 pending | PR checks |
+| 13 | Codex round 2 (#17): owner through server roles, role ownership and `CONNECT WITH GRANT OPTION`, grants to `goldmark_runtime` on system objects, databases not online, names for every securable class, unknown kinds not echoed | **Met** | Integration: nested server role with CONTROL SERVER accepted; role owned by another user refused; `CONNECT WITH GRANT OPTION` refused; `SELECT ON sys.objects` to the role refused; offline database refused, accepted, fixed; certificate grant named `[ItCert2]`; the login's own view still finds role-granted rights. Unit: unknown kind not echoed |
+| 14 | CI green | **Met** on the first push and on round 1 (PR #17, 12 checks); round 2 pending | PR checks |

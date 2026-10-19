@@ -42,7 +42,12 @@ internal sealed partial class FindingPolicy
             }
 
             var kind = match.Groups[1].Value;
-            if (!PrincipalAudit.IsAcceptableKind(kind))
+            if (!PrincipalAudit.KnownKinds.Contains(kind))
+            {
+                // Not echoed either: a lowercase secret also matches the ID grammar (Codex on #17).
+                errors.Add($"{Setting}: entry {i + 1} of {entries.Length} is not a known finding kind.");
+            }
+            else if (!PrincipalAudit.IsAcceptableKind(kind))
             {
                 errors.Add($"{Setting}: findings of kind '{kind}' cannot be accepted; fix them instead. " +
                     $"Acceptable kinds: {string.Join(", ", PrincipalAudit.AcceptableKindNames.Order(StringComparer.Ordinal))}.");

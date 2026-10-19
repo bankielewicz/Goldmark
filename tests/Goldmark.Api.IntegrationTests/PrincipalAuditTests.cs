@@ -60,14 +60,23 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
     [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditLog TO {0};", "database-grant:{0}:UPDATE:OBJECT:[cmdb].[AuditLog]")] // direct, even though the role's DENY wins
     [InlineData("DENY CONNECT TO {0};", "database-connect-denied:{0}:{0}")]
     [InlineData("EXEC('CREATE SCHEMA it_owned'); ALTER AUTHORIZATION ON SCHEMA::it_owned TO {0};", "owns:{0}:schema:it_owned")]
-    [InlineData("EXEC('CREATE SCHEMA it_other'); GRANT SELECT ON SCHEMA::it_other TO goldmark_runtime;", "database-securable:{0}:SCHEMA:it_other:SELECT")]
-    [InlineData("GRANT VIEW DEFINITION ON SCHEMA::dbo TO goldmark_runtime;", "database-securable:{0}:OBJECT:dbo.SchemaVersions:VIEW+DEFINITION")]
-    [InlineData("EXEC('CREATE PROCEDURE dbo.ItProc AS SELECT 1;'); GRANT EXECUTE ON dbo.ItProc TO goldmark_runtime;", "database-securable:{0}:OBJECT:dbo.ItProc:EXECUTE")]
-    [InlineData("GRANT REFERENCES ON OBJECT::cmdb.Ci TO goldmark_runtime;", "database-securable:{0}:OBJECT:cmdb.Ci:REFERENCES")]
-    [InlineData("CREATE TYPE dbo.ItType FROM int; GRANT REFERENCES ON TYPE::dbo.ItType TO goldmark_runtime;", "database-securable:{0}:TYPE:dbo.ItType:REFERENCES")]
+    // Grants to the runtime role beyond migration 0002's are found from the administrator's side
+    // first (Codex on #17); the login's own view finds them too (next test).
+    [InlineData("EXEC('CREATE SCHEMA it_other'); GRANT SELECT ON SCHEMA::it_other TO goldmark_runtime;", "runtime-role-grant:{3}:SELECT:SCHEMA:[it_other]")]
+    [InlineData("GRANT VIEW DEFINITION ON SCHEMA::dbo TO goldmark_runtime;", "runtime-role-grant:{3}:VIEW+DEFINITION:SCHEMA:[dbo]")]
+    [InlineData("EXEC('CREATE PROCEDURE dbo.ItProc AS SELECT 1;'); GRANT EXECUTE ON dbo.ItProc TO goldmark_runtime;", "runtime-role-grant:{3}:EXECUTE:OBJECT:[dbo].[ItProc]")]
+    [InlineData("GRANT REFERENCES ON OBJECT::cmdb.Ci TO goldmark_runtime;", "runtime-role-grant:{3}:REFERENCES:OBJECT:[cmdb].[Ci]")]
+    [InlineData("CREATE TYPE dbo.ItType FROM int; GRANT REFERENCES ON TYPE::dbo.ItType TO goldmark_runtime;", "runtime-role-grant:{3}:REFERENCES:TYPE:[dbo].[ItType]")]
     [InlineData("CREATE CERTIFICATE ItCert ENCRYPTION BY PASSWORD = N'Cert-Pa55word!' WITH SUBJECT = N'it'; GRANT CONTROL ON CERTIFICATE::ItCert TO goldmark_runtime;",
-        "database-securable:{0}:CERTIFICATE:ItCert:CONTROL")]
-    [InlineData("CREATE USER it_imp WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_imp TO goldmark_runtime;", "database-securable:{0}:USER:it_imp:IMPERSONATE")]
+        "runtime-role-grant:{3}:CONTROL:CERTIFICATE:[ItCert]")]
+    [InlineData("CREATE USER it_imp WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_imp TO goldmark_runtime;", "runtime-role-grant:{3}:IMPERSONATE:USER:[it_imp]")]
+    [InlineData("GRANT SELECT ON sys.objects TO goldmark_runtime;", "runtime-role-grant:{3}:SELECT:OBJECT:[sys].[objects]")] // a system object
+    [InlineData("CREATE CERTIFICATE ItCert2 ENCRYPTION BY PASSWORD = N'Cert-Pa55word!' WITH SUBJECT = N'it'; GRANT CONTROL ON CERTIFICATE::ItCert2 TO {0};",
+        "database-grant:{0}:CONTROL:CERTIFICATE:[ItCert2]")] // a real name, not #id (Codex on #17)
+    [InlineData("CREATE USER it_role_owner WITHOUT LOGIN; ALTER AUTHORIZATION ON ROLE::goldmark_runtime TO it_role_owner;",
+        "goldmark-database-principal:{3}:it_role_owner")] // owns the role, so it can join it (Codex on #17)
+    [InlineData("CREATE USER it_wgo WITHOUT LOGIN; GRANT CONNECT TO it_wgo WITH GRANT OPTION;",
+        "goldmark-database-principal:{3}:it_wgo")] // CONNECT WITH GRANT OPTION is not a plain CONNECT (Codex on #17)
     [InlineData("GRANT SELECT ON SCHEMA::cmdb TO public;", "goldmark-grant:{3}:public:SELECT:SCHEMA:[cmdb]")]
     [InlineData("ALTER DATABASE CURRENT SET TRUSTWORTHY ON;", "goldmark-database-option:{3}:TRUSTWORTHY")]
     public async Task A_managed_runtime_login_changed_out_of_band_is_refused_on_the_next_run(string change, string expectedId) // #4
@@ -135,6 +144,37 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
 
         await sql.AsAdminAsync(installation.Database, "ALTER ROLE db_datareader DROP MEMBER it_extra;");
         Assert.Equal(0, (await sql.RunAsync(installation, ["bootstrap-db"])).Code); // CONNECT alone is not a finding
+    }
+
+    [Fact]
+    public async Task The_logins_own_view_finds_rights_granted_through_its_role() // the as-the-login layer (DEC-031)
+    {
+        var (installation, _) = await sql.ProvisionAsync();
+        await sql.AsAdminAsync(installation.Database,
+            "EXEC('CREATE SCHEMA it_other'); GRANT SELECT ON SCHEMA::it_other TO goldmark_runtime; " +
+            "CREATE USER it_imp WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_imp TO goldmark_runtime;");
+        await using var connection = await sql.OpenAsync(installation.RuntimeUser, installation.RuntimePassword, installation.Database);
+
+        var ids = (await PrincipalAudit.SelfAsync(connection, installation.Database, runtime: true)).Select(f => f.Id).ToList();
+
+        Assert.Contains($"database-securable:{installation.RuntimeUser}:SCHEMA:it_other:SELECT", ids);
+        Assert.Contains($"database-securable:{installation.RuntimeUser}:USER:it_imp:IMPERSONATE", ids);
+    }
+
+    [Fact]
+    public async Task An_owner_with_CONTROL_SERVER_through_a_server_role_is_accepted() // Codex on #17
+    {
+        var installation = sql.NewInstallation();
+        var owner = $"{installation.MigrationUser}_ctl";
+        var ownerPassword = SqlServerFixture.Secret();
+        await sql.AsAdminAsync("master",
+            $"CREATE LOGIN {owner} WITH PASSWORD = N'{ownerPassword}'; CREATE SERVER ROLE {owner}_role; CREATE SERVER ROLE {owner}_outer; " +
+            $"GRANT CONTROL SERVER TO {owner}_outer; ALTER SERVER ROLE {owner}_outer ADD MEMBER {owner}_role; ALTER SERVER ROLE {owner}_role ADD MEMBER {owner};");
+        await sql.ExecuteAsync(owner, ownerPassword, "master", $"CREATE DATABASE {installation.Database};");
+
+        var result = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
+
+        Assert.True(result.Code == 0, result.ToString());
     }
 
     [Fact]

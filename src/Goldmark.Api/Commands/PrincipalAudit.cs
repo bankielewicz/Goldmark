@@ -35,6 +35,17 @@ internal static class PrincipalAudit
 
     public static bool IsAcceptableKind(string kind) => AcceptableKinds.Contains(kind);
 
+    /// <summary>Every finding kind the audit reports.</summary>
+    public static readonly HashSet<string> KnownKinds = new(StringComparer.Ordinal)
+    {
+        "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
+        "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
+        "goldmark-database-principal", "runtime-role-grant", "login-disabled", "login-policy-off", "login-expiration-on",
+        "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential", "server-role",
+        "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
+        "database-grant", "database-connect-denied", "server-securable", "database-securable",
+    };
+
     public static IReadOnlyCollection<string> AcceptableKindNames => AcceptableKinds;
 
     private const string BaselineResource = "Goldmark.Audit.sql-server-2025-public-grants.txt";
@@ -48,22 +59,67 @@ internal static class PrincipalAudit
     // Target of a database-scope permission row (database_permissions alias p), as class and
     // name. Names are QUOTENAME'd, so a target is unambiguous and can be pasted into a REVOKE.
     private const string DatabaseTargetClass = """
-        CASE p.class WHEN 0 THEN N'DATABASE' WHEN 1 THEN N'OBJECT' WHEN 3 THEN N'SCHEMA' WHEN 4 THEN N'USER'
+        CASE p.class WHEN 0 THEN N'DATABASE' WHEN 1 THEN N'OBJECT' WHEN 3 THEN N'SCHEMA'
+            WHEN 4 THEN CASE (SELECT dp.type FROM sys.database_principals AS dp WHERE dp.principal_id = p.major_id)
+                WHEN 'R' THEN N'ROLE' WHEN 'A' THEN N'APPLICATION ROLE' ELSE N'USER' END
             WHEN 5 THEN N'ASSEMBLY' WHEN 6 THEN N'TYPE' WHEN 10 THEN N'XML SCHEMA COLLECTION'
-            WHEN 24 THEN N'SYMMETRIC KEY' WHEN 25 THEN N'CERTIFICATE' WHEN 26 THEN N'ASYMMETRIC KEY'
+            WHEN 15 THEN N'MESSAGE TYPE' WHEN 16 THEN N'CONTRACT' WHEN 17 THEN N'SERVICE' WHEN 18 THEN N'REMOTE SERVICE BINDING'
+            WHEN 19 THEN N'ROUTE' WHEN 23 THEN N'FULLTEXT CATALOG' WHEN 24 THEN N'SYMMETRIC KEY' WHEN 25 THEN N'CERTIFICATE'
+            WHEN 26 THEN N'ASYMMETRIC KEY' WHEN 29 THEN N'FULLTEXT STOPLIST' WHEN 31 THEN N'SEARCH PROPERTY LIST'
+            WHEN 32 THEN N'DATABASE SCOPED CREDENTIAL'
             ELSE p.class_desc COLLATE DATABASE_DEFAULT END
         """;
 
     private const string DatabaseTargetName = """
         CASE p.class
             WHEN 0 THEN NULL
-            WHEN 1 THEN ISNULL(QUOTENAME(OBJECT_SCHEMA_NAME(p.major_id)) + N'.' + QUOTENAME(OBJECT_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
-                + CASE WHEN p.minor_id > 0 THEN N' (' + ISNULL(QUOTENAME(COL_NAME(p.major_id, p.minor_id)), N'#' + CAST(p.minor_id AS nvarchar(12))) + N')' ELSE N'' END
-            WHEN 3 THEN ISNULL(QUOTENAME(SCHEMA_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
-            WHEN 4 THEN ISNULL(QUOTENAME(USER_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 1 THEN ISNULL((QUOTENAME(OBJECT_SCHEMA_NAME(p.major_id)) + N'.' + QUOTENAME(OBJECT_NAME(p.major_id))) COLLATE DATABASE_DEFAULT, N'#' + CAST(p.major_id AS nvarchar(12)))
+                + CASE WHEN p.minor_id > 0 THEN N' (' + ISNULL(QUOTENAME(COL_NAME(p.major_id, p.minor_id)) COLLATE DATABASE_DEFAULT, N'#' + CAST(p.minor_id AS nvarchar(12))) + N')' ELSE N'' END
+            WHEN 3 THEN ISNULL(QUOTENAME(SCHEMA_NAME(p.major_id)) COLLATE DATABASE_DEFAULT, N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 4 THEN ISNULL(QUOTENAME(USER_NAME(p.major_id)) COLLATE DATABASE_DEFAULT, N'#' + CAST(p.major_id AS nvarchar(12)))
             WHEN 6 THEN ISNULL((SELECT QUOTENAME(SCHEMA_NAME(t.schema_id)) + N'.' + QUOTENAME(t.name) FROM sys.types AS t WHERE t.user_type_id = p.major_id),
                 N'#' + CAST(p.major_id AS nvarchar(12)))
-            ELSE N'#' + CAST(p.major_id AS nvarchar(12)) END
+            ELSE ISNULL(CASE p.class
+                WHEN 5 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.assemblies AS x WHERE x.assembly_id = p.major_id)
+                WHEN 10 THEN (SELECT QUOTENAME(SCHEMA_NAME(x.schema_id)) + N'.' + QUOTENAME(x.name) FROM sys.xml_schema_collections AS x WHERE x.xml_collection_id = p.major_id)
+                WHEN 15 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.service_message_types AS x WHERE x.message_type_id = p.major_id)
+                WHEN 16 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.service_contracts AS x WHERE x.service_contract_id = p.major_id)
+                WHEN 17 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.services AS x WHERE x.service_id = p.major_id)
+                WHEN 18 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.remote_service_bindings AS x WHERE x.remote_service_binding_id = p.major_id)
+                WHEN 19 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.routes AS x WHERE x.route_id = p.major_id)
+                WHEN 23 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.fulltext_catalogs AS x WHERE x.fulltext_catalog_id = p.major_id)
+                WHEN 24 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.symmetric_keys AS x WHERE x.symmetric_key_id = p.major_id)
+                WHEN 25 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.certificates AS x WHERE x.certificate_id = p.major_id)
+                WHEN 26 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.asymmetric_keys AS x WHERE x.asymmetric_key_id = p.major_id)
+                WHEN 29 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.fulltext_stoplists AS x WHERE x.stoplist_id = p.major_id)
+                WHEN 31 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.registered_search_property_lists AS x WHERE x.property_list_id = p.major_id)
+                WHEN 32 THEN (SELECT QUOTENAME(x.name) COLLATE DATABASE_DEFAULT FROM sys.database_scoped_credentials AS x WHERE x.credential_id = p.major_id)
+                END, N'#' + CAST(p.major_id AS nvarchar(12))) END
+        """;
+
+    // Every database securable that records an owner, as (kind, name, owner principal_id).
+    private const string OwnedSecurables = """
+        SELECT N'object' AS kind, SCHEMA_NAME(schema_id) COLLATE DATABASE_DEFAULT + N'.' + name COLLATE DATABASE_DEFAULT AS name, principal_id AS owner FROM sys.objects
+        UNION ALL SELECT N'schema', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.schemas
+        UNION ALL SELECT N'database principal', name COLLATE DATABASE_DEFAULT, owning_principal_id FROM sys.database_principals
+        UNION ALL SELECT N'type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.types
+        UNION ALL SELECT N'xml schema collection', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.xml_schema_collections
+        UNION ALL SELECT N'assembly', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.assemblies
+        UNION ALL SELECT N'certificate', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.certificates
+        UNION ALL SELECT N'asymmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.asymmetric_keys
+        UNION ALL SELECT N'symmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.symmetric_keys
+        UNION ALL SELECT N'database scoped credential', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.database_scoped_credentials
+        UNION ALL SELECT N'full-text catalog', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_catalogs
+        UNION ALL SELECT N'full-text stoplist', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_stoplists
+        UNION ALL SELECT N'search property list', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.registered_search_property_lists
+        UNION ALL SELECT N'message type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_message_types
+        UNION ALL SELECT N'contract', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_contracts
+        UNION ALL SELECT N'service', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.services
+        UNION ALL SELECT N'route', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.routes
+        UNION ALL SELECT N'remote service binding', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.remote_service_bindings
+        UNION ALL SELECT N'event notification', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.event_notifications
+        UNION ALL SELECT N'external language', language COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_languages
+        UNION ALL SELECT N'external library', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_libraries
         """;
 
     // Class and name of a server-scope permission row (server_permissions alias p).
@@ -162,6 +218,9 @@ internal static class PrincipalAudit
         END;
         CLOSE dbs;
         DEALLOCATE dbs;
+
+        -- Offline, restoring, suspect...: they cannot be checked now, and may come online later.
+        INSERT @f SELECT N'database-unreadable', name, state_desc, NULL, NULL FROM sys.databases WHERE state <> 0 AND name <> @db;
         SELECT Kind, A, B, C, D FROM @f;
         """;
 
@@ -194,27 +253,7 @@ internal static class PrincipalAudit
             -- Ownership of any database securable: an owner holds every right on it, and objects not
             -- owned by dbo break ownership chains (DEC-029: everything is owned by dbo).
             INSERT @f SELECT N'owns', @login, o.kind, o.name, NULL FROM (
-                SELECT N'object' AS kind, SCHEMA_NAME(schema_id) COLLATE DATABASE_DEFAULT + N'.' + name COLLATE DATABASE_DEFAULT AS name, principal_id AS owner FROM sys.objects
-                UNION ALL SELECT N'schema', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.schemas
-                UNION ALL SELECT N'database principal', name COLLATE DATABASE_DEFAULT, owning_principal_id FROM sys.database_principals
-                UNION ALL SELECT N'type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.types
-                UNION ALL SELECT N'xml schema collection', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.xml_schema_collections
-                UNION ALL SELECT N'assembly', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.assemblies
-                UNION ALL SELECT N'certificate', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.certificates
-                UNION ALL SELECT N'asymmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.asymmetric_keys
-                UNION ALL SELECT N'symmetric key', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.symmetric_keys
-                UNION ALL SELECT N'database scoped credential', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.database_scoped_credentials
-                UNION ALL SELECT N'full-text catalog', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_catalogs
-                UNION ALL SELECT N'full-text stoplist', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.fulltext_stoplists
-                UNION ALL SELECT N'search property list', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.registered_search_property_lists
-                UNION ALL SELECT N'message type', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_message_types
-                UNION ALL SELECT N'contract', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.service_contracts
-                UNION ALL SELECT N'service', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.services
-                UNION ALL SELECT N'route', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.routes
-                UNION ALL SELECT N'remote service binding', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.remote_service_bindings
-                UNION ALL SELECT N'event notification', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.event_notifications
-                UNION ALL SELECT N'external language', language COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_languages
-                UNION ALL SELECT N'external library', name COLLATE DATABASE_DEFAULT, principal_id FROM sys.external_libraries
+                {OwnedSecurables}
             ) AS o WHERE o.owner = @uid;
         END;
         SELECT Kind, A, B, C, D FROM @f;
@@ -228,25 +267,44 @@ internal static class PrincipalAudit
     private const string GoldmarkDatabaseSql = $"""
         SET NOCOUNT ON;
         {FindingsTable}
+        -- The owner must hold CONTROL SERVER: sa, sysadmin, or CONTROL SERVER granted to it or to a
+        -- server role it belongs to, at any depth (Codex on #17).
         DECLARE @owner varbinary(85) = (SELECT owner_sid FROM sys.databases WHERE database_id = DB_ID());
         DECLARE @owner_id int = (SELECT principal_id FROM sys.server_principals WHERE sid = @owner);
-        IF @owner <> 0x01 AND NOT EXISTS (
-                SELECT 1 FROM sys.server_role_members AS m
-                WHERE m.member_principal_id = @owner_id AND m.role_principal_id = SUSER_ID(N'sysadmin'))
-            AND NOT EXISTS (
-                SELECT 1 FROM sys.server_permissions AS p
-                WHERE p.grantee_principal_id = @owner_id AND p.class = 100 AND p.permission_name = N'CONTROL SERVER' AND p.state IN ('G', 'W'))
+        DECLARE @controls bit = 0;
+        WITH chain AS (
+            SELECT @owner_id AS id
+            UNION ALL
+            SELECT m.role_principal_id FROM sys.server_role_members AS m JOIN chain AS c ON m.member_principal_id = c.id)
+        SELECT @controls = CASE WHEN @owner = 0x01
+            OR EXISTS (SELECT 1 FROM chain WHERE id = SUSER_ID(N'sysadmin'))
+            OR EXISTS (SELECT 1 FROM sys.server_permissions AS p JOIN chain AS c ON p.grantee_principal_id = c.id
+                WHERE p.class = 100 AND p.permission_name = N'CONTROL SERVER' AND p.state IN ('G', 'W'))
+            THEN 1 ELSE 0 END
+        OPTION (MAXRECURSION 32);
+        IF @controls = 0
             INSERT @f VALUES (N'goldmark-database-owner', DB_NAME(), ISNULL(SUSER_SNAME(@owner), N'#unknown'), NULL, NULL);
 
+        -- Any other user or application role that holds a role, a permission beyond a plain
+        -- CONNECT, or owns anything (a role it owns can be altered to give it Goldmark's rights).
         INSERT @f SELECT DISTINCT N'goldmark-database-principal', DB_NAME(), u.name, NULL, NULL
         FROM sys.database_principals AS u
         WHERE u.type NOT IN ('R') AND u.principal_id > 4
             AND u.sid NOT IN (ISNULL(SUSER_SID(@login1), 0x00), ISNULL(SUSER_SID(@login2), 0x00))
             AND (EXISTS (SELECT 1 FROM sys.database_role_members AS m WHERE m.member_principal_id = u.principal_id)
                 OR EXISTS (SELECT 1 FROM sys.database_permissions AS p WHERE p.grantee_principal_id = u.principal_id
-                    AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT'))
-                OR EXISTS (SELECT 1 FROM sys.schemas AS s WHERE s.principal_id = u.principal_id)
-                OR EXISTS (SELECT 1 FROM sys.objects AS o WHERE o.principal_id = u.principal_id));
+                    AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT' AND p.state = 'G'))
+                OR EXISTS (SELECT 1 FROM ({OwnedSecurables}) AS o WHERE o.owner = u.principal_id));
+
+        -- goldmark_runtime holds exactly what migration 0002 grants it (keep in step with new
+        -- migrations, like VerifyRuntimeSql). Its effective rights are checked as the login, but
+        -- not on system objects, so explicit grants are compared here (Codex on #17).
+        DECLARE @role int = DATABASE_PRINCIPAL_ID(N'goldmark_runtime');
+        INSERT @f SELECT N'runtime-role-grant', DB_NAME(), {PermissionName}, {DatabaseTargetClass}, {DatabaseTargetName}
+        FROM sys.database_permissions AS p
+        WHERE @role IS NOT NULL AND p.grantee_principal_id = @role AND p.state IN ('G', 'W')
+            AND NOT (p.state = 'G' AND p.class = 3 AND p.major_id = SCHEMA_ID(N'cmdb') AND p.permission_name IN (N'SELECT', N'INSERT', N'UPDATE', N'DELETE'))
+            AND NOT (p.state = 'G' AND p.class = 1 AND p.major_id = OBJECT_ID(N'dbo.SchemaVersions') AND p.minor_id = 0 AND p.permission_name = N'SELECT');
         SELECT Kind, A, B, C, D FROM @f;
         """;
 
@@ -600,7 +658,7 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
     public string Description => Kind switch
     {
         "guest-connect" => $"guest can connect to database '{P(0)}', so every login, Goldmark's included, can enter it. Fix: USE {Q(P(0))}; REVOKE CONNECT FROM guest;",
-        "database-unreadable" => $"database '{P(0)}' could not be read (SQL Server error {P(1)}), so it was not checked for guest access.",
+        "database-unreadable" => $"database '{P(0)}' could not be checked ({P(1)}) for guest access or users of Goldmark's logins.",
         "linked-login-all-logins" => $"linked server '{P(0)}' maps every login to a fixed remote login. Fix: EXEC sp_droplinkedsrvlogin @rmtsrvname = {L(P(0))}, @locallogin = NULL;",
         "remote-login-all-logins" => $"remote server '{P(0)}' accepts every login through a remote-login mapping. Fix: EXEC sp_dropremotelogin @remoteserver = {L(P(0))};",
         "public-server-grant" => $"public holds {P(0)} on {Target(P(1), P(2))}, which every login inherits. Fix: REVOKE {Revocable(P(0))} {On(P(1), P(2))}FROM public{Cascade(P(0))};",
@@ -611,7 +669,9 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
         "goldmark-database-option" => $"the Goldmark database '{P(0)}' has {P(1)} on. Fix: ALTER DATABASE {Q(P(0))} SET {P(1)} OFF;",
         "goldmark-database-owner" => $"the Goldmark database '{P(0)}' is owned by '{P(1)}', which does not hold CONTROL SERVER, so that login controls everything in it. " +
             $"Fix: ALTER AUTHORIZATION ON DATABASE::{Q(P(0))} TO <a login with CONTROL SERVER>; (or drop the database if Goldmark did not create it)",
-        "goldmark-database-principal" => $"'{P(1)}' in the Goldmark database '{P(0)}' holds a role, a permission or an object; only Goldmark's two users may. " +
+        "runtime-role-grant" => $"the role goldmark_runtime holds {P(1)} on {Target(P(2), P(3))} in '{P(0)}', which Goldmark's migrations do not grant. " +
+            $"Fix: USE {Q(P(0))}; REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM [goldmark_runtime]{Cascade(P(1))};",
+        "goldmark-database-principal" => $"'{P(1)}' in the Goldmark database '{P(0)}' holds a role or a permission, or owns something; only Goldmark's two users may. " +
             $"Fix: USE {Q(P(0))}; remove its roles, grants and ownership, or DROP USER {Q(P(1))};",
         "login-disabled" => $"login '{P(0)}' is disabled. Goldmark does not enable logins. Fix: ALTER LOGIN {Q(P(0))} ENABLE; or configure another login.",
         "login-policy-off" => $"login '{P(0)}' does not enforce SQL Server's password policy. Fix: ALTER LOGIN {Q(P(0))} WITH CHECK_POLICY = ON;",
