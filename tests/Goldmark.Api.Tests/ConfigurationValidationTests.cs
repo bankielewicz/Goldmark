@@ -209,11 +209,112 @@ public sealed class BootstrapValidationTests
 
     private static BootstrapOptions ValidBootstrap() => new() { AdminUser = "sa", AdminPassword = "Admin-Pa55word!" };
 
+    private static MigrationOptions ValidMigration() => new() { User = "goldmark_migrator", Password = "Migrate-Pa55word!" };
+
+    private static List<string> Validate(DatabaseOptions db, BootstrapOptions bootstrap, MigrationOptions? migration = null) =>
+        BootstrapDatabaseCommand.Validate(db, migration ?? ValidMigration(), bootstrap);
+
     [Fact]
-    public void Valid_settings_pass() => Assert.Empty(BootstrapDatabaseCommand.Validate(ValidDatabase(), ValidBootstrap()));
+    public void Valid_settings_pass() => Assert.Empty(Validate(ValidDatabase(), ValidBootstrap()));
+
+    [Fact]
+    public void The_migration_login_defaults_to_goldmark_migrator_with_no_password()
+    {
+        var defaults = new MigrationOptions();
+        Assert.Equal("goldmark_migrator", defaults.User);
+        Assert.Equal("", defaults.Password);
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), defaults), e => e.Contains("Goldmark:Migration:Password must be 12", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(65536)]
+    public void Port_must_be_a_TCP_port(int port) // #7
+    {
+        var db = ValidDatabase();
+        db.Port = port;
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains("Goldmark:Database:Port must be between 1 and 65535", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("dbo")]
+    [InlineData("guest")]
+    [InlineData("sys")]
+    [InlineData("INFORMATION_SCHEMA")]
+    [InlineData("information_schema")]
+    [InlineData("public")]
+    [InlineData("goldmark_runtime")]
+    [InlineData("SA")]
+    public void Reserved_database_principal_names_are_rejected_for_both_logins(string name) // #7
+    {
+        var db = ValidDatabase();
+        db.User = name;
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains("Goldmark:Database:User must not be 'sa' or a reserved", StringComparison.Ordinal));
+
+        var migration = ValidMigration();
+        migration.User = name;
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), migration), e => e.Contains("Goldmark:Migration:User must not be 'sa' or a reserved", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("goldmark_app", "must differ from Goldmark:Database:User")]
+    [InlineData("GOLDMARK_APP", "must differ from Goldmark:Database:User")]
+    [InlineData("sa", "reserved")]
+    [InlineData("migrator; DROP", "simple identifier")]
+    public void The_migration_login_must_be_its_own_simple_login(string user, string expected)
+    {
+        var migration = ValidMigration();
+        migration.User = user;
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), migration), e => e.StartsWith("Goldmark:Migration:User", StringComparison.Ordinal) && e.Contains(expected, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_migration_login_must_differ_from_the_admin_login()
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AdminUser = "goldmark_migrator";
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("Goldmark:Migration:User must differ from Goldmark:Bootstrap:AdminUser", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_migration_password_must_differ_from_the_runtime_and_admin_passwords()
+    {
+        var migration = ValidMigration();
+        migration.Password = ValidDatabase().Password;
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), migration), e => e.Contains("Goldmark:Migration:Password must differ from Goldmark:Database:Password", StringComparison.Ordinal));
+
+        migration.Password = ValidBootstrap().AdminPassword;
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), migration), e => e.Contains("Goldmark:Migration:Password must differ from Goldmark:Bootstrap:AdminPassword", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(11)]
+    [InlineData(129)]
+    public void Migration_password_length_is_bounded(int length)
+    {
+        var migration = ValidMigration();
+        migration.Password = new string('m', length);
+        Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), migration), e => e.Contains("Goldmark:Migration:Password must be 12 to 128", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Validation_messages_never_contain_a_password()
+    {
+        var db = ValidDatabase();
+        var migration = ValidMigration();
+        migration.Password = db.Password;
+        var bootstrap = ValidBootstrap();
+        bootstrap.AdminPassword = db.Password;
+
+        var all = string.Join("\n", Validate(db, bootstrap, migration));
+
+        Assert.DoesNotContain(db.Password, all, StringComparison.Ordinal);
+    }
 
     [Theory]
     [InlineData("sa")]
+    [InlineData("dbo")]
     [InlineData("goldmark app")]
     [InlineData("x]; DROP LOGIN sa; --")]
     [InlineData("")]
@@ -221,7 +322,7 @@ public sealed class BootstrapValidationTests
     {
         var db = ValidDatabase();
         db.User = user;
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains(":User", StringComparison.Ordinal));
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains(":User", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -229,7 +330,7 @@ public sealed class BootstrapValidationTests
     {
         var bootstrap = ValidBootstrap();
         bootstrap.AdminUser = "goldmark_app";
-        Assert.Contains(BootstrapDatabaseCommand.Validate(ValidDatabase(), bootstrap), e => e.Contains("must differ", StringComparison.Ordinal));
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("must differ", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -239,7 +340,7 @@ public sealed class BootstrapValidationTests
     {
         var db = ValidDatabase();
         db.Password = new string('a', length);
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains(":Password", StringComparison.Ordinal));
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains(":Password", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -249,18 +350,23 @@ public sealed class BootstrapValidationTests
     {
         var db = ValidDatabase();
         db.ConnectTimeoutSeconds = seconds;
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("ConnectTimeoutSeconds", StringComparison.Ordinal));
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains("ConnectTimeoutSeconds", StringComparison.Ordinal));
     }
 
     [Fact]
     public void Least_privilege_verification_checks_effective_permissions_as_the_login()
     {
         // Effective permissions as the login: securityadmin/db_securityadmin passed a fixed-role check.
-        var effective = BootstrapDatabaseCommand.VerifySql;
-        Assert.Contains("sys.login_token", effective, StringComparison.Ordinal);
-        Assert.Contains("sys.user_token", effective, StringComparison.Ordinal);
-        Assert.Contains("fn_my_permissions(NULL, N'SERVER')", effective, StringComparison.Ordinal);
-        Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", effective, StringComparison.Ordinal);
+        foreach (var effective in new[] { BootstrapDatabaseCommand.VerifySql, MigrateCommand.VerifyRuntimeSql })
+        {
+            Assert.Contains("sys.login_token", effective, StringComparison.Ordinal);
+            Assert.Contains("sys.user_token", effective, StringComparison.Ordinal);
+            Assert.Contains("fn_my_permissions(NULL, N'SERVER')", effective, StringComparison.Ordinal);
+            Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", effective, StringComparison.Ordinal);
+        }
+
+        Assert.Contains("sys.login_token", BootstrapDatabaseCommand.VerifyMigrationSql, StringComparison.Ordinal);
+        Assert.Contains("fn_my_permissions(NULL, N'SERVER')", BootstrapDatabaseCommand.VerifyMigrationSql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -268,14 +374,14 @@ public sealed class BootstrapValidationTests
     {
         var db = ValidDatabase();
         db.ServerCertificatePath = "/nonexistent/sqlserver.crt";
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("ServerCertificatePath does not point", StringComparison.Ordinal));
+        Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains("ServerCertificatePath does not point", StringComparison.Ordinal));
 
         var garbage = Path.GetTempFileName();
         try
         {
             File.WriteAllText(garbage, "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----\n");
             db.ServerCertificatePath = garbage;
-            Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("could not be read as a PEM or DER", StringComparison.Ordinal));
+            Assert.Contains(Validate(db, ValidBootstrap()), e => e.Contains("could not be read as a PEM or DER", StringComparison.Ordinal));
         }
         finally
         {
@@ -292,7 +398,7 @@ public sealed class BootstrapValidationTests
     {
         var bootstrap = ValidBootstrap();
         bootstrap.AdminPassword = "";
-        Assert.Contains(BootstrapDatabaseCommand.Validate(ValidDatabase(), bootstrap), e => e.Contains("AdminPassword", StringComparison.Ordinal));
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("AdminPassword", StringComparison.Ordinal));
     }
 }
 
