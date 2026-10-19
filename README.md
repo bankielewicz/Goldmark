@@ -16,7 +16,8 @@ management database (CMDB) for Windows- and VMware-heavy IT estates:
 
 The product requirements are in [docs/PRD.md](docs/PRD.md) (a draft).
 Approved scope, technical decisions and deviations from the PRD are in
-[docs/DECISIONS.md](docs/DECISIONS.md).
+[docs/DECISIONS.md](docs/DECISIONS.md). Build status, the slice plan and working
+rules for contributors are in [docs/HANDOFF.md](docs/HANDOFF.md).
 
 ## Run it with Docker Compose
 

@@ -4,9 +4,11 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-16):** the product owner approved **slice 1 scope only**
-(DEC-001), not the whole PRD. PRD assumption A1 (stack) is confirmed for this
-scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
+**Approval state (2026-10-19):** slice 1 is merged (PR #1). The owner approved
+the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b
+and 5b, in order, one PR each. The PRD text stays a draft (DEC-001); the build
+plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
+(stack) is confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 | ID | Decision | Area |
 |---|---|---|
@@ -30,6 +32,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 | DEC-018 | CI design, and CodeQL / dependency review availability | CI |
 | DEC-019 | Deferred to later slices | Scope |
 | DEC-020 | Constraints of the build sandbox (not of the product) | Process |
+| DEC-021 | Approved MVP build plan (amended PRD §11) | Process |
 
 ---
 
@@ -312,7 +315,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   The first fixed-role check passed a login holding `securityadmin` and
   `db_securityadmin` (review finding). Slice 2 adds the runtime DML grants to
   the baseline.
-- **Removed and deferred to slice 2** (issues labelled `slice-2`): the
+- **Removed and deferred to slice 2b** (DEC-021; issues labelled `slice-2`): the
   administrator-side audit of pre-existing principals. That covered explicit
   grants below database scope, ownership of securables, linked-server, remote
   and credential mappings including wildcard mappings, `guest` access in
@@ -369,9 +372,11 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - **Verified in Chromium and Google Chrome** (Playwright against the Compose stack, locally and in CI): React 19 +
   Vite 8 render with zero CSP/Trusted Types violations, in a secure context,
   and a raw `innerHTML` assignment is blocked.
-- **Risk for slice 5:** Fluent UI v9 injects styles at runtime (Griffel). It
-  must be verified against `style-src 'self'` before adoption. If it needs a
-  nonce or `unsafe-inline`, that comes back for a decision, not a silent change.
+- **Risk for slice 3** (moved from slice 5 by DEC-021): Fluent UI v9 injects
+  styles at runtime (Griffel). It must be verified against `style-src 'self'`
+  and `trusted-types 'none'` before adoption, as the first step of slice 3.
+  If it needs a nonce or `unsafe-inline`, that comes back for a decision, not
+  a silent change.
 
 ## DEC-018 CI design, and CodeQL / dependency review availability
 
@@ -401,11 +406,14 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 | Item | Slice |
 |---|---|
-| Migration login, DML grants, readiness schema check | 2 |
-| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2 |
-| Generated certificate renewal without a restart (DEC-006) | certificate-management work |
-| Owner-only ACL for the generated key on Windows dev hosts (DEC-006) | when a Windows dev host is verified |
-| `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2 |
+| Migration login, DML grants, readiness schema check; `bootstrap-db` port and reserved-name validation (#7) | 2 |
+| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b |
+| `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b |
+| Generated certificate renewal without a restart (#5, DEC-006) | 24 |
+| Owner-only ACL for the generated key on Windows dev hosts (#6, DEC-006) | 24 |
+| Types & attributes admin screen (UI #14; no slice in PRD §11) | 5b |
+| Settings screen (UI #20; no slice in PRD §11) | P1 (DEC-021) |
+| Fluent UI v9 verification under the served CSP and Trusted Types (DEC-017) | 3, first step |
 | Authentication, deny-by-default fallback policy, M6 enumeration test | 3 |
 | OpenAPI document, `/api/v1/health` decision | 8 |
 | PowerShell module and Pester (no executable PowerShell exists yet) | 9 |
@@ -426,6 +434,41 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   revocation checks.
 - The browser check ran on Chromium 141 (Playwright build 1194) driven by
   Playwright 1.64.0; CI uses the runner's Google Chrome.
+
+## DEC-021 Approved MVP build plan (amended PRD §11)
+
+- **Decision (owner, 2026-10-19).** Build PRD §11 slices 2–24 in order, one
+  PR each, gated by the owner's APPROVED. P1 slices 25–30 wait until slice 24
+  ships unless the owner pulls one forward. The full list, branch names and
+  status live in `docs/HANDOFF.md`, which is updated in every slice PR.
+- **Amendments to PRD §11:**
+  1. **Slice 2 is split.** Slice 2 keeps the PRD scope (DbUp baseline,
+     migration vs runtime logins) plus the readiness schema-version check
+     (DEC-008) and #7. New **slice 2b** covers US-01 "use an existing SQL
+     Server" (`docker-compose.external-sql.yml`) and the audit of adopted and
+     shared-instance principals (#2, #3, #4). The audit runs whenever
+     `bootstrap-db` adopts or revalidates a principal, in **both** the bundled
+     and the external-SQL deployment (adoption with
+     `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true` and out-of-band changes to a
+     managed login apply to the bundled SQL Server too; DEC-015). PRD
+     numbering is unchanged.
+  2. **Screens without a slice:** UI #14 (Types & attributes admin) gets its
+     own **slice 5b** (`slice/05b-types-admin`), after slice 5. UI #20
+     (Settings) becomes **P1**, built with the P1 slices.
+  3. **#5 and #6** (TLS renewal without restart; Windows key ACL) go in slice 24.
+  4. **Fluent UI verification moves to slice 3** (from slice 5). It is the
+     first step of slice 3: verify Fluent UI v9 (Griffel) under the served CSP
+     (`style-src 'self'`, `trusted-types 'none'`). If it fails, stop and bring
+     options to the owner before building any screen (DEC-017).
+- **Rationale.** Slice 2 as written plus the deferred bootstrap work was too
+  large to review as one PR; the existing-SQL work and the principal audit
+  belong together (pre-existing principals are the main case on an existing
+  instance), and neither blocks the baseline schema. The two screens
+  and the TLS items needed an owner so they are not lost. Slice 3 builds the
+  first screens, so Fluent must be proven there, before any screen depends
+  on it. Slice 5b and Settings as P1 are owner decisions (2026-10-19).
+- **Working rules** for the build (gating, review rounds, design handoffs,
+  models and sessions) are recorded in `docs/HANDOFF.md`.
 
 ---
 
@@ -462,4 +505,4 @@ done; **Not executed** = implemented but the check has not run (and why).
 | 23 | Least-privilege workflow permissions | **Met** (static) | `ci.yml` |
 | 24 | `SECURITY.md` | **Met** | `SECURITY.md` |
 | 25 | US-01: DbUp migrations on start with a separate migration login; runtime login DML-only | **Unmet in slice 1** (slice 2) | DEC-015 |
-| 26 | US-01: option to use an existing SQL Server | **Unmet in slice 1** (slice 2) | DEC-019 |
+| 26 | US-01: option to use an existing SQL Server | **Unmet in slice 1** (slice 2b, DEC-021) | DEC-019 |
