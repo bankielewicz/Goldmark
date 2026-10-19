@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "devforgeai": {
+      "source": {
+        "source": "github",
+        "repo": "bankielewicz/DevForgeAI"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "devforgeai@devforgeai": true
+  }
+}

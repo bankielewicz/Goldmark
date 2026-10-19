@@ -42,3 +42,8 @@ tests/smoke/.work/
 
 # --- Local design references and scratch ---
 tmp/
+
+# --- Claude Code local files; DevForgeAI comes from its marketplace (.claude/settings.json) ---
+.claude/settings.local.json
+.claude/.cc-writes/
+.claude/skills/devforgeai/

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · States: Sign-in, Setup, Dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h3{font-size:15px;line-height:20px;font-weight:600;margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.inp[readonly]{background:var(--sf2);color:var(--fg2)}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.sec{display:flex;flex-direction:column;gap:12px}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pnl{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tag{font-size:11px;line-height:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt)}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb.s{background:var(--okbg);border-color:var(--okc)}.mb.s>svg{color:var(--okc)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px;display:block}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block;box-sizing:border-box}
+.mini{background:var(--sf2);border:1px solid var(--bd);border-radius:6px;padding:10px;display:flex;flex-direction:column;gap:4px}
+.lbl{font-weight:600;display:block;margin-bottom:4px}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<div><h1>States: Sign-in, First-run setup, Dashboard</h1><p class="mut" style="margin: 4px 0 0">Per-screen states for section C. Populated views are on the main canvas.</p></div>
+
+<section class="sec" aria-labelledby="h-si">
+<h2 id="h-si">1 · Sign-in</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Loading (submitting)</span>
+<div><label class="lbl" for="u1">Username</label><input class="inp" id="u1" readonly value="dana.k" style="width: 100%"></div>
+<div><label class="lbl" for="p1">Password</label><input class="inp" id="p1" type="password" readonly value="••••••••••" style="width: 100%"></div>
+<button class="btn pr" type="button" disabled style="width: 100%"><span class="spin" aria-hidden="true"></span>Signing in…</button>
+<span class="sm mut">Inputs read-only, button disabled with inline spinner.</span>
+</div>
+<div class="pnl"><span class="tag">Success</span>
+<div class="mb s" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><div>Signed in. Taking you to <span class="mono">/ci/8f21c0de?tab=history</span>…</div></div>
+<span class="sm mut">Returns to the page originally requested (deep link preserved). No toast: the destination page loads.</span>
+</div>
+<div class="pnl"><span class="tag">Error (generic, linked to fields)</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div>Username or password is incorrect.</div></div>
+<span class="sm mut">Focus moves to this message. Locked-out, session-expired and setup-missing variants are on the main canvas.</span>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-su">
+<h2 id="h-su">2 · First-run setup</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Loading on Continue</span>
+<div><label class="lbl" for="t1">Setup token</label><input class="inp mono" id="t1" readonly value="gst_4P7Q-W2ZR-K8MX" style="width: 100%"></div>
+<div class="row" style="justify-content: flex-end"><button class="btn pr" type="button" disabled><span class="spin" aria-hidden="true"></span>Checking token…</button></div>
+</div>
+<div class="pnl"><span class="tag">Setup already complete (URL revisited)</span>
+<h3>Setup is already complete</h3>
+<p class="mut" style="margin: 0">An administrator account exists for this instance.</p>
+<a class="btn pr" href="#signin" style="align-self: flex-start">Go to sign-in</a>
+</div>
+<div class="pnl"><span class="tag">Weak password (inline)</span>
+<div><label class="lbl" for="pw">Password</label><input class="inp" id="pw" type="password" value="••••••" aria-invalid="true" aria-describedby="pwe" style="width: 100%; border-color: var(--dn)"><div id="pwe" class="row sm" style="color: var(--dn); gap: 4px; margin-top: 4px"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Use at least [MIN LENGTH] characters.</div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-db">
+<h2 id="h-db">3 · Dashboard</h2>
+<div class="g2">
+<div class="pnl" aria-busy="true" aria-label="Loading dashboard"><span class="tag">Loading</span>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px">
+<div class="mini"><span class="sk" style="width: 70%; height: 10px"></span><span class="sk" style="width: 45%; height: 22px"></span></div>
+<div class="mini"><span class="sk" style="width: 60%; height: 10px"></span><span class="sk" style="width: 40%; height: 22px"></span></div>
+<div class="mini"><span class="sk" style="width: 65%; height: 10px"></span><span class="sk" style="width: 35%; height: 22px"></span></div>
+<div class="mini"><span class="sk" style="width: 55%; height: 10px"></span><span class="sk" style="width: 30%; height: 22px"></span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<div class="mini"><span class="sk" style="width: 50%"></span><span class="sk" style="width: 80%; height: 10px"></span><span class="sk" style="width: 60%; height: 10px"></span></div>
+<div class="mini"><span class="sk" style="width: 45%"></span><span class="sk" style="width: 75%; height: 10px"></span><span class="sk" style="width: 55%; height: 10px"></span></div>
+</div>
+<span class="sm mut">Skeleton cards and tiles shaped like the content; region marked busy.</span>
+</div>
+
+<div class="pnl"><span class="tag">Empty (fresh install)</span>
+<h3>No data yet</h3>
+<p class="mut" style="margin: 0">Goldmark has no CIs. Start with one of these:</p>
+<ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px">
+<li><a href="#sources">Register a collector source</a> <span class="mut sm">for vCenter, Windows, Active Directory or SQL Server</span></li>
+<li><a href="#csv">Import a CSV</a> <span class="mut sm">for a spreadsheet of servers or other CIs</span></li>
+<li><button class="btn xs" type="button">Load the sample dataset</button> <span class="mut sm">fictional *.corp.example estate</span></li>
+</ol>
+</div>
+
+<div class="pnl"><span class="tag">Error in one widget (rest still renders)</span>
+<div class="row" style="justify-content: space-between"><h3>Collector health</h3><a class="sm" href="#sources">Sources &amp; collectors</a></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load collector health.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-9c1e7a20b4d1-01</code><button class="btn xs" type="button" aria-label="Copy reference ID">Copy</button></span></div></div>
+<div class="row sm mut"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Loaded</span>CIs by type, Needs attention and Recent changes render normally.</div>
+</div>
+
+<div class="pnl"><span class="tag">"As of" active</span>
+<div class="mb w" style="align-items: center"><svg aria-hidden="true" viewBox="0 0 16 16" style="margin: 0"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg><div style="flex: 1"><strong>Viewing as of 2026-10-06 14:00 UTC (read-only)</strong></div><button class="btn xs" type="button">Return to now</button></div>
+<div class="row" style="gap: 16px"><span><span class="mut sm">VirtualMachine</span> <strong>2,141</strong></span><span><span class="mut sm">Server</span> <strong>1,629</strong></span><span><span class="mut sm">HypervisorHost</span> <strong>76</strong></span></div>
+<div class="sm"><span class="mut">Recent changes end at 2026-10-06 14:00 UTC.</span> Last item: 13:52 · <span class="bd ol">vCenter vc01</span> app-erp-web02 +1 disk</div>
+<span class="sm mut">Collector tiles show the run status as it was at that time.</span>
+</div>
+</div>
+</section>
+
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: 'gm ' + (this.props.dark ? 'dk' : 'lt') };
+  }
+}
+</script>
+</body>
+</html>

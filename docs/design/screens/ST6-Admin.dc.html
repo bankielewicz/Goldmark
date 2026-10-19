@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · States: Administration</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h3{font-size:15px;line-height:20px;font-weight:600;margin:0}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.dz{background:var(--dn);border-color:var(--dn);color:#fff}
+.dk .btn.dz{color:#1a0004}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.sec{display:flex;flex-direction:column;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pnl{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tag{font-size:11px;line-height:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt)}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.ok{background:var(--okbg);color:var(--okc)}.brd{background:var(--brbg);color:var(--br)}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px;display:block}
+.ctr{text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;padding:8px 0}
+.toast{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:6px;background:var(--fg);color:var(--bg)}
+.dlg{background:var(--sf);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.2);border:1px solid var(--bd);padding:16px;display:flex;flex-direction:column;gap:10px}
+.tip{background:var(--fg);color:var(--bg);font-size:12px;line-height:16px;padding:6px 8px;border-radius:4px;max-width:240px}
+.lbl{font-weight:600;display:block;margin-bottom:4px}
+.p1{font-size:11px;line-height:14px;font-weight:700;padding:1px 6px;border-radius:3px;border:1px dashed var(--br);color:var(--br);white-space:nowrap}
+.err{color:var(--dn);font-size:12px;display:flex;gap:4px;align-items:center;margin-top:4px}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<div><h1>States: Administration</h1><p class="mut" style="margin: 4px 0 0">Types &amp; attributes, Audit log, Users &amp; roles, Settings.</p></div>
+
+<section class="sec" aria-labelledby="h-ty">
+<h2 id="h-ty">14 · Types &amp; attributes</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Delete custom attribute in use</span>
+<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dca"><h3 id="dca">Delete attribute backup_tier?</h3><p class="sm" style="margin: 0"><strong>1,412 CIs</strong> have a value for backup_tier. The values are removed; change history keeps them.</p><div><label class="lbl" for="tc">Type <span class="mono">backup_tier</span> to confirm</label><input class="inp mono" id="tc" value="backup_" style="width: 100%"></div><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn" type="button" disabled>Delete attribute</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Validation (Add attribute)</span>
+<div><label class="lbl" for="an">Name</label><input class="inp mono" id="an" value="Cost Center" aria-invalid="true" aria-describedby="ane" style="width: 100%; border-color: var(--dn)"><div id="ane" class="err"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Use lowercase letters, digits and underscores, e.g. cost_center.</div></div>
+<div><label class="lbl" for="ev">Enum values</label><input class="inp" id="ev" value="" aria-invalid="true" aria-describedby="eve" style="width: 100%; border-color: var(--dn)"><div id="eve" class="err"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Add at least one value.</div></div>
+</div>
+<div class="pnl"><span class="tag">Loading / error</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 80%"></span><span class="sk" style="width: 65%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't load attributes for VirtualMachine.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-5c0e2d9a71b4-01</code></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-au">
+<h2 id="h-au">16 · Audit log</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">No entries in range</span>
+<div class="ctr"><h3>No audit entries match these filters</h3><span class="mut">Between 2026-10-16 08:00 and 09:00 UTC for actor pat.m.</span><button class="btn" type="button">Clear filters</button></div>
+</div>
+<div class="pnl"><span class="tag">Export confirmation</span>
+<div class="dlg" role="dialog" aria-labelledby="ex"><h3 id="ex">Export audit entries</h3><ul class="sm" style="margin: 0; padding-left: 18px"><li>Action: Sign-in success / failure</li><li>Time: last 24 hours (UTC)</li><li>Rows: <strong>412</strong></li></ul><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn pr" type="button">Export 412 rows</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Loading / error</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 85%"></span><span class="sk" style="width: 70%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't load audit entries.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-e8a3b6015cd2-01</code></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-us">
+<h2 id="h-us">17 · Users &amp; roles</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Last Admin / self-edit</span>
+<label class="row" style="gap: 8px"><input type="checkbox" checked disabled aria-describedby="la" style="width: 16px; height: 16px; margin: 0">Admin</label>
+<span class="tip" id="la" role="tooltip">dana.k is the only Admin. Make someone else an Admin before removing this role.</span>
+<div class="row" style="align-items: flex-start"><button class="btn" type="button" disabled aria-describedby="se">Disable user</button><span class="tip" id="se" role="tooltip">You can't disable your own account.</span></div>
+</div>
+<div class="pnl"><span class="tag">Add user</span>
+<div class="dlg" role="dialog" aria-labelledby="au"><h3 id="au">Add user</h3>
+<div class="row" style="flex-wrap: nowrap"><div style="flex: 1"><label class="lbl" for="nu">Username</label><input class="inp" id="nu" value="lee.w" style="width: 100%"></div><div style="flex: 1"><label class="lbl" for="nd">Display name</label><input class="inp" id="nd" value="Lee Wong" style="width: 100%"></div></div>
+<div class="row sm"><label class="row" style="gap: 4px"><input type="radio" name="iv" checked style="margin: 0">Invite link</label><label class="row" style="gap: 4px"><input type="radio" name="iv" style="margin: 0">Temporary password</label></div>
+<div class="mb i sm"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>Lee must set up two-factor authentication at first sign-in.</div></div>
+<div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn pr" type="button">Add user</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Success / error</span>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">pat.m unlocked</span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't reset MFA for pat.m.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-b40c9e27f1a6-01</code></div></div>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="tag">Loading</span><span class="sk"></span><span class="sk" style="width: 75%"></span></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-st">
+<div class="row"><h2 id="h-st">20 · Settings</h2><span class="p1">P1 · whole screen (DEC-021)</span></div>
+<div class="g3">
+<div class="pnl"><span class="tag">Unsaved-changes guard</span>
+<div class="dlg" role="dialog" aria-labelledby="usg"><h3 id="usg">Leave Retention without saving?</h3><p class="sm" style="margin: 0">Your change to audit log retention (365 → 730 days) will be lost.</p><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Stay</button><button class="btn pr" type="button">Discard changes</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Validation / saved</span>
+<div><label class="lbl" for="ar">Audit log (days, minimum 365)</label><input class="inp" id="ar" value="90" aria-invalid="true" aria-describedby="are" style="width: 120px; border-color: var(--dn)"><div id="are" class="err"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Enter at least 365 days.</div></div>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">Retention settings saved</span></div>
+</div>
+<div class="pnl"><span class="tag">Secret field / loading / error</span>
+<div class="row"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Client secret set · updated 2026-10-01</span><button class="btn xs" type="button">Replace…</button></div>
+<span class="sm mut">After Save the field clears; the stored value is never shown again.</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk" style="width: 60%"></span><span class="sk" style="width: 85%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't load TLS details.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-d2f7a0c4e93b-01</code></div></div>
+</div>
+</div>
+</section>
+
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: 'gm ' + (this.props.dark ? 'dk' : 'lt') };
+  }
+}
+</script>
+</body>
+</html>

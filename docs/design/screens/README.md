@@ -17,8 +17,16 @@ frame sizes. Apart from `$preview`, both canvases hold identical files.
 When a screen changes, edit the file here and publish it to both canvases.
 If someone edits a canvas directly, pull that file back here first.
 
-Not stored here (they exist only on the canvases): the six per-screen state
-boards (`ST1`–`ST6`), the Shared states board and each canvas's `canvas.json`.
+State boards (one copy each, published to one canvas only):
+
+- `00-SharedStates.dc.html`: patterns every screen reuses (loading, empty,
+  error, 403, not found, merged and retired CI, as-of, 412 conflict,
+  shown-once secret, typed confirmation, badge vocabulary). 1440 canvas.
+- `ST1`–`ST6-*.dc.html`: each screen's own loading, empty, error and
+  screen-specific states (section C of the prompts), grouped by nav section.
+  1024 canvas. They show content regions only, without the app shell.
+
+Not stored here: each canvas's `canvas.json` (board positions and titles).
 
 Status: review input, not approved designs. They are a starting point for
 the design-system handoff and the per-slice design handoffs in

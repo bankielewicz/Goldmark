@@ -2,25 +2,27 @@
 
 ## Current State and Sources of Authority
 
-Goldmark CMDB has a working slice-1 skeleton: a .NET 10 HTTPS API, health endpoints, Serilog JSON logging, an empty React SPA, and Docker Compose with SQL Server 2025 Express. There are no CMDB features or authentication yet; it is not production-ready.
+Goldmark CMDB has a working slice 1–2 baseline: a .NET 10 HTTPS API, health endpoints, Serilog JSON logging, an empty React SPA, Docker Compose with SQL Server 2025 Express, and the DbUp baseline schema with separate migration and runtime logins. There are no CMDB features or authentication yet; it is not production-ready.
 
 Start slice work with `docs/HANDOFF.md` (status, working rules, next slice and gotchas), `docs/DECISIONS.md` (approved decisions), and the relevant requirements in `docs/PRD.md`. The PRD remains DRAFT v0.2; decisions override conflicting PRD text. DEC-021 and the handoff supersede PRD §11's build plan. Preserve requirement and decision IDs. `docs/specs/PRD-draft.md` is a local draft copy, not the current authority entry point.
 
-As of 2026-10-19, slice 1 is merged and slice 2 (database baseline) is next. Its approved decisions are in `docs/HANDOFF.md` §3; they are not implemented yet. Read the current handoff rather than assuming this snapshot authorizes the next slice. Licensing and DCO remain pending; no license has been granted.
+As of 2026-10-19, slices 1 and 2 are merged (PRs #1 and #14; slice 2's decisions are DEC-022…DEC-029). The handoff names slice 2b as next. Read the current handoff rather than assuming this snapshot authorizes the next slice. Licensing and DCO remain pending; no license has been granted.
 
 ## Project Structure
 
-- `Goldmark.slnx`: API and API test projects.
-- `src/Goldmark.Api/`: configuration validation, HTTPS/security headers, health/readiness, SQL connections, SPA hosting, and `bootstrap-db`/`healthcheck` commands.
-- `tests/Goldmark.Api.Tests/`: xUnit v3 tests, including in-process HTTP tests via `WebApplicationFactory`.
+- `Goldmark.slnx`: the API, its in-process test project and its SQL Server integration test project.
+- `src/Goldmark.Api/`: configuration validation, HTTPS/security headers, health/readiness (including the schema-version check), SQL connections, SPA hosting, embedded migrations, and the `healthcheck`, `bootstrap-db` and `migrate` container commands (`Commands/ContainerCommands.cs`).
+- `tests/Goldmark.Api.Tests/`: xUnit v3 in-process tests, including HTTP tests via `WebApplicationFactory`. No Docker needed.
+- `tests/Goldmark.Api.IntegrationTests/`: migrations, logins and runtime permissions against a real SQL Server 2025 container (Testcontainers, one container per test collection; DEC-027). Needs Docker.
+- `db/`: forward-only migrations (`migrations/NNNN_lower_snake.sql`), their hash manifest `migrations.sha256`, and `check-migrations.sh` with its self-test (DEC-028).
 - `tests/smoke/compose-smoke.sh`: real Compose, SQL Server and browser smoke tests.
 - `web/`: React 19 + TypeScript + Vite browser-only SPA; `src/`, Node policy/build-output tests in `scripts/` and `tests/`, Playwright tests in `e2e/`.
 - `deploy/`: Compose, required environment-variable template, SQL Server entrypoint and health/TLS scripts.
 - `.github/workflows/ci.yml`: dependency policy, web, .NET, Compose smoke, dependency review and CodeQL gates.
 - `docs/ops/`, `docs/security/`: operational and endpoint-access guidance.
-- `docs/design/screens/`: 21 HTML mockups and their review status; prompts are in `docs/specs/claude-design-prompts.md`. These and ignored `tmp/` references are design input, not application code or approved designs.
+- `docs/design/screens/`: 21 HTML mockups, the Shared states board and six per-screen state boards, and their review status; prompts are in `docs/specs/claude-design-prompts.md`. These and ignored `tmp/` references are design input, not application code or approved designs. They wait for slice 3's design-system handoff.
 
-Add `Goldmark.Core`, `.Data`, `.Jobs`, `.Contracts`, `collectors/`, `db/migrations/` and `spec/` only when the authorized slice needs them. Do not scaffold empty projects or install future dependencies.
+Add `Goldmark.Core`, `.Data`, `.Jobs`, `.Contracts`, `collectors/` and `spec/` only when the authorized slice needs them. Do not scaffold empty projects or install future dependencies.
 
 ## Workflow and Design Gates
 
@@ -34,7 +36,7 @@ Follow the owner rules in `docs/HANDOFF.md` §2. For a new slice session, confir
 
 ## Toolchain, Build and Local Development
 
-Use the repository pins: .NET SDK **10.0.402** (`global.json`, roll-forward disabled), Node **24.21.0** (`.node-version`), and pnpm **11.28.5** (`web/package.json`, Corepack integrity pin). `global.json` selects Microsoft.Testing.Platform; use `dotnet test --solution`, not the older positional solution syntax.
+Use the repository pins: .NET SDK **10.0.402** (`global.json`, roll-forward disabled), Node **24.21.0** (`.node-version`), and pnpm **11.28.5** (`web/package.json`, Corepack integrity pin). `global.json` selects Microsoft.Testing.Platform; use `dotnet test --project` or `--solution`, not the older positional syntax.
 
 The following commands match the committed CI configuration; listing them is not evidence that they passed in the current environment. Run from the repository root in Bash unless a `cd` is shown.
 
@@ -45,8 +47,14 @@ node --test "web/scripts/*.test.mjs"
 dotnet restore Goldmark.slnx --locked-mode
 dotnet format Goldmark.slnx --verify-no-changes --no-restore
 dotnet build Goldmark.slnx -c Release --no-restore
-dotnet test --solution Goldmark.slnx -c Release --no-build
+dotnet test --project tests/Goldmark.Api.Tests -c Release --no-build              # in-process, no Docker
+dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release --no-build   # Docker, about 2 min
+
+db/check-migrations.test.sh
+db/check-migrations.sh origin/main
 ```
+
+`dotnet test --solution Goldmark.slnx` runs both test projects, so it needs Docker; CI runs them as separate jobs. The first integration run pulls the SQL Server image (about 1.5 GB). One class or method: add `--filter-class '<Namespace.Class>'` or `--filter-method '*Name*'` to a `--project` command. Never edit a merged migration; add a new script and append its `sha256sum` line to `db/migrations.sha256`.
 
 Front end, after the dependency-policy checks pass:
 
@@ -88,7 +96,7 @@ Keep the frontend browser-only: no Next.js, SSR, RSC or Node.js runtime. Add-ons
 
 ## Verification and Pull Requests
 
-For behavior changes, establish a meaningful failing test, implement, then refactor; report when the failing test cannot be established or run. Cover the slice's acceptance criteria and run the applicable checks above plus required CI gates before declaring completion. Current suites are xUnit, Node's test runner and Playwright/Compose. SQL Server Testcontainers is approved for slice 2 but not configured yet; Pester, shared C#/PowerShell identity vectors and axe remain future work. There is no numerical coverage threshold.
+For behavior changes, establish a meaningful failing test, implement, then refactor; report when the failing test cannot be established or run. Cover the slice's acceptance criteria and run the applicable checks above plus required CI gates before declaring completion. Current suites are xUnit (in-process and SQL Server integration via Testcontainers), the migration checker's self-test, Node's test runner and Playwright/Compose. Pester, shared C#/PowerShell identity vectors and axe remain future work. There is no numerical coverage threshold.
 
 Bind evidence to the actual revision/working tree: report commands, outcomes and acceptance criteria as PASS, FAIL, NOT_RUN or BLOCKED. Distinguish local checks from GitHub CI and document skipped checks; historical handoff results do not qualify new changes. Documentation-only updates should check referenced paths, commands and whitespace without claiming application tests ran.
 

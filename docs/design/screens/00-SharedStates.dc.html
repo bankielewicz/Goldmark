@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · Shared states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;position:relative}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:13px;line-height:16px;font-weight:700;margin:0;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.gm h3{font-size:18px;line-height:24px;font-weight:600;margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.sub{border-color:transparent;background:transparent}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn.dz{background:var(--dn);border-color:var(--dn);color:#fff}
+.dk .btn.dz{color:#1a0004}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px}
+.cell{padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt);vertical-align:middle}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.inf{background:var(--inbg);color:var(--in)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.bd.ret{background:transparent;border:1px dashed var(--bd2);color:var(--fg2);font-weight:400}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px}
+.dlg{background:var(--sf);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.25);border:1px solid var(--bd);padding:20px;display:flex;flex-direction:column;gap:12px}
+.toast{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:6px;background:var(--fg);color:var(--bg);box-shadow:0 6px 18px rgba(0,0,0,.2)}
+.tip{position:relative;background:var(--fg);color:var(--bg);font-size:12px;line-height:16px;padding:6px 8px;border-radius:4px;max-width:240px}
+.code{background:var(--sf2);border:1px solid var(--bd);border-radius:4px;padding:10px 12px;word-break:break-all}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 24px">
+<div class="row" style="justify-content: space-between">
+<div><h1>Shared states</h1><p class="mut" style="margin: 4px 0 0">Patterns every screen reuses. Each screen's own empty and error text is noted in its footer.</p></div>
+<button class="btn" type="button" aria-label="{{themeLabel}}" onClick="{{toggleTheme}}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></svg>Toggle theme</button>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+<section class="card cell" aria-labelledby="s1"><h2 id="s1">Loading (skeleton)</h2>
+<div aria-busy="true" aria-label="Loading search results" style="display: flex; flex-direction: column; gap: 10px">
+<div class="row" style="gap: 12px; flex-wrap: nowrap"><span class="sk" style="width: 30%"></span><span class="sk" style="width: 20%"></span><span class="sk" style="width: 15%"></span><span class="sk" style="width: 25%"></span></div>
+<div class="row" style="gap: 12px; flex-wrap: nowrap"><span class="sk" style="width: 26%"></span><span class="sk" style="width: 22%"></span><span class="sk" style="width: 12%"></span><span class="sk" style="width: 28%"></span></div>
+<div class="row" style="gap: 12px; flex-wrap: nowrap"><span class="sk" style="width: 32%"></span><span class="sk" style="width: 18%"></span><span class="sk" style="width: 16%"></span><span class="sk" style="width: 20%"></span></div>
+<div class="row" style="gap: 12px; flex-wrap: nowrap"><span class="sk" style="width: 24%"></span><span class="sk" style="width: 20%"></span><span class="sk" style="width: 14%"></span><span class="sk" style="width: 26%"></span></div>
+</div>
+<p class="sm mut" style="margin: 0">Shaped like the content. Region marked aria-busy. Reduced motion: no shimmer.</p>
+</section>
+
+<section class="card cell" aria-labelledby="s2"><h2 id="s2">Empty</h2>
+<div style="text-align: center; padding: 16px 8px; display: flex; flex-direction: column; gap: 10px; align-items: center">
+<strong>No CIs match "sql99"</strong>
+<span class="mut">Try fewer filters or search all types.</span>
+<div class="row" style="justify-content: center"><button class="btn" type="button">Clear filters</button><button class="btn pr" type="button">Search all types</button></div>
+</div>
+<p class="sm mut" style="margin: 0">One sentence on why it is empty plus the primary next action.</p>
+</section>
+
+<section class="card cell" aria-labelledby="s3"><h2 id="s3">Error</h2>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 8px; flex: 1"><span><strong>Couldn't load relationships.</strong> The server took too long to answer.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-4bf92f3577b34da6-01</code><button class="btn xs sub" type="button" aria-label="Copy reference ID">Copy</button></span></div></div>
+<p class="sm mut" style="margin: 0">Plain-language cause, Retry, copyable trace ID. Never a stack trace. Scoped to the widget or tab; the rest of the page still renders.</p>
+</section>
+
+<section class="card cell" aria-labelledby="s4"><h2 id="s4">Permission denied (403)</h2>
+<div style="padding: 8px 0; display: flex; flex-direction: column; gap: 8px">
+<h3>You don't have access to this page</h3>
+<p style="margin: 0" class="mut">API tokens are available to Admins. Ask an administrator if you need access.</p>
+<a class="btn" href="Main.dc.html" style="align-self: flex-start">Go to Dashboard</a>
+</div>
+<div class="row" style="border-top: 1px solid var(--bd); padding-top: 12px; align-items: flex-start"><button class="btn" type="button" disabled aria-describedby="tip1">Edit</button><span class="tip" id="tip1" role="tooltip">Editing needs the Editor role. You are a Viewer.</span></div>
+<p class="sm mut" style="margin: 0">Actions a role can't use are hidden; when shown disabled, an explanation is attached.</p>
+</section>
+
+<section class="card cell" aria-labelledby="s5"><h2 id="s5">Not found (unknown /ci/{id})</h2>
+<div style="padding: 8px 0; display: flex; flex-direction: column; gap: 10px">
+<h3>We couldn't find that CI</h3>
+<p style="margin: 0" class="mut">No CI has the ID <span class="mono">8f21c0de-0000</span>. It may never have existed or the link is mistyped.</p>
+<form role="search" class="row" style="flex-wrap: nowrap"><label class="vh" for="nfq">Search CIs</label><input class="inp" id="nfq" placeholder="Search CIs" style="flex: 1"><button class="btn pr" type="submit">Search</button></form>
+<a href="Main.dc.html">Go to Dashboard</a>
+</div>
+</section>
+
+<section class="card cell" aria-labelledby="s6"><h2 id="s6">Merged CI redirect</h2>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>This CI was merged into <a href="05-CIDetail.dc.html">app-erp-db01</a>. You were redirected.</div></div>
+<p class="sm mut" style="margin: 0">Shown at the top of the surviving CI's detail page after /ci/{old-id} redirects.</p>
+<h2 style="margin-top: 8px">Retired CI</h2>
+<div class="mb" style="background: var(--ntbg)"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5 5l6 6"/></svg><div>Retired on 2026-09-30. This CI is kept for history and ignored by impact analysis.</div></div>
+</section>
+
+<section class="card cell" aria-labelledby="s7" style="grid-column: span 2"><h2 id="s7">"As of" time travel (read-only)</h2>
+<div class="mb w" role="status" style="align-items: center"><svg aria-hidden="true" viewBox="0 0 16 16" style="margin: 0"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg><div style="flex: 1"><strong>Viewing as of 2026-10-06 14:00 UTC (read-only)</strong> <span class="mut sm">15:00 your local time</span></div><button class="btn" type="button">Return to now</button></div>
+<div class="row" style="align-items: flex-start"><button class="btn" type="button" disabled aria-describedby="tip2">Edit</button><button class="btn" type="button" disabled>Retire</button><span class="tip" id="tip2" role="tooltip">You are viewing a past point in time. Return to now to make changes.</span></div>
+<div class="card" style="padding: 12px; display: flex; flex-direction: column; gap: 10px; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,.12)" role="dialog" aria-label="Choose point in time">
+<strong>Show the estate as of</strong>
+<div class="row"><label class="vh" for="aod">Date</label><input class="inp" id="aod" value="2026-10-06" style="width: 130px"><label class="vh" for="aot">Time UTC</label><input class="inp" id="aot" value="14:00" style="width: 80px"><span class="mut">UTC</span></div>
+<div class="row"><button class="btn xs" type="button">1 h ago</button><button class="btn xs" type="button">Yesterday</button><button class="btn xs" type="button">Last Tuesday</button><button class="btn pr xs" type="button" style="margin-left: auto">Apply</button></div>
+</div>
+</section>
+
+<section class="card cell" aria-labelledby="s8"><h2 id="s8">Concurrency conflict (412)</h2>
+<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="c412">
+<h3 id="c412">Someone else changed this CI</h3>
+<p style="margin: 0">sam.o saved changes to <strong>app-erp-db01</strong> 2 minutes ago, after you started editing.</p>
+<div class="row" style="justify-content: flex-end"><button class="btn" type="button">Discard mine</button><button class="btn pr" type="button">Review their changes</button></div>
+</div>
+</section>
+
+<section class="card cell" aria-labelledby="s9"><h2 id="s9">Shown-once secret</h2>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div><strong>This value is shown only once.</strong> It cannot be shown again.</div></div>
+<div class="row" style="flex-wrap: nowrap"><code class="mono code" style="flex: 1">sxt_Zr8Pq3Wm1Kd7Hx0Lb5Nv2Jc9F</code><button class="btn" type="button">Copy</button></div>
+<label class="row" style="gap: 8px"><input type="checkbox" style="width: 18px; height: 18px; margin: 0; accent-color: var(--br)">I have stored this</label>
+<button class="btn pr" type="button" disabled style="align-self: flex-end">Close</button>
+</section>
+
+<section class="card cell" aria-labelledby="s10"><h2 id="s10">High-impact confirmation</h2>
+<div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mrg">
+<h3 id="mrg">Merge app-erp-db01-old into app-erp-db01?</h3>
+<p style="margin: 0" class="sm">2 relationships and 3 identifiers move to the survivor. This cannot be undone.</p>
+<div><label for="cfm" style="font-weight: 600; display: block; margin-bottom: 4px">Type <span class="mono">app-erp-db01</span> to confirm</label><input class="inp mono" id="cfm" value="app-erp-db0" style="width: 100%"></div>
+<div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn" type="button" disabled>Merge</button></div>
+</div>
+</section>
+
+<section class="card cell" aria-labelledby="s11"><h2 id="s11">Success, stale, live region</h2>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">Export ready: 1,248 CIs</span><a href="#dl" style="color: var(--bg); font-weight: 600">Download</a></div>
+<div class="row"><span>backup_tier: Gold</span><span class="bd ol">AD corp.example</span><span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Stale · 26 h</span></div>
+<p class="sm mut" style="margin: 0">Async results (search done, import finished, "41 Down, 17 Degraded") are announced in a polite live region.</p>
+</section>
+
+<section class="card cell" aria-labelledby="s12" style="grid-column: span 3"><h2 id="s12">Badge vocabulary (icon + text, never color alone)</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px"><strong class="sm">Impact / health</strong><div class="row">
+<span class="bd dn"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Down</span>
+<span class="bd dg"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg>Degraded</span>
+<span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>OK</span>
+<span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Not seen</span>
+<span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.5.2-.8.6-.8 1.1v.4M8 11.6v.2"/></svg>Unknown</span>
+<span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Stale</span>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><strong class="sm">Lifecycle</strong><div class="row">
+<span class="bd inf"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M3 8h10M9 4l4 4-4 4"/></svg>Planned</span>
+<span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Active</span>
+<span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Retiring</span>
+<span class="bd ret"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5 5l6 6"/></svg>Retired</span>
+</div></div>
+<div style="display: flex; flex-direction: column; gap: 8px"><strong class="sm">Provenance and markers</strong><div class="row">
+<span class="bd ol">vCenter vc01</span><span class="bd ol">Manual</span><span class="bd ol">CSV hr-assets</span>
+<span class="bd ol"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>Collector-owned</span>
+<span class="bd brd"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 5.5 13.5H2.5v-3z"/></svg>Overridden</span>
+<span style="font-size: 11px; line-height: 14px; font-weight: 700; padding: 1px 6px; border-radius: 3px; border: 1px dashed var(--br); color: var(--br)">P1</span>
+</div></div>
+</div>
+</section>
+</div>
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const dark = s.dark != null ? s.dark : !!this.props.dark;
+    return {
+      themeClass: 'gm ' + (dark ? 'dk' : 'lt'),
+      themeLabel: dark ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ dark: !dark })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · States: Integration</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h3{font-size:15px;line-height:20px;font-weight:600;margin:0}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.dz{background:var(--dn);border-color:var(--dn);color:#fff}
+.dk .btn.dz{color:#1a0004}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.sec{display:flex;flex-direction:column;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pnl{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tag{font-size:11px;line-height:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt)}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.inf{background:var(--inbg);color:var(--in)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.p1{font-size:11px;line-height:14px;font-weight:700;padding:1px 6px;border-radius:3px;border:1px dashed var(--br);color:var(--br);white-space:nowrap}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb.s{background:var(--okbg);border-color:var(--okc)}.mb.s>svg{color:var(--okc)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px;display:block}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block;box-sizing:border-box}
+.ctr{text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;padding:8px 0}
+.toast{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:6px;background:var(--fg);color:var(--bg)}
+.dlg{background:var(--sf);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.2);border:1px solid var(--bd);padding:16px;display:flex;flex-direction:column;gap:10px}
+.gm table{border-collapse:collapse;width:100%;font-size:13px}
+.gm th{text-align:left;font-weight:600;color:var(--fg2);font-size:12px;padding:4px 6px;border-bottom:1px solid var(--bd)}
+.gm td{padding:5px 6px;border-bottom:1px solid var(--bd);vertical-align:top}
+.gm tr:last-child td{border-bottom:0}
+.drop{border:2px dashed var(--dn);border-radius:8px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<div><h1>States: Integration</h1><p class="mut" style="margin: 4px 0 0">Sources &amp; collectors, CSV import, API tokens, Webhooks, Apps &amp; integrations.</p></div>
+
+<section class="sec" aria-labelledby="h-sc">
+<h2 id="h-sc">12 · Sources &amp; collectors</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty (none registered)</span>
+<div class="ctr"><h3>No collector sources yet</h3><span class="mut">Collectors are read-only PowerShell jobs that run on your network and send inventory to Goldmark. Credentials stay on the collector host.</span><button class="btn pr" type="button">+ Register source</button></div>
+</div>
+<div class="pnl"><span class="tag">Run with errors, expanded</span>
+<div class="row"><strong>Windows collector</strong><span class="bd dg"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg>Errors</span><span class="sm mut">13:28 UTC · 6 min 12 s</span></div>
+<table><thead><tr><th scope="col">Class</th><th scope="col">Target</th><th scope="col">Message</th></tr></thead><tbody>
+<tr><td>AccessDenied</td><td>BR-GLA-FS01</td><td>gMSA lacks WinRM rights</td></tr>
+<tr><td>Timeout</td><td>BR-MAN-PRN02</td><td>No answer after [TIMEOUT] s</td></tr>
+<tr><td>Timeout</td><td>2 more</td><td><a href="#all">Show all</a></td></tr>
+</tbody></table>
+</div>
+<div class="pnl"><span class="tag">Stale source</span>
+<div class="row"><strong>AD corp.example</strong><span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Stale</span></div>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div>No run for 26 h; expected every 1 h. Values from this source show a Stale badge. Check the scheduled task on the collector host.</div></div>
+</div>
+<div class="pnl"><span class="tag">Revoke token confirmation</span>
+<div class="dlg" role="dialog" aria-labelledby="rv"><h3 id="rv">Revoke the ingest token for vCenter vc01?</h3><p class="sm" style="margin: 0">The collector stops being able to send data until you issue a new token and update the collector host.</p><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn dz" type="button">Revoke token</button></div></div>
+</div>
+<div class="pnl" aria-busy="true" aria-label="Loading sources"><span class="tag">Loading</span>
+<div style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 85%"></span><span class="sk"></span><span class="sk" style="width: 65%"></span></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load run history for Windows collector.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-a71d3e9f2c40-01</code></span></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-csv">
+<h2 id="h-csv">13 · CSV import wizard</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Invalid file or encoding</span>
+<div class="drop"><svg aria-hidden="true" viewBox="0 0 16 16" style="width: 24px; height: 24px; color: var(--dn)"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><strong>servers.xlsx can't be imported</strong><span class="sm">This is an Excel workbook. Save it as CSV (UTF-8) and try again.</span><label class="btn" for="f2" style="cursor: pointer">Choose another file</label><input id="f2" type="file" accept=".csv" style="position: absolute; width: 1px; height: 1px; opacity: 0"></div>
+<div class="mb e"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="sm">Encoding variant: "Row 37 contains characters that aren't valid UTF-8. Re-save the file as UTF-8 or choose the encoding:" <select class="inp" aria-label="File encoding" style="height: 24px; font-size: 12px"><option>Windows-1252</option></select></div></div>
+</div>
+<div class="pnl"><span class="tag">Commit failed partway</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span><strong>Import stopped at row 97 of 159.</strong> The connection to the database was lost.</span></div></div>
+<table><thead><tr><th scope="col">Applied</th><th scope="col">Not applied</th></tr></thead><tbody><tr><td>Rows 1–96: 72 created, 21 updated, 3 unchanged</td><td>Rows 97–159 (63 rows)</td></tr></tbody></table>
+<div class="row"><button class="btn pr" type="button">Resume from row 97</button><a class="sm" href="#history">View in import history</a></div>
+<span class="sm mut">Reference ID <code class="mono">00-3f9b20ce71d8-01</code>. Applied rows keep source "csv:branch-office-servers".</span>
+</div>
+<div class="pnl"><span class="tag">Success (toast after leaving the page)</span>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">branch-office-servers imported: 159 rows</span><a href="#csv" style="color: var(--bg); font-weight: 600">View</a></div>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>First-time hint: <a href="#sample">Try the sample dataset</a> before importing your own file.</div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-tk">
+<h2 id="h-tk">18 · API tokens</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty</span>
+<div class="ctr"><h3>No API tokens yet</h3><span class="mut">Create a token for a script or integration. Collector tokens are issued from Sources &amp; collectors.</span><button class="btn pr" type="button">+ Create token</button></div>
+</div>
+<div class="pnl"><span class="tag">Revoke confirmation</span>
+<div class="dlg" role="dialog" aria-labelledby="rt"><h3 id="rt">Revoke "reporting read"?</h3><p class="sm" style="margin: 0">Requests using sxt_…03be fail immediately. This cannot be undone.</p><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Cancel</button><button class="btn dz" type="button">Revoke</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Loading / error</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 75%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't create the token.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-77aa1c0e5b39-01</code></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-wh">
+<h2 id="h-wh">19 · Webhooks</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty</span>
+<div class="ctr"><h3>No webhook subscriptions yet</h3><span class="mut">Goldmark can send signed HTTPS events when CIs, relationships or reviews change.</span><button class="btn pr" type="button">+ New subscription</button></div>
+</div>
+<div class="pnl"><span class="tag">Test delivery failed</span>
+<div class="row"><button class="btn" type="button">Send test delivery</button><span class="bd dn"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Failed · 401 · 212 ms</span></div>
+<span class="sm">The endpoint rejected the request. Check that it verifies X-Goldmark-Signature with the current secret.</span>
+</div>
+<div class="pnl"><span class="tag">Loading / error</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 70%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't load the delivery log.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-6d44e7b05a12-01</code></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-ap">
+<div class="row"><h2 id="h-ap">21 · Apps &amp; integrations</h2><span class="p1">P1</span></div>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty (no apps registered)</span>
+<div class="ctr"><h3>No apps registered</h3><span class="mut">Add-on apps connect only through the API, webhooks, annotations and links. They never run code inside Goldmark.</span><button class="btn pr" type="button">+ Register app</button></div>
+</div>
+<div class="pnl"><span class="tag">Namespace already taken</span>
+<div><label for="nsx" style="font-weight: 600; display: block; margin-bottom: 4px">Annotation namespace</label><input class="inp mono" id="nsx" value="monitoring" aria-invalid="true" aria-describedby="nse" style="width: 100%; border-color: var(--dn)"><div id="nse" class="row sm" style="color: var(--dn); gap: 4px; margin-top: 4px"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>"monitoring" is used by Endpoint Monitor. Choose another.</div></div>
+</div>
+<div class="pnl"><span class="tag">Disabled app</span>
+<div class="row"><strong>Backup Reporter</strong><span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M5 5l6 6"/></svg>Disabled</span></div>
+<span class="sm">Tokens revoked; links and badges hidden. 1,204 annotations kept until purged.</span>
+<div class="row"><button class="btn" type="button">Enable</button><button class="btn" type="button" style="color: var(--dn); border-color: var(--dn)">Purge annotations…</button></div>
+</div>
+</div>
+<p class="sm mut" style="margin: 0">Loading and error follow the same pattern as API tokens.</p>
+</section>
+
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: 'gm ' + (this.props.dark ? 'dk' : 'lt') };
+  }
+}
+</script>
+</body>
+</html>
