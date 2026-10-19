@@ -16,7 +16,15 @@ internal static class HealthCheckCommand
 
     public static async Task<int> RunAsync()
     {
-        var https = CommandConfiguration.Build().GetSection(HttpsOptions.SectionName).Get<HttpsOptions>() ?? new HttpsOptions();
+        var configuration = CommandConfiguration.Build();
+        if (ConfigurationPreflight.BindingErrors(configuration) is { Count: > 0 } errors)
+        {
+            // 1, not 2: Docker reserves exit code 2 for HEALTHCHECK commands.
+            await Console.Error.WriteLineAsync($"healthcheck: invalid configuration: {string.Join(" ", errors)}");
+            return 1;
+        }
+
+        var https = configuration.GetSection(HttpsOptions.SectionName).Get<HttpsOptions>() ?? new HttpsOptions();
         byte[] expected;
         try
         {

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 using Goldmark.Api.Security;
 using Microsoft.Extensions.Options;
@@ -112,17 +113,27 @@ internal sealed partial class HttpsOptionsValidator : IValidateOptions<HttpsOpti
     }
 
     // Loading here turns operator mistakes into a clean startup failure instead of an
-    // unhandled exception while Kestrel is being configured.
+    // unhandled exception while Kestrel is being configured. The whole bundle is imported
+    // as well, because startup also reads every intermediate in it (LoadChain).
     private static bool CanLoad(string certificatePath, string keyPath)
     {
+        var bundle = new X509Certificate2Collection();
         try
         {
             using var certificate = TlsCertificateProvider.LoadPem(certificatePath, keyPath);
+            bundle.ImportFromPemFile(certificatePath);
             return certificate.HasPrivateKey;
         }
         catch (Exception ex) when (ex is CryptographicException or IOException or UnauthorizedAccessException or ArgumentException)
         {
             return false;
+        }
+        finally
+        {
+            foreach (var certificate in bundle)
+            {
+                certificate.Dispose();
+            }
         }
     }
 }

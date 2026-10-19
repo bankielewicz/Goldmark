@@ -2,6 +2,7 @@ using System.Security.Cryptography.X509Certificates;
 using Goldmark.Api.Commands;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Tests.Infrastructure;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -98,6 +99,14 @@ public sealed class ConfigurationValidationTests
             using var firstKey = first.GetECDsaPrivateKey()!;
             File.WriteAllText(key, firstKey.ExportPkcs8PrivateKeyPem());
             Assert.True(new HttpsOptionsValidator().Validate(null, new HttpsOptions { CertificatePath = cert, KeyPath = key }).Succeeded);
+
+            // Valid leaf and key, but a corrupt (valid base64, invalid DER) intermediate: startup imports
+            // the whole bundle, so validation must too.
+            var corruptChain = Path.Combine(dir, "corrupt-chain.crt");
+            File.WriteAllText(corruptChain, first.ExportCertificatePem() + "\n-----BEGIN CERTIFICATE-----\nAAAAAAAA\n-----END CERTIFICATE-----\n");
+            var chained = new HttpsOptionsValidator().Validate(null, new HttpsOptions { CertificatePath = corruptChain, KeyPath = key });
+            Assert.True(chained.Failed);
+            Assert.Contains(chained.Failures!, f => f.Contains("could not be loaded", StringComparison.Ordinal));
         }
         finally
         {
@@ -255,6 +264,26 @@ public sealed class BootstrapValidationTests
     }
 
     [Fact]
+    public void A_pinned_SQL_certificate_is_validated_before_connecting()
+    {
+        var db = ValidDatabase();
+        db.ServerCertificatePath = "/nonexistent/sqlserver.crt";
+        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("ServerCertificatePath does not point", StringComparison.Ordinal));
+
+        var garbage = Path.GetTempFileName();
+        try
+        {
+            File.WriteAllText(garbage, "-----BEGIN CERTIFICATE-----\nnot base64\n-----END CERTIFICATE-----\n");
+            db.ServerCertificatePath = garbage;
+            Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("could not be read as a PEM or DER", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(garbage);
+        }
+    }
+
+    [Fact]
     public void Adopting_an_existing_login_is_off_by_default() =>
         Assert.False(new BootstrapOptions().AdoptExistingLogin);
 
@@ -264,5 +293,48 @@ public sealed class BootstrapValidationTests
         var bootstrap = ValidBootstrap();
         bootstrap.AdminPassword = "";
         Assert.Contains(BootstrapDatabaseCommand.Validate(ValidDatabase(), bootstrap), e => e.Contains("AdminPassword", StringComparison.Ordinal));
+    }
+}
+
+/// <summary>
+/// A value of the wrong type must become a clean configuration error (exit 2) that names the
+/// setting. The binder's own message contains the value, so it must never be echoed.
+/// </summary>
+public sealed class ConfigurationPreflightTests
+{
+    private static List<string> Errors(string key, string value) =>
+        ConfigurationPreflight.BindingErrors(new ConfigurationBuilder()
+            .AddInMemoryCollection([new KeyValuePair<string, string?>(key, value)])
+            .Build());
+
+    [Fact]
+    public void Well_typed_settings_pass()
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Goldmark:Https:Port"] = "8443",
+            ["Goldmark:Https:Hsts:Enabled"] = "true",
+            ["Goldmark:Database:ConnectTimeoutSeconds"] = "5",
+            ["Goldmark:Bootstrap:AdoptExistingLogin"] = "false",
+            ["Goldmark:Logging:MinimumLevel"] = "Warning",
+        }).Build();
+
+        Assert.Empty(ConfigurationPreflight.BindingErrors(configuration));
+    }
+
+    [Theory]
+    [InlineData("Goldmark:Https:Port")]
+    [InlineData("Goldmark:Https:Hsts:Enabled")]
+    [InlineData("Goldmark:Database:ConnectTimeoutSeconds")]
+    [InlineData("Goldmark:Bootstrap:AdoptExistingLogin")]
+    [InlineData("Goldmark:Logging:MinimumLevel")]
+    public void A_wrongly_typed_value_names_the_setting_but_never_the_value(string key)
+    {
+        const string value = "NEVER-ECHO-5d1c";
+
+        var error = Assert.Single(Errors(key, value));
+
+        Assert.StartsWith(key, error, StringComparison.Ordinal);
+        Assert.DoesNotContain(value, error, StringComparison.Ordinal);
     }
 }

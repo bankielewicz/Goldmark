@@ -142,10 +142,16 @@ internal static class BootstrapDatabaseCommand
     public static async Task<int> RunAsync()
     {
         var configuration = CommandConfiguration.Build();
-        var db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? new DatabaseOptions();
-        var bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? new BootstrapOptions();
+        var errors = ConfigurationPreflight.BindingErrors(configuration);
+        var db = new DatabaseOptions();
+        var bootstrap = new BootstrapOptions();
+        if (errors.Count == 0)
+        {
+            db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
+            bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
+            errors = Validate(db, bootstrap);
+        }
 
-        var errors = Validate(db, bootstrap);
         if (errors.Count > 0)
         {
             await Console.Error.WriteLineAsync("bootstrap-db: invalid configuration:");
@@ -365,6 +371,8 @@ internal static class BootstrapDatabaseCommand
         {
             errors.Add($"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.");
         }
+
+        errors.AddRange(DatabaseOptionsValidator.CertificatePinErrors(db.ServerCertificatePath));
 
         if (db.ConnectTimeoutSeconds is < 1 or > 120)
         {

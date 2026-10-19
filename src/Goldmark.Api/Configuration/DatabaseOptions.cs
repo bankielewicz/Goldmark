@@ -76,17 +76,7 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
             failures.Add($"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.");
         }
 
-        if (options.ServerCertificatePath is { Length: > 0 } path)
-        {
-            if (!File.Exists(path))
-            {
-                failures.Add($"{DatabaseOptions.SectionName}:ServerCertificatePath does not point to a readable file.");
-            }
-            else if (!CanLoadCertificate(path))
-            {
-                failures.Add($"{DatabaseOptions.SectionName}:ServerCertificatePath could not be read as a PEM or DER certificate.");
-            }
-        }
+        failures.AddRange(CertificatePinErrors(options.ServerCertificatePath));
 
         if (options.ConnectTimeoutSeconds is < 1 or > 120)
         {
@@ -96,8 +86,27 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
     }
 
-    // A pinned certificate that cannot be parsed would make every connection fail later;
-    // report it at startup instead.
+    /// <summary>
+    /// A pinned certificate that cannot be parsed would make every connection fail later;
+    /// report it at startup instead. Shared with <c>bootstrap-db</c>.
+    /// </summary>
+    public static IEnumerable<string> CertificatePinErrors(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            yield break;
+        }
+
+        if (!File.Exists(path))
+        {
+            yield return $"{DatabaseOptions.SectionName}:ServerCertificatePath does not point to a readable file.";
+        }
+        else if (!CanLoadCertificate(path))
+        {
+            yield return $"{DatabaseOptions.SectionName}:ServerCertificatePath could not be read as a PEM or DER certificate.";
+        }
+    }
+
     private static bool CanLoadCertificate(string path)
     {
         try
