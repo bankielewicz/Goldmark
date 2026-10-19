@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · First-run setup</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;position:relative}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h2{font-size:18px;line-height:24px;font-weight:600;margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.mark{width:36px;height:36px;border-radius:8px;background:var(--br);color:var(--onbr);display:grid;place-items:center;font-weight:700;font-size:18px}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0;width:100%}
+.lbl{font-weight:600;display:block;margin-bottom:4px}
+.btn{min-height:32px;padding:0 14px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.sub{border-color:transparent;background:transparent}
+.btn.ic{width:32px;padding:0}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb.s{background:var(--okbg);border-color:var(--okc)}.mb.s>svg{color:var(--okc)}
+.mb>svg{margin-top:2px}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:14px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.code{background:var(--sf2);border:1px solid var(--bd);border-radius:4px;padding:8px 10px}
+.steps{display:flex;gap:4px;list-style:none;margin:0;padding:0}
+.steps li{flex:1;display:flex;flex-direction:column;gap:6px;font-size:12px;line-height:16px;color:var(--fg2)}
+.steps .bar{height:4px;border-radius:2px;background:var(--bd)}
+.steps .done .bar,.steps .cur .bar{background:var(--br)}
+.steps .cur{color:var(--fg);font-weight:600}
+.ok{color:var(--okc)}.no{color:var(--fg2)}
+.tag{font-size:12px;font-weight:600;color:var(--fg2);text-transform:uppercase;letter-spacing:.04em}
+.only1024{display:none}
+@media (max-width:1100px){
+.nav{flex:0 0 56px!important;max-width:56px!important;padding:8px 6px!important}
+.nav h2{font-size:0!important;line-height:0!important;height:1px;background:var(--bd);margin:10px 6px!important}
+.nav>p{display:none}
+.nav a{justify-content:center;padding:0!important;gap:0!important;font-size:0;min-height:40px!important}
+.nav a svg{width:20px;height:20px}
+.nav a .bd,.nav a .p1{display:none}
+.top>.row:first-child>.mut{display:none}
+.top form[role=search]{margin-left:0!important}
+.main{padding:16px!important}
+.only1024{display:inline-flex!important}
+.hide1024{display:none!important}
+.stack>*{flex:1 1 100%!important;max-width:none!important}
+.split{position:relative}
+.split>.drw{position:absolute!important;top:0;right:0;z-index:6;width:380px;max-width:calc(100% - 24px)!important;box-shadow:-8px 0 28px rgba(0,0,0,.22)!important;background:var(--sf)}
+.split>.drw.full{left:0;width:auto;max-width:none!important}
+.g8{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.pg{grid-template-columns:minmax(0,1fr)!important}
+.acts>*{display:none!important}.acts>.keep{display:inline-flex!important}
+.c2 th:nth-child(4),.c2 td:nth-child(4),.c2 th:nth-child(5),.c2 td:nth-child(5),.c2 th:nth-child(6),.c2 td:nth-child(6){display:none}
+.c5 th:nth-child(6),.c5 td:nth-child(6){display:none}
+}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="display: flex; flex-direction: column">
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 16px"><span class="tag">Interactive: use Continue / Back to step through</span><button class="btn ic sub" type="button" aria-label="{{themeLabel}}" onClick="{{toggleTheme}}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></svg></button></div>
+<main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 0 16px 32px">
+<div class="row" style="gap: 12px"><span class="mark" aria-hidden="true">G</span><div><div style="font-size: 20px; font-weight: 600; line-height: 26px">Set up Goldmark</div><div class="mut">SAMPLE Contoso Infrastructure</div></div></div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; align-items: flex-start; width: 100%">
+<div class="card" style="width: 560px; max-width: 100%; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 20px">
+<nav aria-label="Setup progress"><ol class="steps">
+<li class="{{c1}}"><span class="bar"></span><span>{{m1}} 1 Setup token</span></li>
+<li class="{{c2}}"><span class="bar"></span><span>{{m2}} 2 Admin account</span></li>
+<li class="{{c3}}"><span class="bar"></span><span>{{m3}} 3 Two-factor authentication</span></li>
+<li class="{{c4}}"><span class="bar"></span><span>{{m4}} 4 Recovery codes</span></li>
+</ol></nav>
+<div class="mut sm" aria-live="polite">{{stepText}}</div>
+
+<sc-if value="{{s1}}" hint-placeholder-val="{{ true }}">
+<section style="display: flex; flex-direction: column; gap: 16px" aria-labelledby="h1s">
+<h2 id="h1s" tabindex="-1">Enter the setup token</h2>
+<p style="margin: 0">Find the setup token in the Goldmark container log. It is printed once at first start.</p>
+<div class="row code" style="justify-content: space-between; flex-wrap: nowrap"><code class="mono">docker compose logs app | grep "Setup token"</code><button class="btn sub" type="button" aria-label="Copy command"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="1"/><path d="M3 10.5V3a.5.5 0 0 1 .5-.5H11"/></svg>Copy</button></div>
+<div><label class="lbl" for="tok">Setup token</label><input class="inp mono" id="tok" autocomplete="off" value="gst_4P7Q-W2ZR-K8MX"></div>
+<div class="mb e"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div><strong>State example:</strong> This token is invalid or has expired. Restart the container to print a new one.</div></div>
+</section>
+</sc-if>
+
+<sc-if value="{{s2}}" hint-placeholder-val="{{ false }}">
+<section style="display: flex; flex-direction: column; gap: 14px" aria-labelledby="h2s">
+<h2 id="h2s" tabindex="-1">Create the administrator account</h2>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div><label class="lbl" for="un">Username</label><input class="inp" id="un" autocomplete="username" value="dana.k"></div>
+<div><label class="lbl" for="dn">Display name</label><input class="inp" id="dn" value="Dana Kowalski"></div>
+</div>
+<div><label class="lbl" for="em">Email <span class="mut" style="font-weight: 400">(optional)</span></label><input class="inp" id="em" type="email" value="dana.k@corp.example"></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+<div><label class="lbl" for="pw">Password</label><input class="inp" id="pw" type="password" autocomplete="new-password" value="••••••••••••" aria-describedby="rules"></div>
+<div><label class="lbl" for="pw2">Confirm password</label><input class="inp" id="pw2" type="password" autocomplete="new-password" value="••••••••••••"></div>
+</div>
+<ul id="rules" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px" aria-label="Password rules">
+<li class="row ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>At least 14 characters <span class="vh">met</span></li>
+<li class="row ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Not found in the common-password list</li>
+<li class="row no"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/></svg>Passwords match (not yet)</li>
+</ul>
+</section>
+</sc-if>
+
+<sc-if value="{{s3}}" hint-placeholder-val="{{ false }}">
+<section style="display: flex; flex-direction: column; gap: 14px" aria-labelledby="h3s">
+<h2 id="h3s" tabindex="-1">Set up two-factor authentication</h2>
+<div style="display: flex; gap: 20px; flex-wrap: wrap">
+<svg role="img" aria-label="QR code for your authenticator app. If you cannot scan it, enter the manual key." viewBox="0 0 29 29" style="width: 180px; height: 180px; stroke: none; background: #fff; padding: 8px; border: 1px solid var(--bd); border-radius: 4px"><g fill="#111"><path d="M0 0h7v7H0zM22 0h7v7h-7zM0 22h7v7H0z"/></g><g fill="#fff"><path d="M1 1h5v5H1zM23 1h5v5h-5zM1 23h5v5H1z"/></g><g fill="#111"><path d="M2 2h3v3H2zM24 2h3v3h-3zM2 24h3v3H2zM9 1h2v2H9zM12 2h3v1h-3zM16 0h2v3h-2zM9 5h4v2H9zM15 5h1v3h-1zM18 4h2v2h-2zM9 9h2v2H9zM13 9h3v2h-3zM18 8h3v3h-3zM23 9h2v2h-2zM26 9h3v1h-3zM0 9h3v1H0zM4 10h3v2H4zM1 13h2v3H1zM5 14h3v1H5zM9 13h1v4H9zM11 14h4v3h-4zM17 13h2v2h-2zM21 13h3v1h-3zM25 12h2v4h-2zM0 18h4v1H0zM6 17h2v3H6zM10 19h3v2h-3zM15 18h2v4h-2zM19 17h3v2h-3zM24 18h4v1h-4zM9 23h2v3H9zM12 24h3v2h-3zM17 23h3v1h-3zM22 22h3v3h-3zM26 21h3v2h-3zM9 27h5v2H9zM16 26h3v3h-3zM21 27h2v2h-2zM25 26h4v3h-4z"/></g></svg>
+<div style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 10px">
+<div><div class="lbl">Can't scan? Enter this key manually</div><div class="row code" style="justify-content: space-between"><code class="mono" style="letter-spacing: .06em">JBSW Y3DP EHPK 3PXP</code><button class="btn sub" type="button" aria-label="Copy manual key"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="1"/><path d="M3 10.5V3a.5.5 0 0 1 .5-.5H11"/></svg>Copy</button></div></div>
+<div class="sm mut">Works with Microsoft Authenticator, Google Authenticator, 1Password, Bitwarden, Authy or any TOTP app.</div>
+</div>
+</div>
+<div style="max-width: 260px"><label class="lbl" for="v6">6-digit code from the app</label><input class="inp mono" id="v6" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="" style="height: 40px; font-size: 18px; letter-spacing: .2em"></div>
+</section>
+</sc-if>
+
+<sc-if value="{{s4}}" hint-placeholder-val="{{ false }}">
+<section style="display: flex; flex-direction: column; gap: 14px" aria-labelledby="h4s">
+<h2 id="h4s" tabindex="-1">Save your recovery codes</h2>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div><strong>These codes are shown only once.</strong> Each code signs you in once if you lose your authenticator.</div></div>
+<ol class="mono code" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; margin: 0; padding: 12px 16px 12px 40px">
+<li>7KQ2-M9XD</li><li>R4TB-8ZWN</li><li>H2PL-Q6VC</li><li>X9MF-3KJA</li><li>D5WS-T7HY</li><li>N8CE-2GUP</li><li>B3VZ-K4LQ</li><li>Y6RJ-9MXT</li><li>F2HN-W8DS</li><li>P7GA-5QEK</li>
+</ol>
+<div class="row"><button class="btn" type="button"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11"/></svg>Download .txt</button><button class="btn" type="button"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="1"/><path d="M3 10.5V3a.5.5 0 0 1 .5-.5H11"/></svg>Copy all</button><button class="btn" type="button"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4 6V2h8v4M4 11.5H2.5v-5h11v5H12M4 9.5h8v4.5H4z"/></svg>Print</button></div>
+<label class="row" style="gap: 10px; min-height: 32px; cursor: pointer"><input type="checkbox" checked="{{stored}}" onChange="{{toggleStored}}" style="width: 18px; height: 18px; margin: 0; accent-color: var(--br)">I have stored these codes safely</label>
+</section>
+</sc-if>
+
+<sc-if value="{{s5}}" hint-placeholder-val="{{ false }}">
+<section class="mb s" style="padding: 20px; flex-direction: column; gap: 10px" aria-labelledby="h5s">
+<div class="row ok"><svg aria-hidden="true" viewBox="0 0 16 16" style="width: 24px; height: 24px"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><h2 id="h5s" tabindex="-1" style="color: var(--fg)">Goldmark is ready</h2></div>
+<p style="margin: 0">Your administrator account is protected by two-factor authentication. Next, register a collector source or import a CSV.</p>
+<a class="btn pr" href="Main.dc.html" style="align-self: flex-start; color: var(--onbr)">Go to dashboard</a>
+</section>
+</sc-if>
+
+<sc-if value="{{showNav}}" hint-placeholder-val="{{ true }}">
+<div class="row" style="justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 16px">
+<button class="btn sub" type="button" onClick="{{back}}" disabled="{{backDisabled}}">Back</button>
+<button class="btn pr" type="button" onClick="{{next}}" disabled="{{nextDisabled}}">{{nextLabel}}</button>
+</div>
+</sc-if>
+</div>
+
+<aside style="width: 340px; max-width: 100%; display: flex; flex-direction: column; gap: 10px" aria-label="Other states">
+<span class="tag">Other states</span>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>Setup is already complete. <a href="01-SignIn.dc.html">Go to sign-in</a></div></div>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div>Setup was completed by someone else while you were on this page. <a href="01-SignIn.dc.html">Sign in</a></div></div>
+<div class="mb e"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div>That code didn't work. Check the time on your phone and try the next code.</div></div>
+<div class="mb e"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Goldmark couldn't be reached. Your progress is kept.</span><span class="row"><button class="btn" type="button">Retry</button><span class="sm mut">Reference ID <code class="mono" style="font-size: 12px">00-4bf92f35-a1c2</code></span><button class="btn sub" type="button" aria-label="Copy reference ID" style="min-height: 24px; padding: 0 6px">Copy</button></span></div></div>
+<p class="sm mut" style="margin: 0">Each Continue shows an inline spinner and disables the button. On step change, focus moves to the step heading and the step is announced.</p>
+</aside>
+</div>
+</main>
+<footer class="sm mut" style="display: flex; justify-content: center; gap: 16px; padding: 16px"><span>Goldmark 0.1.0-draft</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"step":{"editor":"enum","options":["1","2","3","4","5"],"default":"1"},"$preview":{"width":1024,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const dark = s.dark != null ? s.dark : !!this.props.dark;
+    const step = s.step || parseInt(this.props.step || '1', 10);
+    const stored = !!s.stored;
+    const cls = (n) => (n < step ? 'done' : n === step ? 'cur' : '');
+    const mk = (n) => (n < step ? '✓' : '');
+    const names = ['Setup token', 'Admin account', 'Two-factor authentication', 'Recovery codes', 'Done'];
+    return {
+      themeClass: 'gm ' + (dark ? 'dk' : 'lt'),
+      themeLabel: dark ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ dark: !dark }),
+      c1: cls(1), c2: cls(2), c3: cls(3), c4: cls(4),
+      m1: mk(1), m2: mk(2), m3: mk(3), m4: mk(4),
+      s1: step === 1, s2: step === 2, s3: step === 3, s4: step === 4, s5: step === 5,
+      showNav: step < 5,
+      stepText: step < 5 ? 'Step ' + step + ' of 4: ' + names[step - 1] : 'Setup complete',
+      stored: stored,
+      toggleStored: () => this.setState({ stored: !stored }),
+      backDisabled: step === 1,
+      nextDisabled: step === 4 && !stored,
+      nextLabel: step === 3 ? 'Verify' : step === 4 ? 'Finish' : 'Continue',
+      next: () => this.setState({ step: Math.min(5, step + 1) }),
+      back: () => this.setState({ step: Math.max(1, step - 1) })
+    };
+  }
+}
+</script>
+</body>
+</html>

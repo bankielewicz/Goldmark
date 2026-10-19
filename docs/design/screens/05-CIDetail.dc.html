@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · app-erp-db01</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;position:relative}
+.gm a{color:var(--br);text-underline-offset:2px}.gm a:hover{text-decoration-thickness:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:24px;line-height:32px;font-weight:600;margin:2px 0 0}
+.gm h2{font-size:16px;line-height:22px;font-weight:600;margin:0}
+.gm h3{font-size:14px;line-height:20px;font-weight:600;margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.skip{position:absolute;left:-9999px;top:8px;z-index:5;background:var(--sf);padding:8px 12px;border:2px solid var(--fg)}.skip:focus{left:8px}
+.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;background:var(--sf);border-bottom:1px solid var(--bd)}
+.mark{width:28px;height:28px;border-radius:6px;background:var(--br);color:var(--onbr);display:grid;place-items:center;font-weight:700;font-size:14px}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.sub,.gm a.btn.sub{border-color:transparent;background:transparent}
+.btn.ic{width:32px;padding:0;justify-content:center}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.av{width:24px;height:24px;border-radius:50%;background:var(--brbg);color:var(--br);display:grid;place-items:center;font-size:11px;font-weight:700}
+.shell{display:flex;flex-wrap:wrap;align-items:stretch}
+.nav{flex:1 1 220px;max-width:240px;padding:8px;box-sizing:border-box;background:var(--sf2);border-right:1px solid var(--bd)}
+.nav h2{font-size:12px!important;line-height:16px!important;font-weight:600;color:var(--fg2);margin:14px 10px 4px!important}
+.nav a{display:flex;align-items:center;gap:10px;min-height:32px;padding:0 10px;border-radius:4px;color:var(--fg);text-decoration:none}
+.nav a:hover{background:var(--ntbg)}
+.nav a.on{background:var(--brbg);font-weight:600;box-shadow:inset 3px 0 0 var(--br)}
+.main{flex:999 1 560px;min-width:0;padding:16px 24px 24px;box-sizing:border-box;display:flex;flex-direction:column;gap:16px}
+.crumb{font-size:12px;color:var(--fg2);display:flex;gap:6px;flex-wrap:wrap}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px}
+.tbl{overflow-x:auto;background:var(--sf);border:1px solid var(--bd);border-radius:8px}
+.gm table{border-collapse:collapse;width:100%}
+.gm th{text-align:left;font-weight:600;color:var(--fg2);font-size:12px;line-height:16px;padding:8px 12px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.gm td{padding:10px 12px;border-bottom:1px solid var(--bd);vertical-align:top}
+.gm tr:last-child td{border-bottom:0}
+.cp td{padding:4px 12px!important}.cp .main{gap:12px}
+.gm tr.sel td{background:var(--hl)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt);vertical-align:middle}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.inf{background:var(--inbg);color:var(--in)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb>svg{margin-top:2px}
+.p1{font-size:11px;line-height:14px;font-weight:700;padding:1px 6px;border-radius:3px;border:1px dashed var(--br);color:var(--br);white-space:nowrap}
+.foot{padding:12px 24px;font-size:12px;color:var(--fg2);border-top:1px solid var(--bd);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--bd);overflow-x:auto}
+.tab{min-height:40px;padding:0 14px;border:0;background:transparent;color:var(--fg2);font:inherit;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--fg);font-weight:600;border-bottom-color:var(--br)}
+.tab:focus-visible{outline:2px solid var(--fg);outline-offset:-2px}
+.pg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.grp{padding:14px 16px;display:flex;flex-direction:column;gap:2px}
+.kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:7px 0;border-top:1px solid var(--bd);align-items:start}
+.kv dt{color:var(--fg2)}.kv dd{margin:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.pop{position:absolute;z-index:3;background:var(--sf);border:1px solid var(--bd2);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;width:360px}
+.only1024{display:none}
+@media (max-width:1100px){
+.nav{flex:0 0 56px!important;max-width:56px!important;padding:8px 6px!important}
+.nav h2{font-size:0!important;line-height:0!important;height:1px;background:var(--bd);margin:10px 6px!important}
+.nav>p{display:none}
+.nav a{justify-content:center;padding:0!important;gap:0!important;font-size:0;min-height:40px!important}
+.nav a svg{width:20px;height:20px}
+.nav a .bd,.nav a .p1{display:none}
+.top>.row:first-child>.mut{display:none}
+.top form[role=search]{margin-left:0!important}
+.main{padding:16px!important}
+.only1024{display:inline-flex!important}
+.hide1024{display:none!important}
+.stack>*{flex:1 1 100%!important;max-width:none!important}
+.split{position:relative}
+.split>.drw{position:absolute!important;top:0;right:0;z-index:6;width:380px;max-width:calc(100% - 24px)!important;box-shadow:-8px 0 28px rgba(0,0,0,.22)!important;background:var(--sf)}
+.split>.drw.full{left:0;width:auto;max-width:none!important}
+.g8{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.pg{grid-template-columns:minmax(0,1fr)!important}
+.acts>*{display:none!important}.acts>.keep{display:inline-flex!important}
+.c2 th:nth-child(4),.c2 td:nth-child(4),.c2 th:nth-child(5),.c2 td:nth-child(5),.c2 th:nth-child(6),.c2 td:nth-child(6){display:none}
+.c5 th:nth-child(6),.c5 td:nth-child(6){display:none}
+}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<a class="skip" href="#content">Skip to content</a>
+<header class="top">
+<div class="row" style="gap: 10px"><span class="mark" aria-hidden="true">G</span><strong style="font-size: 15px">Goldmark</strong><span class="mut">SAMPLE Contoso Infrastructure</span></div>
+<form role="search" style="flex: 1 1 280px; max-width: 520px; display: flex; margin-left: 16px"><label class="vh" for="gs">Search all CIs</label><input class="inp" id="gs" type="search" placeholder="Search CIs (Enter)" style="width: 100%"></form>
+<div class="row" style="margin-left: auto; gap: 4px">
+<button class="btn" type="button" aria-haspopup="dialog"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg>As of: Now</button>
+<button class="btn ic" type="button" aria-label="{{themeLabel}}" onClick="{{toggleTheme}}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></svg></button>
+<button class="btn sub" type="button" aria-haspopup="menu" aria-label="User menu, Dana Kowalski"><span class="av" aria-hidden="true">DK</span>Dana K.</button>
+</div>
+</header>
+<div class="shell">
+<nav class="nav" aria-label="Main">
+<h2>Overview</h2>
+<a href="Main.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 2.5h4.5v6h-4.5zM9 2.5h4.5v3.5H9zM9 8h4.5v5.5H9zM2.5 10.5h4.5v3H2.5z"/></svg>Dashboard</a>
+<h2>Inventory</h2>
+<a class="on" href="04-Search.dc.html" aria-current="true"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></svg>Search</a>
+<a href="06-Graph.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="4" cy="4" r="1.8"/><circle cx="12" cy="5" r="1.8"/><circle cx="7" cy="12" r="1.8"/><path d="M5.8 4.2l4.4.6M4.6 5.7l1.8 4.6M11 6.6l-3 3.8"/></svg>Graph explorer</a>
+<a href="07-Impact.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg>Impact analysis</a>
+<a href="08-BusinessServices.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="2" y="5" width="12" height="8.5" rx="1"/><path d="M6 5V3.5h4V5"/></svg>Business services</a>
+<h2>Data hygiene</h2>
+<a href="09-ReviewQueue.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2 9.5 3.8 3h8.4L14 9.5v4H2zM2 9.5h3.5l1 1.5h3l1-1.5H14"/></svg>Review queue<span class="bd brd" style="margin-left: auto">7</span></a>
+<a href="11-DataQuality.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 13.5 4v4c0 3-2.3 5.3-5.5 6.2C4.8 13.3 2.5 11 2.5 8V4z"/><path d="m5.6 8 1.7 1.7 3.1-3.3"/></svg>Data quality</a>
+<a href="10-StorageGroups.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><ellipse cx="8" cy="3.8" rx="5" ry="1.8"/><path d="M3 3.8v8.4c0 1 2.2 1.8 5 1.8s5-.8 5-1.8V3.8M3 8c0 1 2.2 1.8 5 1.8S13 9 13 8"/></svg>Storage groups</a>
+<a href="15-ChangeHistory.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg>Change history</a>
+<h2>Integration</h2>
+<a href="12-Sources.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M6 1.5v3M10 1.5v3M4 4.5h8V8a4 4 0 0 1-8 0zM8 12v2.5"/></svg>Sources &amp; collectors</a>
+<a href="13-CsvImport.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M9.5 1.5H4a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5z"/><path d="M9.5 1.5V5H13M8 12V8M6.2 9.7 8 8l1.8 1.7"/></svg>CSV import</a>
+<a href="18-ApiTokens.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="5" cy="11" r="3"/><path d="m7.2 8.8 6.3-6.3M11.5 4.5 13 6"/></svg>API tokens</a>
+<a href="19-Webhooks.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M5.5 6.5a3 3 0 1 1 4.6 2.5l1.9 3.5M3 11.5a2.5 2.5 0 1 0 5 0h4.5"/></svg>Webhooks</a>
+<a href="21-Apps.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><path d="M11.5 9v5M9 11.5h5"/></svg>Apps &amp; integrations<span class="p1" style="margin-left: auto">P1</span></a>
+<h2>Administration</h2>
+<a href="14-Types.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M2.5 2.5h5v5h-5z"/><circle cx="11.5" cy="5" r="2.5"/><path d="M5 9.5 8 14H2zM9.5 9.5h4v4h-4z"/></svg>Types &amp; attributes</a>
+<a href="17-Users.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 13.5a4.5 4.5 0 0 1 9 0M10.5 2.8a2.5 2.5 0 0 1 0 4.4M12 9.5a4.5 4.5 0 0 1 2.5 4"/></svg>Users &amp; roles</a>
+<a href="16-AuditLog.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M4 1.5h8v13H4zM6 5h4M6 8h4M6 11h2"/></svg>Audit log</a>
+<a href="20-Settings.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>Settings</a>
+</nav>
+<main class="main" id="content">
+<header style="display: flex; flex-direction: column; gap: 10px">
+<nav class="crumb" aria-label="Breadcrumb"><a href="04-Search.dc.html">Search</a><span aria-hidden="true">/</span><a href="04-Search.dc.html">VirtualMachine</a><span aria-hidden="true">/</span><span aria-current="page">app-erp-db01</span></nav>
+<div style="display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="row" style="gap: 12px"><h1>app-erp-db01</h1><span class="bd ol"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M5.5 14h5M8 11v3"/></svg>VirtualMachine</span><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Active</span></div>
+<div class="row mut" style="gap: 16px"><span>Owner <a href="#owner">Team: ERP Platform</a> · <a href="#owner">Sam Ortega</a></span><span>Last seen 9 min ago by <span class="bd ol">vCenter vc01</span></span></div>
+<div class="row" aria-label="External status from registered apps"><span class="p1">P1</span><a class="bd dn" href="https://monitor.example/host/8f21" style="text-decoration: none"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Monitoring: Critical · 2 min ago</a><a class="btn xs" href="https://monitor.example/host/8f21" target="_blank" rel="noopener">Open in Monitor<svg aria-hidden="true" viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5 7 9M12 9.5v4H2.5V4h4"/></svg><span class="vh">(opens in new tab)</span></a></div>
+</div>
+<div class="row acts" role="toolbar" aria-label="CI actions">
+<button class="btn keep only1024" type="button" aria-haspopup="menu">More actions<svg aria-hidden="true" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg></button>
+<button class="btn keep" type="button"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 5.5 13.5H2.5v-3z"/></svg>Edit</button>
+<button class="btn" type="button">Change lifecycle</button>
+<button class="btn" type="button">Retire</button>
+<a class="btn" href="06-Graph.dc.html">View in graph</a>
+<a class="btn pr" href="07-Impact.dc.html"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg>Run impact</a>
+</div>
+</div>
+</header>
+
+<div role="tablist" aria-label="CI sections" class="tabs">
+<sc-for list="{{tabs}}" as="t" hint-placeholder-count="6">
+<button class="tab" role="tab" type="button" aria-selected="{{t.sel}}" onClick="{{t.pick}}">{{t.label}}</button>
+</sc-for>
+</div>
+<div class="mut sm" style="margin-top: -8px">URL: /ci/8f21c0de?tab={{tab}}</div>
+
+<sc-if value="{{tAttr}}" hint-placeholder-val="{{ true }}">
+<div role="tabpanel" aria-label="Attributes" class="pg">
+<section class="card grp" aria-labelledby="g1"><h2 id="g1" style="font-size: 14px; margin-bottom: 6px">Identity</h2>
+<dl style="margin: 0">
+<div class="kv"><dt>Name</dt><dd>app-erp-db01 <span class="bd ol"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>vCenter vc01</span></dd></div>
+<div class="kv"><dt>DNS name</dt><dd>app-erp-db01.corp.example <span class="bd ol">vCenter vc01</span><span class="sm mut">9 min ago</span></dd></div>
+<div class="kv"><dt>instanceUuid</dt><dd class="mono">5021c6a2-77d1-4b3e-9a10-2f8e4a1c0d93</dd></div>
+</dl></section>
+<section class="card grp" aria-labelledby="g2" style="position: relative"><h2 id="g2" style="font-size: 14px; margin-bottom: 6px">Hardware / OS</h2>
+<dl style="margin: 0">
+<div class="kv"><dt>os</dt><dd>Windows Server 2022 <span class="bd ol">Windows collector</span><button class="btn xs" type="button" aria-expanded="true" aria-controls="pop-os">2 sources</button></dd></div>
+<div class="kv"><dt>vCPU / memory</dt><dd>8 vCPU · 64 GB <span class="bd ol"><svg aria-hidden="true" viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/></svg>vCenter vc01</span></dd></div>
+<div class="kv"><dt>Tools status</dt><dd>toolsOk <span class="bd ol">vCenter vc01</span></dd></div>
+</dl>
+<div class="pop" id="pop-os" role="dialog" aria-label="Sources for os" style="top: 82px; right: 12px">
+<div class="row" style="justify-content: space-between"><strong>os: 2 sources</strong><button class="btn ic sub" type="button" aria-label="Close" style="min-height: 24px; width: 24px">×</button></div>
+<table style="margin-top: 8px; font-size: 13px"><thead><tr><th scope="col" style="padding: 4px 6px">Source</th><th scope="col" style="padding: 4px 6px">Value</th><th scope="col" style="padding: 4px 6px">Seen</th></tr></thead><tbody>
+<tr><td style="padding: 6px"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Won</span> Windows</td><td style="padding: 6px">Windows Server 2022 Datacenter</td><td style="padding: 6px">34 min</td></tr>
+<tr><td style="padding: 6px">vCenter vc01</td><td style="padding: 6px">Microsoft Windows Server 2022 (64-bit)</td><td style="padding: 6px">9 min</td></tr>
+</tbody></table>
+<p class="sm mut" style="margin: 8px 0 0">Why: precedence for os is Manual &gt; SQL &gt; Windows &gt; vCenter &gt; AD &gt; CSV.</p>
+</div>
+</section>
+<section class="card grp" aria-labelledby="g3"><h2 id="g3" style="font-size: 14px; margin-bottom: 6px">Placement</h2>
+<dl style="margin: 0">
+<div class="kv"><dt>vCenter</dt><dd><a href="#vc">vc01.corp.example</a> <span class="bd ol">vCenter vc01</span></dd></div>
+<div class="kv"><dt>cluster</dt><dd><a href="#cl">CL-PROD-02</a> <span class="bd ol">vCenter vc01</span></dd></div>
+<div class="kv"><dt>host</dt><dd><a href="#h">esx-mx-014</a> <span class="bd ol">vCenter vc01</span></dd></div>
+<div class="kv"><dt>datastore</dt><dd><a href="#ds">DS-S3-ERP-01</a> <span class="mut">(StorageGroup S3)</span> <span class="bd ol">vCenter vc01</span></dd></div>
+</dl></section>
+<section class="card grp" aria-labelledby="g4"><h2 id="g4" style="font-size: 14px; margin-bottom: 6px">Ownership &amp; custom</h2>
+<dl style="margin: 0">
+<div class="kv" id="owner"><dt>owner_team</dt><dd>ERP Platform <span class="bd ol">Manual</span></dd></div>
+<div class="kv"><dt>cost_center</dt><dd>CC-4410 <span class="bd brd"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M10.5 2.5 13.5 5.5 5.5 13.5H2.5v-3z"/></svg>Overridden</span><span class="sm mut">"Finance re-org 2026-09; CSV still has CC-4100" · dana.k</span></dd></div>
+<div class="kv"><dt>backup_tier</dt><dd>Gold <span class="bd ol">CSV hr-assets</span><span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Stale</span><button class="btn xs" type="button">Override</button></dd></div>
+</dl></section>
+</div>
+</sc-if>
+
+<sc-if value="{{tRel}}" hint-placeholder-val="{{ false }}">
+<div role="tabpanel" aria-label="Relationships" style="display: flex; flex-direction: column; gap: 12px">
+<div class="row" style="justify-content: space-between"><h2>Depends on (4)</h2><button class="btn" type="button">+ Add relationship</button></div>
+<div class="tbl"><table><thead><tr><th scope="col">Relationship</th><th scope="col">Related CI</th><th scope="col">Type</th><th scope="col">Redundancy group</th><th scope="col">Source</th><th scope="col">Since</th></tr></thead><tbody>
+<tr><td>runs_on</td><td><a href="#h">esx-mx-014</a></td><td>HypervisorHost</td><td class="mut">—</td><td><span class="bd ol">vCenter vc01</span></td><td>2026-08-02</td></tr>
+<tr><td>uses_datastore</td><td><a href="#ds">DS-S3-ERP-01</a></td><td>Datastore</td><td class="mut">—</td><td><span class="bd ol">vCenter vc01</span></td><td>2025-11-19</td></tr>
+<tr><td>member_of_cluster</td><td><a href="#cl">CL-PROD-02</a></td><td>Cluster</td><td class="mut">—</td><td><span class="bd ol">vCenter vc01</span></td><td>2025-11-19</td></tr>
+<tr><td>connected_to</td><td><a href="#n">dvPG-App-120</a></td><td>Network</td><td class="mut">—</td><td><span class="bd ol">vCenter vc01</span></td><td>2025-11-19</td></tr>
+</tbody></table></div>
+<h2>Depended on by (3)</h2>
+<div class="tbl"><table><thead><tr><th scope="col">Relationship</th><th scope="col">Related CI</th><th scope="col">Type</th><th scope="col">Redundancy group</th><th scope="col">Source</th><th scope="col">Since</th></tr></thead><tbody>
+<tr><td>os_of</td><td><a href="#s">APP-ERP-DB01</a></td><td>Server</td><td class="mut">—</td><td><span class="bd ol">Windows collector</span></td><td>2025-11-20</td></tr>
+<tr><td>hosted_on (via server)</td><td><a href="#i">SQLPRD01\ERP</a></td><td>SqlInstance</td><td>AG-ERP replicas</td><td><span class="bd ol">SQL collector</span></td><td>2025-11-20</td></tr>
+<tr><td>depends_on</td><td><a href="08-BusinessServices.dc.html">ERP</a></td><td>BusinessService</td><td class="mut">—</td><td><span class="bd ol">Manual</span></td><td>2026-01-08</td></tr>
+</tbody></table></div>
+</div>
+</sc-if>
+
+<sc-if value="{{tComp}}" hint-placeholder-val="{{ false }}">
+<div role="tabpanel" aria-label="Components" style="display: flex; flex-direction: column; gap: 12px">
+<h2>NICs (2)</h2>
+<div class="tbl"><table><thead><tr><th scope="col">Label</th><th scope="col">MAC</th><th scope="col">Network</th><th scope="col">IP addresses</th><th scope="col">Source</th></tr></thead><tbody>
+<tr><td>Network adapter 1</td><td class="mono">00:50:56:aa:bb:01</td><td>dvPG-App-120</td><td class="mono">10.20.120.41</td><td><span class="bd ol">vCenter vc01</span></td></tr>
+<tr><td>Network adapter 2</td><td class="mono">00:50:56:aa:bb:02</td><td>dvPG-Backup-310</td><td class="mono">10.31.0.41</td><td><span class="bd ol">vCenter vc01</span></td></tr>
+</tbody></table></div>
+<h2>Disks (3)</h2>
+<div class="tbl"><table><thead><tr><th scope="col">Label</th><th scope="col">Capacity</th><th scope="col">Datastore</th><th scope="col">Mode</th></tr></thead><tbody>
+<tr><td>Hard disk 1</td><td>120 GB</td><td>DS-S3-ERP-01</td><td>Thin</td></tr>
+<tr><td>Hard disk 2</td><td>1.5 TB</td><td>DS-S3-ERP-01</td><td>Thick eager zeroed</td></tr>
+<tr><td>Hard disk 3</td><td>400 GB</td><td>DS-S3-ERP-01</td><td>Thick eager zeroed</td></tr>
+</tbody></table></div>
+<p class="mut sm" style="margin: 0">HBA ports and LUN paths appear here for hosts; this VM has none.</p>
+</div>
+</sc-if>
+
+<sc-if value="{{tHist}}" hint-placeholder-val="{{ false }}">
+<div role="tabpanel" aria-label="History" style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start">
+<ol class="card" style="list-style: none; margin: 0; padding: 8px; flex: 1 1 320px; max-width: 380px">
+<li style="padding: 10px; border-radius: 4px; background: var(--hl)"><div class="row sm mut">2026-10-15 09:12 UTC · <span class="bd ol">vCenter vc01</span></div><div>host esx-mx-011 → esx-mx-014 (vMotion)</div></li>
+<li style="padding: 10px"><div class="row sm mut">2026-10-02 14:40 UTC · <span class="bd brd">dana.k</span></div><div>cost_center overridden</div></li>
+<li style="padding: 10px"><div class="row sm mut">2026-09-20 03:05 UTC · <span class="bd ol">Windows collector</span></div><div>os updated (build 20348.2700)</div></li>
+</ol>
+<section class="card" style="flex: 2 1 420px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px" aria-labelledby="dh">
+<div class="row" style="justify-content: space-between"><h2 id="dh" style="font-size: 14px">Change on 2026-10-15 09:12 UTC</h2><a href="#asof">View CI as of this time</a></div>
+<table><thead><tr><th scope="col">Field</th><th scope="col">Change</th><th scope="col">Before</th><th scope="col">After</th></tr></thead><tbody>
+<tr><td>host</td><td><span class="bd dg">Changed</span></td><td><del>esx-mx-011</del></td><td><ins style="text-decoration: none; font-weight: 600">esx-mx-014</ins></td></tr>
+<tr><td>runs_on</td><td><span class="bd dn">Removed</span></td><td><del>esx-mx-011</del></td><td class="mut">—</td></tr>
+<tr><td>runs_on</td><td><span class="bd ok">Added</span></td><td class="mut">—</td><td style="font-weight: 600">esx-mx-014</td></tr>
+</tbody></table>
+</section>
+</div>
+</sc-if>
+
+<sc-if value="{{tIdent}}" hint-placeholder-val="{{ false }}">
+<div role="tabpanel" aria-label="Identifiers" class="tbl"><table><thead><tr><th scope="col">Scheme</th><th scope="col">Normalized value</th><th scope="col">Scope</th><th scope="col">Source</th><th scope="col">Since</th></tr></thead><tbody>
+<tr><td>BIOS-UUID-SWAPPED</td><td class="mono">4221a5c6-02d1-7b3e-9a10-2f8e4a1c0de0</td><td>global</td><td><span class="bd ol">vCenter vc01</span></td><td>2025-11-19</td></tr>
+<tr><td>vCenter instanceUuid</td><td class="mono">5021c6a2-77d1-4b3e-9a10-2f8e4a1c0d93</td><td>vc01</td><td><span class="bd ol">vCenter vc01</span></td><td>2025-11-19</td></tr>
+<tr><td>AD objectGUID</td><td class="mono">7f3c9e10-5b2a-4c8d-a1e2-9d04b6f7c311</td><td>corp.example</td><td><span class="bd ol">AD corp.example</span> <span class="bd"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>Stale</span></td><td>2025-11-20</td></tr>
+<tr><td>DNS FQDN</td><td class="mono">app-erp-db01.corp.example</td><td>global</td><td><span class="bd ol">Windows collector</span></td><td>2025-11-20</td></tr>
+</tbody></table></div>
+</sc-if>
+
+<sc-if value="{{tImp}}" hint-placeholder-val="{{ false }}">
+<div role="tabpanel" aria-label="Impact" class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<h2>What depends on this?</h2>
+<p class="mut" style="margin: 0">If app-erp-db01 fails:</p>
+<ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+<li class="row"><span class="bd dn"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Down</span><a href="#s">APP-ERP-DB01</a><span class="mut">Server · os_of</span></li>
+<li class="row"><span class="bd dn"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Down</span><a href="#i">SQLPRD01\ERP</a><span class="mut">SqlInstance · hosted_on</span></li>
+<li class="row"><span class="bd dg"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg>Degraded</span><a href="#ag">AG-ERP</a><span class="mut">1 of 2 replicas down</span></li>
+<li class="row"><span class="bd dg"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg>Degraded</span><a href="08-BusinessServices.dc.html">ERP</a><span class="mut">BusinessService</span></li>
+</ul>
+<a class="btn pr" href="07-Impact.dc.html" style="align-self: flex-start">Open full impact analysis</a>
+</div>
+</sc-if>
+</main>
+</div>
+<footer class="foot"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional) · *.corp.example</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"compact":{"editor":"boolean","default":false},"$preview":{"width":1024,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const dark = s.dark != null ? s.dark : !!this.props.dark;
+    const tab = s.tab || 'attributes';
+    const defs = [['attributes', 'Attributes'], ['relationships', 'Relationships'], ['components', 'Components'], ['history', 'History'], ['identifiers', 'Identifiers'], ['impact', 'Impact']];
+    return {
+      themeClass: 'gm ' + (dark ? 'dk' : 'lt') + (this.props.compact ? ' cp' : ''),
+      themeLabel: dark ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ dark: !dark }),
+      tab: tab,
+      tabs: defs.map((d) => ({ label: d[1], sel: d[0] === tab ? 'true' : 'false', pick: () => this.setState({ tab: d[0] }) })),
+      tAttr: tab === 'attributes', tRel: tab === 'relationships', tComp: tab === 'components',
+      tHist: tab === 'history', tIdent: tab === 'identifiers', tImp: tab === 'impact'
+    };
+  }
+}
+</script>
+</body>
+</html>

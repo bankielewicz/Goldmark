@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · Sign in</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;position:relative}
+.gm a{color:var(--br);text-underline-offset:2px}.gm a:hover{text-decoration-thickness:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h2{font-size:16px;line-height:22px;font-weight:600;margin:0}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.mark{width:36px;height:36px;border-radius:8px;background:var(--br);color:var(--onbr);display:grid;place-items:center;font-weight:700;font-size:18px}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0;width:100%}
+.inp[aria-invalid="true"]{border-color:var(--dn);border-bottom-width:2px}
+.lbl{font-weight:600;display:block;margin-bottom:4px}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.sub{border-color:transparent;background:transparent}
+.btn.ic{width:32px;padding:0}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb>svg{margin-top:2px}
+.p1{font-size:11px;line-height:14px;font-weight:700;padding:1px 6px;border-radius:3px;border:1px dashed var(--br);color:var(--br);white-space:nowrap}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tag{font-size:12px;font-weight:600;color:var(--fg2);text-transform:uppercase;letter-spacing:.04em}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block}
+@media (max-width:480px){.card.si{width:100%!important;border-radius:0}}
+.only1024{display:none}
+@media (max-width:1100px){
+.nav{flex:0 0 56px!important;max-width:56px!important;padding:8px 6px!important}
+.nav h2{font-size:0!important;line-height:0!important;height:1px;background:var(--bd);margin:10px 6px!important}
+.nav>p{display:none}
+.nav a{justify-content:center;padding:0!important;gap:0!important;font-size:0;min-height:40px!important}
+.nav a svg{width:20px;height:20px}
+.nav a .bd,.nav a .p1{display:none}
+.top>.row:first-child>.mut{display:none}
+.top form[role=search]{margin-left:0!important}
+.main{padding:16px!important}
+.only1024{display:inline-flex!important}
+.hide1024{display:none!important}
+.stack>*{flex:1 1 100%!important;max-width:none!important}
+.split{position:relative}
+.split>.drw{position:absolute!important;top:0;right:0;z-index:6;width:380px;max-width:calc(100% - 24px)!important;box-shadow:-8px 0 28px rgba(0,0,0,.22)!important;background:var(--sf)}
+.split>.drw.full{left:0;width:auto;max-width:none!important}
+.g8{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+.g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.pg{grid-template-columns:minmax(0,1fr)!important}
+.acts>*{display:none!important}.acts>.keep{display:inline-flex!important}
+.c2 th:nth-child(4),.c2 td:nth-child(4),.c2 th:nth-child(5),.c2 td:nth-child(5),.c2 th:nth-child(6),.c2 td:nth-child(6){display:none}
+.c5 th:nth-child(6),.c5 td:nth-child(6){display:none}
+}
+</style>
+</helmet>
+<div class="{{themeClass}}" style="display: flex; flex-direction: column">
+<div style="display: flex; justify-content: flex-end; padding: 12px 16px"><button class="btn ic sub" type="button" aria-label="{{themeLabel}}" onClick="{{toggleTheme}}"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></svg></button></div>
+<main style="flex: 1; display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 8px 16px 32px">
+<div class="row" style="gap: 12px"><span class="mark" aria-hidden="true">G</span><div><div style="font-size: 20px; font-weight: 600; line-height: 26px">Goldmark</div><div class="mut">SAMPLE Contoso Infrastructure</div></div></div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 40px; justify-content: center; align-items: flex-start; width: 100%">
+
+<div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+<span class="tag">Step 1 · Credentials</span>
+<form class="card si" style="width: 400px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 16px">
+<h1>Sign in</h1>
+<div class="mb e" role="alert" tabindex="-1"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div>Username or password is incorrect.</div></div>
+<div><label class="lbl" for="u">Username</label><input class="inp" id="u" name="username" autocomplete="username" value="dana.k"></div>
+<div><label class="lbl" for="p">Password</label><div style="display: flex; gap: 4px"><input class="inp" id="p" name="password" type="password" autocomplete="current-password" value="••••••••••"><button class="btn ic" type="button" aria-label="Show password" aria-pressed="false"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg></button></div></div>
+<button class="btn pr" type="submit" style="width: 100%">Sign in</button>
+<div class="row" style="gap: 12px; flex-wrap: nowrap"><span style="flex: 1; height: 1px; background: var(--bd)"></span><span class="mut sm">or</span><span style="flex: 1; height: 1px; background: var(--bd)"></span><span class="p1">P1 · OIDC only</span></div>
+<button class="btn" type="button" style="width: 100%"><svg aria-hidden="true" viewBox="0 0 16 16" style="stroke: none"><rect x="1.5" y="1.5" width="6" height="6" fill="#f25022"/><rect x="8.5" y="1.5" width="6" height="6" fill="#7fba00"/><rect x="1.5" y="8.5" width="6" height="6" fill="#00a4ef"/><rect x="8.5" y="8.5" width="6" height="6" fill="#ffb900"/></svg>Sign in with Microsoft</button>
+</form>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+<span class="tag">Step 2 · Two-factor code</span>
+<form class="card si" style="width: 400px; box-sizing: border-box; padding: 28px; display: flex; flex-direction: column; gap: 16px">
+<h1>Two-factor authentication</h1>
+<p style="margin: 0">Enter the 6-digit code from your authenticator app.</p>
+<div><label class="lbl" for="otp">6-digit code</label><input class="inp mono" id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" value="482 913" aria-invalid="true" aria-describedby="otp-err" style="font-size: 20px; letter-spacing: .2em; height: 44px; font-family: Consolas, ui-monospace, monospace"><div id="otp-err" class="row sm" style="color: var(--dn); margin-top: 6px; gap: 4px"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>That code didn't work. Codes change every 30 seconds.</div></div>
+<button class="btn pr" type="submit" disabled style="width: 100%"><span class="spin" aria-hidden="true"></span>Verifying…</button>
+<div class="row" style="justify-content: space-between"><a href="#recovery">Use a recovery code instead</a><button class="btn sub" type="button">Back</button></div>
+</form>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px; width: 400px; max-width: 100%">
+<span class="tag" style="text-align: center">Messages at top of card</span>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div>This account is temporarily locked after 5 failed attempts. Try again in 15 minutes or contact an administrator.</div></div>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>Your session expired. Sign in again.</div></div>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div>Goldmark isn't set up yet. <a href="02-Setup.dc.html">Go to first-run setup</a></div></div>
+<div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px; box-shadow: none">
+<label class="lbl" for="rc" style="margin: 0">Recovery code</label>
+<input class="inp mono" id="rc" autocomplete="off" value="7KQ2-M9XD" style="font-family: Consolas, ui-monospace, monospace">
+<span class="sm mut">Recovery-code variant of step 2. Each code works once.</span>
+</div>
+<p class="sm mut" style="margin: 0">After success, Goldmark returns to the page originally requested (deep link preserved, e.g. /ci/8f21?tab=history).</p>
+</div>
+
+</div>
+</main>
+<footer class="sm mut" style="display: flex; justify-content: center; gap: 16px; padding: 16px; flex-wrap: wrap"><span>Goldmark 0.1.0-draft</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1024,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = this.state || {};
+    const dark = s.dark != null ? s.dark : !!this.props.dark;
+    return {
+      themeClass: 'gm ' + (dark ? 'dk' : 'lt'),
+      themeLabel: dark ? 'Switch to light theme' : 'Switch to dark theme',
+      toggleTheme: () => this.setState({ dark: !dark })
+    };
+  }
+}
+</script>
+</body>
+</html>
