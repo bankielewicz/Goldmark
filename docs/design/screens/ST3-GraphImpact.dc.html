@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · States: Graph, Impact, Business services</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h3{font-size:15px;line-height:20px;font-weight:600;margin:0}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.inp[readonly]{background:var(--sf2);color:var(--fg2)}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.sec{display:flex;flex-direction:column;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pnl{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tag{font-size:11px;line-height:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt)}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb.s{background:var(--okbg);border-color:var(--okc)}.mb.s>svg{color:var(--okc)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px;display:block}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block;box-sizing:border-box}
+.ctr{text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;padding:8px 0}
+.toast{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:6px;background:var(--fg);color:var(--bg)}
+.dlg{background:var(--sf);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.2);border:1px solid var(--bd);padding:16px;display:flex;flex-direction:column;gap:10px}
+.bar{height:8px;border-radius:4px;background:var(--ntbg);overflow:hidden}.bar span{display:block;height:100%;background:var(--br)}
+.cv{height:150px;border:1px dashed var(--bd2);border-radius:6px;background:var(--sf2);display:flex;align-items:center;justify-content:center;gap:24px}
+.nd{width:56px;height:28px;border-radius:6px;background:var(--ntbg)}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<div><h1>States: Graph explorer, Impact analysis, Business services</h1><p class="mut" style="margin: 4px 0 0">Per-screen states for section C.</p></div>
+
+<section class="sec" aria-labelledby="h-gr">
+<h2 id="h-gr">6 · Graph explorer</h2>
+<div class="g3">
+<div class="pnl" aria-busy="true" aria-label="Loading graph"><span class="tag">Loading</span>
+<div class="cv"><span class="nd"></span><span class="nd" style="width: 72px"></span><span class="nd"></span></div>
+<div class="row mut"><span class="spin" aria-hidden="true"></span>Loading 3 levels…</div>
+</div>
+<div class="pnl"><span class="tag">Too large (more than 500 nodes)</span>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div><strong>1,846 nodes at depth 5 is too many to draw.</strong> Lower the depth or filter by CI or relationship type. The table view still lists every edge.</div></div>
+<div class="row"><button class="btn" type="button">Set depth to 3</button><button class="btn pr" type="button">Switch to table view</button></div>
+</div>
+<div class="pnl"><span class="tag">Empty (no relationships)</span>
+<div class="ctr"><h3>hcx-ma-01 has no relationships</h3><span class="mut">Nothing depends on it and it depends on nothing within the current filters.</span><div class="row" style="justify-content: center"><button class="btn" type="button">Clear filters</button><a class="btn" href="#ci">Open CI</a></div></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load the neighborhood of app-erp-db01.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-2b8f0d71ac55-01</code></span></div></div>
+</div>
+<div class="pnl"><span class="tag">"As of" active</span>
+<div class="mb w" style="align-items: center"><svg aria-hidden="true" viewBox="0 0 16 16" style="margin: 0"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg><div style="flex: 1"><strong>Graph as of 2026-10-14 09:00 UTC (read-only)</strong></div><button class="btn xs" type="button">Return to now</button></div>
+<span class="sm mut">At that time app-erp-db01 ran on esx-mx-011; the graph and table both show it.</span>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-im">
+<h2 id="h-im">7 · Impact analysis</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Initial empty</span>
+<div class="ctr"><svg aria-hidden="true" viewBox="0 0 16 16" style="width: 28px; height: 28px; color: var(--fg2)"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg><h3>Choose one or more CIs to simulate a failure</h3><span class="mut">Add them under Failed CIs, then select Run.</span></div>
+</div>
+<div class="pnl"><span class="tag">Running</span>
+<div class="row" style="justify-content: space-between"><span class="row"><span class="spin" aria-hidden="true"></span>Evaluating dependents of StorageGroup S3…</span><button class="btn" type="button">Cancel</button></div>
+<div class="bar" role="progressbar" aria-label="Impact analysis progress" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100"><span style="width: 45%"></span></div>
+<span class="sm mut">540 of about 1,200 CIs evaluated</span>
+</div>
+<div class="pnl"><span class="tag">No impact</span>
+<div class="ctr"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Down 0 · Degraded 0</span><h3 aria-live="polite">Nothing depends on these CIs</h3><span class="mut">StorageGroup S11 has no dependents within depth 10.</span></div>
+</div>
+<div class="pnl"><span class="tag">Depth limit reached</span>
+<div class="mb w"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div><strong>Stopped at depth 10.</strong> 6 paths go deeper, so more CIs may be affected. <button class="btn xs" type="button">Run again with depth 20</button></div></div>
+<span class="sm mut">Results so far stay in the table.</span>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Impact analysis failed before it finished.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-61aa04de9c27-01</code><button class="btn xs" type="button" aria-label="Copy reference ID">Copy</button></span></div></div>
+</div>
+<div class="pnl"><span class="tag">"As of" active</span>
+<div class="mb w" style="align-items: center"><svg aria-hidden="true" viewBox="0 0 16 16" style="margin: 0"><path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9M2.5 2.5v2.5H5"/><path d="M8 5v3l2 1.3"/></svg><div style="flex: 1"><strong>Impact computed as of 2026-10-06 14:00 UTC</strong></div><button class="btn xs" type="button">Return to now</button></div>
+<div class="row"><span class="bd dn">Down 39</span><span class="bd dg">Degraded 15</span><span class="mut sm">Evaluated 1,188 CIs</span></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-bs">
+<h2 id="h-bs">8 · Business service editor</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty list</span>
+<div class="ctr"><h3>No business services yet</h3><span class="mut">Create the first one so impact analysis reaches the business layer.</span><button class="btn pr" type="button">+ New service</button></div>
+</div>
+<div class="pnl" aria-busy="true" aria-label="Loading services"><span class="tag">Loading</span>
+<div style="display: flex; flex-direction: column; gap: 10px"><span class="sk" style="width: 60%"></span><span class="sk"></span><span class="sk" style="width: 85%"></span><span class="sk" style="width: 70%"></span></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't save ERP. Your changes are still in the form.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-0f3c88b21e70-01</code></span></div></div>
+</div>
+<div class="pnl"><span class="tag">Validation</span>
+<div><label for="sn" style="font-weight: 600; display: block; margin-bottom: 4px">Name *</label><input class="inp" id="sn" value="" aria-invalid="true" aria-describedby="sne" style="width: 100%; border-color: var(--dn)"><div id="sne" class="row sm" style="color: var(--dn); gap: 4px; margin-top: 4px"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Enter a name for the service.</div></div>
+<span class="sm mut">Duplicate-name variant is on the main canvas.</span>
+</div>
+<div class="pnl"><span class="tag">Saved / unsaved guard</span>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">ERP saved · 4 dependencies</span></div>
+<div class="dlg" role="dialog" aria-labelledby="ug"><h3 id="ug">Leave without saving?</h3><p class="sm" style="margin: 0">You have unsaved changes to ERP.</p><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Stay</button><button class="btn pr" type="button">Discard changes</button></div></div>
+</div>
+<div class="pnl"><span class="tag">Read-only (Viewer, Auditor, as-of)</span>
+<div class="row"><h3>ERP</h3><span class="bd">Read-only</span></div>
+<div class="row sm"><span class="mut">Owner</span> Team ERP Platform · Riley Chen</div>
+<div class="row sm"><span class="mut">Dependencies</span> ERP-LSNR, ERP_PROD, app-erp-web01/02</div>
+<span class="sm mut">Form fields render as text; Save, Remove and the picker are hidden. 412 conflict uses the shared dialog.</span>
+</div>
+</div>
+</section>
+
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: 'gm ' + (this.props.dark ? 'dk' : 'lt') };
+  }
+}
+</script>
+</body>
+</html>

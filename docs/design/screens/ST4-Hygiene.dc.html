@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark · States: Data hygiene</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+.lt{--bg:#f5f5f5;--sf:#ffffff;--sf2:#fafafa;--fg:#242424;--fg2:#5c5c5c;--bd:#e0e0e0;--bd2:#c7c7c7;--br:#8a5a00;--onbr:#ffffff;--brbg:#fbf1db;--dn:#b10e1c;--dnbg:#fdf3f4;--wn:#8a4b00;--wnbg:#fff6e5;--okc:#0e700e;--okbg:#f1faf1;--nt:#5c5c5c;--ntbg:#f0f0f0;--in:#0f548c;--inbg:#ebf3fc;--hl:#fdf6e7}
+.dk{--bg:#141414;--sf:#1f1f1f;--sf2:#1a1a1a;--fg:#ffffff;--fg2:#c2c2c2;--bd:#383838;--bd2:#5c5c5c;--br:#e6b450;--onbr:#1a1400;--brbg:#3a2c0c;--dn:#ff9aa2;--dnbg:#3b1418;--wn:#f7c26b;--wnbg:#3a2a0d;--okc:#8ade8a;--okbg:#0f2e0f;--nt:#c2c2c2;--ntbg:#2e2e2e;--in:#86bff2;--inbg:#0e2a45;--hl:#2e2610}
+.gm{font-family:"Segoe UI","Segoe UI Variable Text",system-ui,-apple-system,sans-serif;font-size:14px;line-height:20px;background:var(--bg);color:var(--fg);min-height:100vh;padding:32px;box-sizing:border-box;display:flex;flex-direction:column;gap:28px}
+.gm a{color:var(--br);text-underline-offset:2px}
+.gm svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.gm h1{font-size:28px;line-height:36px;font-weight:600;margin:0}
+.gm h2{font-size:20px;line-height:28px;font-weight:600;margin:0}
+.gm h3{font-size:15px;line-height:20px;font-weight:600;margin:0}
+.inp{height:32px;box-sizing:border-box;border:1px solid var(--bd2);border-bottom-color:var(--fg2);border-radius:4px;background:var(--sf);color:var(--fg);padding:0 10px;font:inherit;min-width:0}
+.btn{min-height:32px;padding:0 12px;border-radius:4px;border:1px solid var(--bd2);background:var(--sf);color:var(--fg);font:inherit;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+.gm a.btn{color:var(--fg);text-decoration:none}
+.btn.pr,.gm a.btn.pr{background:var(--br);border-color:var(--br);color:var(--onbr)}
+.btn.xs{min-height:24px;padding:0 8px;font-size:12px}
+.btn:disabled{background:var(--ntbg);color:var(--fg2);border-color:var(--bd);cursor:not-allowed}
+.btn:focus-visible,.inp:focus-visible,.gm a:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.sec{display:flex;flex-direction:column;gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pnl{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tag{font-size:11px;line-height:14px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--fg2)}
+.bd{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:16px;padding:2px 8px;border-radius:999px;font-weight:600;white-space:nowrap;background:var(--ntbg);color:var(--nt)}
+.bd svg{width:14px;height:14px}
+.dn{background:var(--dnbg);color:var(--dn)}.dg{background:var(--wnbg);color:var(--wn)}.ok{background:var(--okbg);color:var(--okc)}.inf{background:var(--inbg);color:var(--in)}.brd{background:var(--brbg);color:var(--br)}
+.bd.ol{background:transparent;border:1px solid var(--bd2);color:var(--fg);font-weight:400}
+.mono{font-family:Consolas,"Cascadia Mono",ui-monospace,monospace;font-size:13px}
+.mb{display:flex;gap:10px;align-items:flex-start;padding:8px 12px;border-radius:4px;border:1px solid var(--bd);background:var(--sf)}
+.mb.i{background:var(--inbg);border-color:var(--in)}.mb.i>svg{color:var(--in)}
+.mb.w{background:var(--wnbg);border-color:var(--wn)}.mb.w>svg{color:var(--wn)}
+.mb.e{background:var(--dnbg);border-color:var(--dn)}.mb.e>svg{color:var(--dn)}
+.mb.s{background:var(--okbg);border-color:var(--okc)}.mb.s>svg{color:var(--okc)}
+.mb>svg{margin-top:2px}
+.mut{color:var(--fg2)}.sm{font-size:12px;line-height:16px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sk{background:var(--ntbg);border-radius:4px;height:14px;display:block}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid currentColor;border-right-color:transparent;display:inline-block;box-sizing:border-box}
+.ctr{text-align:center;display:flex;flex-direction:column;gap:8px;align-items:center;padding:8px 0}
+.toast{display:flex;gap:10px;align-items:center;padding:10px 14px;border-radius:6px;background:var(--fg);color:var(--bg)}
+.dlg{background:var(--sf);border-radius:8px;box-shadow:0 12px 40px rgba(0,0,0,.2);border:1px solid var(--bd);padding:16px;display:flex;flex-direction:column;gap:10px}
+.gm table{border-collapse:collapse;width:100%;font-size:13px}
+.gm th{text-align:left;font-weight:600;color:var(--fg2);font-size:12px;padding:4px 6px;border-bottom:1px solid var(--bd)}
+.gm td{padding:5px 6px;border-bottom:1px solid var(--bd);vertical-align:top}
+.gm tr:last-child td{border-bottom:0}
+</style>
+</helmet>
+<div class="{{themeClass}}">
+<div><h1>States: Data hygiene</h1><p class="mut" style="margin: 4px 0 0">Review queue, Storage groups, Data quality, Change history.</p></div>
+
+<section class="sec" aria-labelledby="h-rq">
+<h2 id="h-rq">9 · Review queue</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty</span>
+<div class="ctr"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>0 open</span><h3>Nothing to review</h3><span class="mut">Reconciliation is keeping up.</span><button class="btn xs" type="button">Show resolved items</button></div>
+</div>
+<div class="pnl"><span class="tag">Already resolved by someone else</span>
+<div class="mb i" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>sam.o resolved this item 1 minute ago (Merge into app-erp-db01). Your decision was not applied.</span><span class="row"><button class="btn xs" type="button">Refresh</button><a class="sm" href="#audit">View their decision</a></span></div></div>
+<span class="sm mut">Decisions are idempotent: no error, no duplicate merge.</span>
+</div>
+<div class="pnl"><span class="tag">Bulk action partly failed</span>
+<div class="mb w" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><path d="M8 1.8 15 14H1z"/><path d="M8 6v4M8 12v.3"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span><strong>Rejected 4 of 5 items.</strong> 1 item couldn't be rejected.</span></div></div>
+<table><thead><tr><th scope="col">Item</th><th scope="col">Result</th></tr></thead><tbody>
+<tr><td>hcx-ma-01 matches 2 CIs</td><td><span class="bd dn"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg>Already resolved</span></td></tr>
+<tr><td>4 others</td><td><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>Rejected</span></td></tr>
+</tbody></table>
+</div>
+<div class="pnl" aria-busy="true" aria-label="Loading review queue"><span class="tag">Loading</span>
+<div style="display: flex; gap: 10px"><div style="flex: 1; display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 80%"></span><span class="sk"></span><span class="sk" style="width: 70%"></span></div><div style="flex: 2; display: flex; flex-direction: column; gap: 8px"><span class="sk" style="width: 60%; height: 20px"></span><span class="sk"></span><span class="sk"></span><span class="sk" style="width: 85%"></span></div></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load the evidence for this item.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-c3e5a9120d4b-01</code></span></div></div>
+<span class="sm mut">The list on the left still works.</span>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-sg">
+<h2 id="h-sg">10 · Storage group mapping</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Empty (no groups yet)</span>
+<div class="ctr"><h3>No storage groups yet</h3><span class="mut">Groups are derived from FC target WWNNs after the vCenter collector runs.</span><a class="btn pr" href="#sources">Open Sources &amp; collectors</a></div>
+</div>
+<div class="pnl"><span class="tag">Group grew since mapping</span>
+<div class="row"><strong>S3</strong><span>FS7300-A (block)</span><span class="bd inf"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg>Group grew: 2 new WWNNs</span></div>
+<span class="sm mut">The mapping is kept. The drawer marks the new WWNNs as "New".</span>
+</div>
+<div class="pnl"><span class="tag">Conflict on save</span>
+<div class="dlg" role="dialog" aria-labelledby="sgc"><h3 id="sgc">S3 was mapped by someone else</h3><p class="sm" style="margin: 0">pat.m mapped S3 to <strong>FS7300-B</strong> while you were choosing FS7300-A.</p><div class="row" style="justify-content: flex-end"><button class="btn" type="button">Discard mine</button><button class="btn pr" type="button">Review their change</button></div></div>
+</div>
+<div class="pnl" aria-busy="true" aria-label="Loading groups"><span class="tag">Loading</span>
+<div style="display: flex; flex-direction: column; gap: 8px"><span class="sk" style="width: 50%; height: 18px"></span><span class="sk"></span><span class="sk" style="width: 90%"></span><span class="sk" style="width: 75%"></span></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load storage groups.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-58b2e01f7a3c-01</code></span></div></div>
+</div>
+<div class="pnl"><span class="tag">Success</span>
+<div class="toast" role="status"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg><span style="flex: 1">S11 mapped to FS5200-C (block)</span></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-dq">
+<h2 id="h-dq">11 · Data quality</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">Report with zero rows</span>
+<div class="ctr"><span class="bd ok"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="m5 8.2 2 2 4-4.4"/></svg>0</span><h3>No AD objects are missing from hypervisor inventory</h3></div>
+</div>
+<div class="pnl"><span class="tag">Report unavailable</span>
+<div class="ctr"><h3>Connect an Active Directory source to enable this report</h3><a class="btn pr" href="#sources">Register source</a></div>
+</div>
+<div class="pnl"><span class="tag">Loading / error</span>
+<div aria-busy="true" style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 80%"></span></div>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div class="row"><span>Couldn't run this report.</span><button class="btn xs" type="button">Retry</button><code class="mono sm">00-9a07f3c1b2e8-01</code></div></div>
+</div>
+</div>
+</section>
+
+<section class="sec" aria-labelledby="h-ch">
+<h2 id="h-ch">15 · Change history</h2>
+<div class="g3">
+<div class="pnl"><span class="tag">No changes in range</span>
+<div class="ctr"><h3>No changes between 2026-10-15 00:00 and 2026-10-16 00:00 UTC</h3><span class="mut">Try a longer time range or remove the source filter.</span><button class="btn" type="button">Last 30 days</button></div>
+</div>
+<div class="pnl"><span class="tag">Very large result</span>
+<div class="mb i"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4.5M8 4.6v.2"/></svg><div><strong>184,302 changes match.</strong> Showing the newest 100. Narrow by CI type, source or a shorter time range to find older changes faster.</div></div>
+<div class="row" style="justify-content: space-between"><span class="sm mut">Showing 1–100 of 184,302</span><button class="btn xs" type="button">Load more</button></div>
+</div>
+<div class="pnl"><span class="tag">Export in progress</span>
+<div class="toast" role="status"><span class="spin" aria-hidden="true"></span><span style="flex: 1">Exporting 2,413 changes…</span></div>
+<span class="sm mut">Then "Export ready" toast with Download.</span>
+</div>
+<div class="pnl" aria-busy="true" aria-label="Loading changes"><span class="tag">Loading</span>
+<div style="display: flex; flex-direction: column; gap: 8px"><span class="sk"></span><span class="sk" style="width: 85%"></span><span class="sk"></span><span class="sk" style="width: 70%"></span></div>
+</div>
+<div class="pnl"><span class="tag">Error</span>
+<div class="mb e" role="alert"><svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5v4M8 11v.5"/></svg><div style="display: flex; flex-direction: column; gap: 6px"><span>Couldn't load changes for this range.</span><span class="row"><button class="btn xs" type="button">Retry</button><span class="sm mut">Reference ID</span><code class="mono sm">00-1e4d6b08c9f2-01</code></span></div></div>
+</div>
+</div>
+</section>
+
+<footer class="sm mut" style="display: flex; justify-content: space-between; border-top: 1px solid var(--bd); padding-top: 12px"><span>Goldmark 0.1.0-draft · design review mockup</span><span>Sample data (fictional)</span></footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":2300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: 'gm ' + (this.props.dark ? 'dk' : 'lt') };
+  }
+}
+</script>
+</body>
+</html>
