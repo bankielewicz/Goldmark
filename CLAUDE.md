@@ -15,6 +15,7 @@ Working rules from HANDOFF that change how you act:
 - **Gated flow.** Never start the next slice or phase until the owner replies "APPROVED". One PR per slice, branched from the latest `main` as `slice/<nn>-<short-name>`. Never auto-merge.
 - **At most two review-fix rounds per PR** (Codex, CodeQL, self-review). Later findings go to the owner as fix-now/defer recommendations, then become issues.
 - **Design handoff before any UI code.** For a slice with screens, output one "DESIGN HANDOFF — paste into Claude Design" block covering all of the slice's screens and wait. A design-system handoff comes first, before slice 3's screens.
+- **Every slice, in addition to its own criteria** (rule 7): new mutations write audit records and are tested for it; new UI functions are also reachable through `/api/v1`; new endpoints declare an access policy and join the authorization enumeration test.
 - **Ask before** adding a dependency the PRD didn't anticipate or changing scope. Update `docs/HANDOFF.md` in every slice PR.
 
 ## Commands
@@ -27,10 +28,22 @@ Back end (solution `Goldmark.slnx`; tests use xUnit v3 on Microsoft Testing Plat
 dotnet restore Goldmark.slnx --locked-mode
 dotnet format Goldmark.slnx --verify-no-changes --no-restore   # lint/format, as CI runs it
 dotnet build Goldmark.slnx -c Release --no-restore
-dotnet test --solution Goldmark.slnx -c Release --no-build
-# One test class or method (xUnit v3 filters):
+dotnet test --project tests/Goldmark.Api.Tests -c Release --no-build              # in-process, no Docker, seconds
+dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release --no-build   # real SQL Server 2025 via Docker, about 2 min
+# One test class or method (xUnit v3 filters; same options for either project):
 dotnet test --project tests/Goldmark.Api.Tests -c Release --filter-class 'Goldmark.Api.Tests.HealthEndpointTests'
 dotnet test --project tests/Goldmark.Api.Tests -c Release --filter-method '*Readiness*'
+```
+
+`dotnet test --solution Goldmark.slnx` runs both projects, so it needs Docker; CI runs them as separate jobs. The first integration run pulls the SQL Server image (about 1.5 GB).
+
+Migrations (`db/`, CI job `migrations`):
+
+```sh
+db/check-migrations.test.sh             # the checker's own tampering cases
+db/check-migrations.sh origin/main      # manifest, hashes, numbering; base revision's scripts unchanged
+# Adding one: create db/migrations/NNNN_lower_snake.sql, then
+sha256sum db/migrations/NNNN_lower_snake.sql >> db/migrations.sha256
 ```
 
 Front end (run in `web/`):
@@ -51,14 +64,15 @@ Run the stack: `cp deploy/.env.example deploy/.env`, fill in the REQUIRED values
 
 One ASP.NET Core project for now (`src/Goldmark.Api`, DEC-005). The PRD's other projects (`Goldmark.Core`, `.Data`, `.Jobs`, `.Contracts`, `collectors/`, `spec/`) are added by the slices that need them; check HANDOFF before creating one.
 
-- **One image, several commands.** `Program.cs` dispatches `healthcheck` (the image `HEALTHCHECK`) and `bootstrap-db` (run by the one-shot `db-init` container) before any web host starts. Slice 2 adds a `migrate` command run the same way. Exit codes carry meaning: 0 ok, 1 SQL/connection error, 2 invalid configuration, 3 refused; Docker reserves 2 for healthchecks, so `healthcheck` returns 1 for every failure.
+- **One image, several commands.** `Program.cs` hands any positional first argument to `Commands/ContainerCommands.cs` before a web host starts, so a mistyped command exits 2 instead of starting a server. `healthcheck` (the image `HEALTHCHECK`) runs alone; database commands chain in-process and stop at the first failure: `db-init` runs `bootstrap-db migrate` (the image has no shell). Exit codes for database commands: 0 ok, 1 SQL/connection error, 2 invalid configuration, 3 refused. Docker reserves 2 for healthchecks, so `healthcheck` returns 1 for every failure.
 - **Fail fast on configuration.** `ConfigurationPreflight` and `ValidateOnStart` options make startup exit 2 listing setting names only. The .NET binder's own error message contains the value, so never print it. `WebApplicationFactory` settings aren't visible to `builder.Configuration` before `Build()`, so preflight is unit-tested directly and smoke-tested in the container.
 - **Composition.** `Hosting/GoldmarkApplication.cs` (`AddGoldmark` / `UseGoldmark`) wires everything. HTTPS only: Kestrel listens on one TLS port with a certificate from `TlsCertificateProvider` (operator-supplied, or generated on first start and persisted in a volume); there is no HTTP listener. HSTS is automatic (on with an operator certificate, off with self-signed; DEC-007).
 - **Security headers are outermost.** `SecurityHeadersMiddleware` runs first so error responses get them too. The CSP is strict (`style-src 'self'`, `require-trusted-types-for 'script'`, `trusted-types 'none'`; DEC-017). Any UI library must work under it; Fluent UI v9 (runtime style injection) is unverified and must be checked as the first step of slice 3, and a needed nonce or `unsafe-inline` goes back to the owner.
 - **SPA hosting.** The React app (`web/`, browser-only, no SSR/RSC) is built to `web/dist` and served from `wwwroot` by `SpaHosting`. Catch-alls return 404 for unknown `/health/*` and `/api/*` paths so they never get the SPA shell with 200.
 - **Every endpoint declares its access policy.** Endpoints carry `EndpointAccess(...)` metadata. `EndpointInventoryTests` fails on any unclassified endpoint, and `docs/security/endpoint-access.md` must list it: change all three together. Slice 3 turns this into the deny-by-default M6 enumeration test.
-- **Database.** SQL Server 2025 Express in Compose, TDS 8 strict with a pinned certificate. The app connects as a least-privilege runtime login; `bootstrap-db` creates it and manages only principals tagged with the `goldmark:managed` extended property, refusing others unless `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`. DDL can't take parameters: identifiers and passwords go through `QUOTENAME` in `sp_executesql`. Readiness (`/health/ready`) runs a real query and returns status text only.
-- **Tests.** `tests/Goldmark.Api.Tests/Infrastructure/GoldmarkFactory.cs` hosts the app in-process in the Production environment with a fake SPA build and a database port where nothing listens, so readiness must fail. `TestSecrets` values must never appear in logs or responses; `LoggingTests` checks this.
+- **Database and logins.** SQL Server 2025 Express in Compose, TDS 8 strict with a pinned certificate. Three principals with different passwords: `sa` (bootstrap only), `goldmark_migrator` (`db_owner` of the Goldmark database only, used by `migrate`, never reaches the app container) and the runtime login (member of the `goldmark_runtime` role: DML only, no DDL, explicit `DENY UPDATE, DELETE` on the audit log). `bootstrap-db` creates both logins and manages only principals whose `goldmark:managed` extended property names their purpose (`runtime-login`, `migration-login`); it refuses others unless `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`. DDL can't take parameters: identifiers and passwords go through `QUOTENAME` in `sp_executesql`.
+- **Migrations are forward-only and immutable.** T-SQL scripts in `db/migrations/` are embedded in the API and applied by DbUp, one transaction per script, journal `dbo.SchemaVersions`. DbUp records names, not content, so a merged script is never edited: add a new one and its hash (DEC-028). The schema version is the newest script's number; `/health/ready` returns 503 unless the database is at exactly the version the build expects (DEC-023), and returns status text only. When testing permissions, check effective rights, not grant rows: a column-level `GRANT` to a role overrides that role's table-level `DENY` on SQL Server 2025, hence `migrate`'s per-column audit-log check.
+- **Tests.** `tests/Goldmark.Api.Tests/Infrastructure/GoldmarkFactory.cs` hosts the app in-process in the Production environment with a fake SPA build and a database port where nothing listens, so readiness must fail. `TestSecrets` values must never appear in logs or responses; `LoggingTests` checks this. `tests/Goldmark.Api.IntegrationTests` starts one SQL Server container per test collection (`SqlServerFixture`): the image digest is read from `deploy/docker-compose.yml` and the real `deploy/sqlserver/sql-entrypoint.sh` runs, so tests pin the generated certificate like the app does; each test uses its own database and login names. The Testcontainers resource reaper is disabled (DEC-027). Analyzer CA1711 rejects type names ending in `Collection`, so xUnit collection definitions end in `Tests`.
 
 ## Build and supply-chain rules
 
@@ -69,4 +83,4 @@ One ASP.NET Core project for now (`src/Goldmark.Api`, DEC-005). The PRD's other 
 
 ## Design mockups
 
-`docs/design/screens/` holds the 21 Claude Design mockups (review input, not approved designs). They are published to two canvases listed in that folder's README; when a screen changes, edit the file there and publish it to both canvases. `docs/specs/claude-design-prompts.md` holds the prompts they were built from.
+`docs/design/screens/` holds the 21 Claude Design mockups plus their state boards (`00-SharedStates`, `ST1`–`ST6`): review input, not approved designs. The files need the Claude Design runtime, so opened directly in a browser they render unstyled with every state showing; review them on the canvases. They wait for slice 3: with `docs/specs/claude-design-prompts.md` they are the starting point for the design-system handoff (rule 4) and for each slice's design handoff (rule 3). They are published to two canvases listed in that folder's README; when a screen changes, edit the file there and publish it to both canvases. `docs/specs/claude-design-prompts.md` holds the prompts they were built from.
