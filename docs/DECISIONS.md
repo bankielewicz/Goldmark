@@ -4,11 +4,12 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-19):** slice 1 is merged (PR #1); slice 2 is in review. The owner approved
-the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b
-and 5b, in order, one PR each. The PRD text stays a draft (DEC-001); the build
+**Approval state (2026-10-19):** slices 1 and 2 are merged (PRs #1, #14); slice 2b is in review. The owner approved
+the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b, 2c
+and 5b, in order, one PR each. Docker Compose is the first distribution, not the
+target deployment (DEC-030). The PRD text stays a draft (DEC-001); the build
 plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
-(stack) is confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
+(stack) is confirmed, with SQL Server 2025 as the minimum version (OQ-2 resolved, DEC-030). A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 | ID | Decision | Area |
 |---|---|---|
@@ -41,6 +42,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-027 | Database integration tests against real SQL Server 2025 | Testing |
 | DEC-028 | Applied migrations are immutable (hash manifest, CI) | Database |
 | DEC-029 | Baseline schema (0001) choices | Database |
+| DEC-030 | Deployment target: Docker first, Windows service and existing SQL Servers next | Process |
+| DEC-031 | Principal audit of Goldmark's logins and the shared instance | Database |
+| DEC-032 | `bootstrap-db`: administrator login, Mode Create/Existing, user names | Database |
+| DEC-033 | `docker-compose.external-sql.yml` | Deployment |
 
 ---
 
@@ -323,7 +328,9 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   The first fixed-role check passed a login holding `securityadmin` and
   `db_securityadmin` (review finding). Slice 2 adds membership of
   `goldmark_runtime` to the baseline (DEC-025).
-- **Removed and deferred to slice 2b** (DEC-021; issues labelled `slice-2`): the
+- **Done in slice 2b (DEC-031):** the audit below now runs on every
+  `bootstrap-db` run, before any change, from the administrator's side and as
+  each login. *Slice-1 text, kept for the record:* **removed and deferred to slice 2b** (DEC-021; issues labelled `slice-2`): the
   administrator-side audit of pre-existing principals. That covered explicit
   grants below database scope, ownership of securables, linked-server, remote
   and credential mappings including wildcard mappings, `guest` access in
@@ -415,8 +422,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | Item | Slice |
 |---|---|
 | Migration login, DML grants, readiness schema check; `bootstrap-db` port and reserved-name validation (#7) | 2 (done: DEC-022…DEC-029) |
-| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b |
-| `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b |
+| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b (done: DEC-031) |
+| `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b (done: DEC-032, DEC-033) |
+| Generated administrator, migration and runtime credentials; `sa` disabled in the bundled deployment | 2c (DEC-032) |
+| Windows service distribution, installer wizard, Windows authentication, availability groups | owner to place (DEC-030) |
 | Generated certificate renewal without a restart (#5, DEC-006) | 24 |
 | Owner-only ACL for the generated key on Windows dev hosts (#6, DEC-006) | 24 |
 | Types & attributes admin screen (UI #14; no slice in PRD §11) | 5b |
@@ -603,7 +612,7 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   `TRUNCATE`/`MERGE … DELETE`/`IDENTITY_INSERT` on the audit log, writes to
   the journal, `GRANT`, role and user changes. Each denied statement is
   followed by a check that nothing changed.
-- **Out of scope (2b, #4):** auditing grants on other individual objects and
+- **Done in slice 2b (DEC-031, #4):** auditing grants on other individual objects and
   ownership chains. Audit-log retention (NFR-LOG-3) will need a delete path
   that is not the runtime login (slice 4).
 
@@ -688,6 +697,208 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   `ChangedBy` defaults from `SESSION_CONTEXT` (7), content-hash semantics
   (10), `Source` foreign key (13), promoted attributes and further indexes (5).
 
+## DEC-030 Deployment target: Docker first, Windows service and existing SQL Servers next
+
+- **Decision (owner, 2026-10-19).** Docker Compose on Linux is the **first
+  distribution and the development harness, not the destination**. The target
+  deployments are a Windows service (running under a domain account or gMSA)
+  with a dedicated, shared or availability-group SQL Server, authenticated with
+  Windows authentication (preferred) or a SQL login, set up by an installation
+  wizard. This came out of the PRD's architecture discussion and was not carried
+  into the PRD (the PRD's US-01 and NFR-REL-2 describe containers only).
+- **SQL Server 2025 is the minimum version** (owner; resolves OQ-2 and risk R2).
+  The native `json` type stays.
+- **`bootstrap-db` is the provisioning engine for every deployment** (option A).
+  It is a plain CLI command with no Docker dependency; Compose only supplies its
+  settings. An installer calls the same commands `db-init` runs. A DBA-run script
+  followed by verification (option B) is a mode of it: Mode `Existing`
+  (DEC-032). Its jobs are *create* (deployment-specific), *adopt/mark* and
+  *audit* (the same everywhere).
+- **What a port changes** (recorded so later slices keep it cheap): the password
+  path (`PWDCOMPARE`, rotation, the SQL-login-only refusal, `SqlConnectionFactory`
+  always sending a password); availability groups (logins per replica, a
+  DBA-created database, `MultiSubnetFailover`); secret storage (`.env` → DPAPI or a
+  gMSA); log sink (stdout → file or Event Log); Docker `HEALTHCHECK` → service
+  recovery. The schema, migrations, T-SQL checks and app code carry over.
+- **Standing rule** (HANDOFF rule 8): no new Linux- or Docker-only assumptions in
+  application code. The principal audit (DEC-031) reads effective rights from the
+  login's own token, so it already works for Windows logins and group-granted rights.
+- **Open:** the slice for the Windows service distribution, the wizard, Windows
+  authentication and availability groups is for the owner to place in the plan.
+
+## DEC-031 Principal audit of Goldmark's logins and the shared instance
+
+- **Decision (owner, 2026-10-19).** Closes #2, #3, #4. `bootstrap-db` audits both
+  logins and the instance **on every run, in both deployments**, before it
+  changes anything, and again afterwards for principals the run created. Code:
+  `src/Goldmark.Api/Commands/PrincipalAudit.cs`.
+- **Two layers** (owner, so it ports to Windows authentication):
+  - *administrator side:* catalogs only an administrator can see: login state
+    (disabled, `CHECK_POLICY` off, `CHECK_EXPIRATION` on, expired, locked,
+    must-change, `DENY CONNECT SQL`), credential mappings, direct server roles and
+    grants, ownership of server- and database-level securables, linked-server and
+    remote-login mappings (login-specific and for all logins), users in other
+    databases, `guest` access in other databases, server-level grants to `public`,
+    grants to `public`/`guest` in master, msdb, tempdb and model compared with a
+    **measured baseline**, grants to `public`/`guest` in the Goldmark database,
+    its `TRUSTWORTHY`/`DB_CHAINING` options and the server's cross-database
+    ownership chaining;
+  - *as each login:* effective rights from its own token: databases it can enter
+    (as `guest` or as a user, directly or through a group); rights on other logins,
+    server roles and endpoints; for the runtime login, rights on any database
+    principal, schema, object or other securable besides DML on schema `cmdb` and
+    `SELECT` on the journal. `migrate` runs this layer too (without the pass over
+    other databases).
+- **Finding IDs** (owner): `kind:part[:part…]`. Parts keep letters, digits and
+  `_ . - $ # @ \ / [ ]`; a space becomes `+`; anything else is percent-encoded, so
+  an ID never contains a comma, colon or white space. Every finding names its fix.
+- **Accepting findings** (owner: by ID). `Goldmark:Bootstrap:AcceptedFindings`
+  (`GOLDMARK_DB_ACCEPTED_FINDINGS`), IDs separated by commas or white space.
+  - Only findings about other databases or the instance are acceptable:
+    `guest-connect`, `linked-login-all-logins`, `remote-login-all-logins`,
+    `system-grant`, `cross-db-chaining`, `database-unreadable`.
+  - Findings about Goldmark's own logins or database must be fixed. That includes
+    server-level grants to `public`: every login inherits them, so they are rights
+    of the runtime login like any other (DEC-015).
+  - A malformed ID, or the ID of a must-fix kind, is exit 2.
+  - An accepted finding is still reported on every run; an accepted ID that does
+    not occur is a warning.
+  - There is no "accept all" setting.
+- **Measured baseline.** `src/Goldmark.Api/Commands/Audit/sql-server-2025-public-grants.txt`
+  (embedded): 3,467 grants to `public`/`guest` in the four system databases on the
+  pinned image, stored as the set every database has (model's) plus each system
+  database's extras. The integration test fails, naming a measured file, when a
+  SQL Server image update changes it. A fresh Goldmark database has exactly the
+  "every database" set (tested). Other CUs or editions may differ slightly; those
+  differences are acceptable `system-grant` findings.
+- **Review round 1 (Codex on #17), fixed:**
+  - grants are compared by grantee, permission, **securable class** and target, so a
+    schema named like a baseline view is not mistaken for it;
+  - securable targets are `QUOTENAME`'d in IDs, and every name in a suggested fix
+    is quoted (`[...]`, `N'...'`), so pasting a fix cannot run injected SQL;
+  - accepted IDs match **ordinally** (case-sensitive servers);
+  - when adopting, a same-name user that would be remapped is audited **before**
+    any change;
+  - new must-fix kinds: `goldmark-database-owner`: the Goldmark database is owned
+    by a login without CONTROL SERVER, for example a lower-privileged login that
+    created it first and stayed its dbo (security review). `goldmark-database-principal`:
+    another user or application role in it holds a role, a permission beyond
+    `CONNECT`, or owns a schema or object.
+- **Review round 2 (Codex on #17), fixed:**
+  - the owner check follows server-role membership at any depth (CONTROL SERVER
+    through a custom role is accepted);
+  - `goldmark-database-principal` also covers ownership of roles and every other
+    securable, and `CONNECT WITH GRANT OPTION`;
+  - new must-fix `runtime-role-grant`: explicit grants to `goldmark_runtime` beyond
+    migration 0002's, including on system objects, which the as-the-login layer
+    skips. Keep it in step with new migrations, like `VerifyRuntimeSql`;
+  - databases that are not online are reported as `database-unreadable`;
+  - grant targets resolve every securable class to its quoted name;
+  - an unknown finding kind in `AcceptedFindings` is not echoed.
+- **No other principal in the Goldmark database** (owner, 2026-10-19, option A):
+  `goldmark-database-principal` stays must-fix. A reporting account with a role in
+  the Goldmark database is refused; integrations use the API (PRD D2, §9.5).
+- **Rights come only through the role.** A direct grant to a Goldmark user other
+  than `CONNECT` is a finding even when a role's `DENY` currently overrides it
+  (for example `GRANT UPDATE ON cmdb.AuditLog` to the runtime user). `migrate`'s
+  effective-rights check (DEC-025) still accepts that case; `bootstrap-db` does not.
+- **Performance (measured).** On Express, new databases get `AUTO_CLOSE ON`, and
+  opening a closed database is slow. `HAS_DBACCESS` and any query into a database
+  open it. The audit therefore makes **one** administrator pass over other
+  databases per run (guest access and users of both logins together), before any
+  change. `migrate` skips the pass over other databases (`bootstrap-db` ran it).
+  The database `bootstrap-db` creates gets `AUTO_CLOSE OFF` (DEC-032). With these,
+  the integration suite went from 6 min 20 s (first version) to about 5 min for
+  121 tests in two containers.
+- **Measured on SQL Server 2025:**
+  - remote servers can no longer be created (`sp_addserver`, error 15663), but
+    `sp_addremotelogin` on a linked server with RPC still creates a remote login
+    for all logins (tested);
+  - a fresh login sees schemas regardless of rights, but sees other database
+    principals, types, certificates and objects only with a permission on them;
+  - `fn_my_permissions` on itself returns `CONTROL`, `ALTER`, `IMPERSONATE` and
+    `VIEW DEFINITION` (expected, excluded);
+  - `guest`'s `CONNECT` in model is copied into every new database (tested: the
+    Goldmark database is then refused, and that cannot be accepted).
+- **Not covered:** Windows logins and groups (SQL logins only until the Windows
+  deployment, DEC-030); availability-group replicas other than the one connected
+  to; databases that cannot be read (reported as `database-unreadable`).
+
+## DEC-032 `bootstrap-db`: administrator login, Mode Create/Existing, user names
+
+- **Decision (owner, 2026-10-19).**
+- **Administrator login.**
+  - `Goldmark:Bootstrap:AdminUser` has **no default**.
+  - **`sa` is refused** (exit 2) unless `Goldmark:Bootstrap:AllowSaAdmin` is set.
+    Only the bundled Compose file sets it, until slice 2c. Reason: `sa` is a
+    well-known name with every right, which attackers try first; the CIS
+    benchmark recommends disabling it.
+  - The administrator needs **CONTROL SERVER** (checked first, exit 3), because
+    the audit reads every catalog and `PWDCOMPARE` reads password hashes.
+  - It stays in `deploy/.env` and is used on every `db-init` run (owner: option
+    A for Docker). Running without it after installation belongs to the Windows
+    service deployment (DEC-030), where the wizard holds it once.
+- **Mode `Existing`** (`Goldmark:Bootstrap:Mode`, owner's open question on logins
+  that operators create in advance). A DBA creates the database, both logins (with
+  the configured passwords), their users and the migration user's `db_owner`
+  membership. `bootstrap-db` then:
+  - creates and changes nothing except the `goldmark:managed` marker;
+  - refuses (exit 3, nothing changed) if anything is missing or a password
+    differs, and never changes a password;
+  - guards provisioning server-side: it throws instead of creating or changing a
+    login, user or membership.
+
+  Mode `Create` (default) keeps the slice-2 behaviour. The DBA script is in
+  `docs/ops/external-sql-server.md` and is tested.
+- **#15 (owner: refuse).** A database user mapped to a Goldmark login must have
+  the login's name (exact, case-sensitive). Otherwise `bootstrap-db` refuses
+  before any change and prints `ALTER USER [x] WITH NAME = [login]`, for adopted
+  and for managed users (an out-of-band rename). A login that owns the Goldmark
+  database (mapped as `dbo`) is refused with the `ALTER AUTHORIZATION` fix.
+  `migrate` keeps finding the user by name.
+- **SQL Server 2025 or later is checked first** (`ProductMajorVersion` ≥ 17, exit 3,
+  nothing changed), so an older server never gets a database and logins that the
+  first migration then cannot use (Codex on #17).
+- **`AUTO_CLOSE OFF`** on the database `bootstrap-db` creates. On Express, new
+  databases close whenever their last connection ends. Without this, every
+  unpooled readiness probe (DEC-008) and every audit pass would reopen the
+  database. Mode `Existing` leaves the DBA's database as it is (the DBA script sets it).
+- **Slice 2c (owner, 2026-10-19), next after 2b:** generated administrator,
+  migration and runtime credentials (random names with a recognisable prefix,
+  random passwords), stored in volumes; the app reads its password from a file; a
+  dedicated login for the SQL container's healthcheck; `sa` disabled.
+  `bootstrap-db` writes to a configured path, so the mechanism ports
+  (DPAPI/installer later). Risks to settle there:
+  - a tested recovery if the generated administrator is lost (on Linux there is no
+    local-administrator bypass);
+  - the image needs `MSSQL_SA_PASSWORD` on every start even with `sa` disabled.
+
+## DEC-033 `docker-compose.external-sql.yml`
+
+- **Decision (owner, 2026-10-19; US-01 "use an existing SQL Server").**
+  - **A standalone file with `db-init` and `app` only**, not an override:
+    removing services through an override is awkward. It uses Compose's default
+    network, because the bundled file's `internal` backend network could not
+    reach an outside server.
+  - **Same `deploy/.env`.** `.env.example` has an "Existing SQL Server" section.
+    Required: host, administrator user and password, and the two Goldmark
+    passwords.
+- **TLS.** `GOLDMARK_DB_ENCRYPT` is `Strict` (default) or `Mandatory`.
+  `GOLDMARK_SQL_SERVER_CERT_FILE` pins the server certificate:
+  - it is mounted read-only, and `ServerCertificatePath` is set only when the
+    variable is set (`${VAR:+…}`; otherwise `/dev/null` is mounted and ignored);
+  - with no pin, the certificate must chain to a CA the container trusts;
+  - `GOLDMARK_DB_HOST_NAME_IN_CERTIFICATE` covers a differing name;
+  - `TrustServerCertificate` stays off.
+- **Smoke test.** `tests/smoke/external-sql.network.yml` (test-only override)
+  attaches the external file's services to the bundled stack's network. The
+  bundled SQL Server then plays an existing server:
+  - a dedicated `smoke_dba` administrator (`sa` refused);
+  - a database and logins created in advance (Mode `Existing`);
+  - the app ready on its own port, with no administrator or migration credential
+    in its environment;
+  - a `guest-connect` finding refused, then accepted by its ID.
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -747,3 +958,26 @@ Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.Integrati
 | 12 | Migration immutability: hash manifest, CI fails on a changed script (owner, DEC-028) | **Met (local)**; CI on the PR | `db/check-migrations.test.sh` (12 cases), CI job `migrations` |
 | 13 | #7: `Database:Port` validated; `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` rejected | **Met** | Unit tests (also `public`, `goldmark_runtime`, `sa`, for both logins) |
 | 14 | CI green | **Met** | PR #14: 12 checks green on the first push |
+
+## Slice 2b acceptance mapping
+
+Same status vocabulary as slice 1. Local runs (agent's sandbox), after review round 2: 208
+in-process tests, 132 integration tests (two SQL Server 2025 containers), 72 smoke checks (63
+before), all passing.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | US-01: option to use an existing SQL Server | **Met (local)** | `deploy/docker-compose.external-sql.yml`; smoke: external project against the bundled SQL Server as a stand-in (Mode Existing, `smoke_dba`), app ready on its own port |
+| 2 | Logins that operators create in advance (owner's open question) | **Met** | Mode `Existing` (DEC-032); integration `ExistingSqlServerTests` (happy path + 5 refusals with nothing changed); smoke |
+| 3 | Administrator login: no default, `sa` refused outside the bundled stack, CONTROL SERVER required (owner) | **Met** | Unit tests; integration (dedicated sysadmin works, `sa` exit 2, weak administrator exit 3 with nothing created); smoke (`sa` exit 2) |
+| 4 | #2: every user database where `guest` has `CONNECT` is refused (exit 3, nothing changed) unless accepted; message names the database and the revoke; refused, then passes after `REVOKE` | **Met** | `InstanceAuditTests` (other database; model, which is then copied into the Goldmark database; the Goldmark database itself, not acceptable; the login's own view); smoke end to end with the ID |
+| 5 | #3: linked-server mappings for the login and wildcard ones with a fixed credential; wildcard and login-specific remote logins; default self mapping not reported; exit 3 | **Met** | `InstanceAuditTests` (wildcard linked login, remote login, default mapping passes); `PrincipalAuditTests` (login-specific mapping) |
+| 6 | #4: a read-only check per gap, before any change when adopting and again after provisioning; exit 3 with every finding named | **Met** | `PrincipalAuditTests`: 12 adopted-login cases (policy, expiration, must-change, disabled, `DENY CONNECT SQL`, credential, server grants and roles, mapped user, owned database, linked login) and 14 out-of-band changes to a managed login (roles, direct grants, `DENY CONNECT`, ownership, role grants on schemas, objects, types, certificates, users, `public` grants, `TRUSTWORTHY`) |
+| 7 | #4: system-database `guest`/`public` grants compared with a measured SQL Server 2025 baseline, not skipped | **Met** | Embedded baseline (3,467 grants); `The_system_database_baseline_matches_the_pinned_SQL_Server_image`; `InstanceAuditTests` theory (msdb, master `xp_cmdshell`, tempdb) |
+| 8 | #4: DEC-015 updated | **Met** | DEC-015, DEC-031 |
+| 9 | #15: a login mapped to a differently named user is refused with a clear message (owner: refuse) | **Met** | `PrincipalAuditTests` (adopted `it_other_name`: refused, then adopted after the rename; managed user renamed out of band) |
+| 10 | The audit runs whenever a principal is adopted or revalidated, for both logins, in both deployments (DEC-021) | **Met** | Every `bootstrap-db` run; both Compose files; integration covers both logins; smoke covers both files |
+| 11 | Findings accepted by ID (owner) | **Met** | `FindingPolicyTests`, validation tests (exit 2 for malformed or must-fix IDs), integration accept-and-warn cycle, smoke |
+| 12 | Codex round 1 (#17): securable class in baseline keys, older servers refused, adopted same-name user audited first, quoted fixes, exact ID matching, database owner and other principals | **Met** | Unit tests (quoting, exact matching); integration: schema named like a baseline view, adopted `db_owner` user refused with nothing changed, database created first by a `dbcreator` login refused, extra principal with a role refused. The version check has no test: it would need a pre-2025 image |
+| 13 | Codex round 2 (#17): owner through server roles, role ownership and `CONNECT WITH GRANT OPTION`, grants to `goldmark_runtime` on system objects, databases not online, names for every securable class, unknown kinds not echoed | **Met** | Integration: nested server role with CONTROL SERVER accepted; role owned by another user refused; `CONNECT WITH GRANT OPTION` refused; `SELECT ON sys.objects` to the role refused; offline database refused, accepted, fixed; certificate grant named `[ItCert2]`; the login's own view still finds role-granted rights. Unit: unknown kind not echoed |
+| 14 | CI green | **Met** on the first push and on round 1 (PR #17, 12 checks); round 2 pending | PR checks |

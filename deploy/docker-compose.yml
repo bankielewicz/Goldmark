@@ -1,4 +1,4 @@
-# Goldmark + bundled SQL Server 2025 Express (US-01, slices 1-2).
+# Goldmark + bundled SQL Server 2025 Express (US-01, slices 1-2b).
 #
 #   cp deploy/.env.example deploy/.env    # then fill in every required value
 #   docker compose -f deploy/docker-compose.yml up -d --build --wait
@@ -54,10 +54,11 @@ services:
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
 
-  # One-shot, idempotent. bootstrap-db (as sa) creates the database, the least-privilege
-  # runtime login and the migration login (db_owner of this database only); migrate (as the
-  # migration login) applies the schema migrations and grants the runtime login its role.
-  # Only this container receives the sa and migration passwords; the app never does.
+  # One-shot, idempotent. bootstrap-db (as sa) audits the instance and both logins, then creates
+  # the database, the least-privilege runtime login and the migration login (db_owner of this
+  # database only); migrate (as the migration login) applies the schema migrations and grants
+  # the runtime login its role. Only this container receives the sa and migration passwords;
+  # the app never does. An existing SQL Server: deploy/docker-compose.external-sql.yml.
   db-init:
     image: goldmark:${GOLDMARK_IMAGE_TAG:-local}
     pull_policy: never
@@ -71,7 +72,11 @@ services:
       Goldmark__Migration__Password: ${GOLDMARK_DB_MIGRATION_PASSWORD:?Set GOLDMARK_DB_MIGRATION_PASSWORD in deploy/.env}
       Goldmark__Bootstrap__AdminUser: sa
       Goldmark__Bootstrap__AdminPassword: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in deploy/.env}
+      # sa is refused everywhere else (DEC-032). The bundled SQL Server has no other administrator
+      # yet; slice 2c replaces sa with a generated administrator login.
+      Goldmark__Bootstrap__AllowSaAdmin: "true"
       Goldmark__Bootstrap__AdoptExistingLogin: ${GOLDMARK_DB_ADOPT_EXISTING_LOGIN:-false}
+      Goldmark__Bootstrap__AcceptedFindings: ${GOLDMARK_DB_ACCEPTED_FINDINGS:-}
     volumes:
       - sql-tls-public:/run/goldmark/sql-tls:ro
     networks: [backend]
