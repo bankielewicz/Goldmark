@@ -27,6 +27,16 @@ per-installation certificate:
   automatically when it is within 30 days of expiry, when `GOLDMARK_TLS_HOSTNAMES`
   changes, or when the files are unreadable. Each regeneration logs a warning,
   and clients that trusted the old certificate must trust the new one.
+- **Restart within the renewal window.** The expiry check runs when the app
+  starts. A container that keeps running past the certificate's expiry keeps
+  serving the expired certificate, and the container health check (which pins
+  the certificate on disk) does not notice. Restart the app at least once in
+  the last 30 days of the certificate's life (the expiry date is logged at
+  start-up with the fingerprint); any routine update or host reboot does this.
+- **Windows dev hosts:** the 0700/0600 modes apply on Linux only. On Windows the
+  generated directory (`.goldmark/tls` under the project when run with
+  `dotnet run`) inherits the parent folder's permissions, so keep the checkout
+  in a folder other local users cannot read, such as under your user profile.
 
 The SHA-256 fingerprint is logged at start-up (event 2003 or 2005), so you can
 compare it with what your browser shows:

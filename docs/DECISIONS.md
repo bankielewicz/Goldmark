@@ -96,7 +96,19 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   BuildKit versions (the mount point was `0755`).
 - An operator certificate/key pair is loaded during startup validation, so a
   malformed, encrypted or mismatched pair fails cleanly with the setting names
-  instead of an exception during Kestrel setup (review finding).
+  instead of an exception during Kestrel setup (review finding). The whole
+  bundle is imported as well, so a corrupt intermediate also fails validation
+  (review finding).
+- **Known limits, deferred** (review findings, documented in
+  `docs/ops/tls-certificates.md`):
+  - The 30-day renewal check runs at startup only. A process that runs
+    longer than the certificate's remaining life keeps serving the old one;
+    restarting within the 30-day window renews it. Hot reload comes with
+    later certificate-management work.
+  - On Windows (dev hosts only), the generated directory and key inherit the
+    parent directory's ACL; the `0700`/`0600` modes apply on Linux, which is
+    what the container runs. An owner-only ACL is deferred until a Windows dev
+    host is verified (CI is Linux-only).
 - Docs: `docs/ops/tls-certificates.md` (trust and replacement).
 
 ## DEC-007 HSTS: automatic (clarifies NFR-SEC-2)
@@ -115,6 +127,13 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   in-flight probe and a result is reused for 5 s. However many requests
   arrive, SQL Server sees at most one probe connection every 5 s (review
   finding).
+  - The shared probe runs on its own 10 s timeout, not on the initiating
+    request's token, so a client that disconnects cannot get a cancellation
+    cached as everyone's result (review finding).
+  - Cache age uses the monotonic clock, so a wall-clock correction cannot keep
+    a stale result alive (review finding).
+- Any other `/health/...` path is a `404` (GET/HEAD), never the SPA shell, so a
+  mistyped probe path cannot report `200` (review finding).
 - `GET /health/live`: no dependencies (SQL Server down does not affect it).
 - `GET /health/ready`: opens a fresh, **unpooled**, TDS 8 strict-encrypted
   connection as the least-privilege runtime login and runs `SELECT 1`. A 10 s
@@ -298,15 +317,19 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   grants below database scope, ownership of securables, linked-server, remote
   and credential mappings including wildcard mappings, `guest` access in
   other databases, `guest`/`public` grants in system databases, and
-  password-policy, expiry and deny state of adopted logins. It only matters
-  when adopting principals or sharing an instance; the bundled SQL Server is
-  fresh and Goldmark-created logins are refused if anything else touched them.
+  password-policy, expiry and deny state of adopted logins (issues #2, #3,
+  #4). It matters when adopting principals, sharing an instance, or when
+  someone changes a managed login out of band. The bundled SQL Server is
+  fresh. For a managed login the post-provisioning check still catches
+  role memberships and server/database-scope permissions, but **not** grants
+  below database scope or ownership (issue #4).
 - Validation: the runtime password must differ from the administrator
   password, be 12–128 characters, and the runtime login must not be the
   admin login or `sa`. The database name must not be a system database.
   The connect timeout must be 1–120 s, and the whole wait is cancelled at
   `WaitSeconds` plus one connect timeout. A pinned SQL certificate must
-  parse as PEM or DER at startup.
+  parse as PEM or DER at startup; `bootstrap-db` applies the same check before
+  connecting (review finding).
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.
@@ -316,6 +339,11 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - The app refuses to start (exit 2, setting names only) without host, user or
   password, with `sa` as the runtime user, or with encryption other than
   `Strict`/`Mandatory`.
+- A setting with a value of the wrong type (e.g. `Goldmark__Https__Port=abc`)
+  is also exit 2, naming the setting path. The value is never printed, because
+  the configuration binder's own message contains it and it may be a secret.
+  The web host and `bootstrap-db` share this check; `healthcheck` reports it
+  with exit 1, because Docker reserves exit 2 for health checks (review finding).
 
 ## DEC-016 Logging (NFR-LOG-1)
 
@@ -374,7 +402,9 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 | Item | Slice |
 |---|---|
 | Migration login, DML grants, readiness schema check | 2 |
-| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases, wildcard linked-server and remote mappings, ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (GitHub issues labelled `slice-2`) | 2 |
+| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2 |
+| Generated certificate renewal without a restart (DEC-006) | certificate-management work |
+| Owner-only ACL for the generated key on Windows dev hosts (DEC-006) | when a Windows dev host is verified |
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2 |
 | Authentication, deny-by-default fallback policy, M6 enumeration test | 3 |
 | OpenAPI document, `/api/v1/health` decision | 8 |
