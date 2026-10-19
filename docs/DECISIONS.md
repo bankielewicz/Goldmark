@@ -795,6 +795,9 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   - databases that are not online are reported as `database-unreadable`;
   - grant targets resolve every securable class to its quoted name;
   - an unknown finding kind in `AcceptedFindings` is not echoed.
+- **No other principal in the Goldmark database** (owner, 2026-10-19, option A):
+  `goldmark-database-principal` stays must-fix. A reporting account with a role in
+  the Goldmark database is refused; integrations use the API (PRD D2, §9.5).
 - **Rights come only through the role.** A direct grant to a Goldmark user other
   than `CONNECT` is a finding even when a role's `DENY` currently overrides it
   (for example `GRANT UPDATE ON cmdb.AuditLog` to the runtime user). `migrate`'s
