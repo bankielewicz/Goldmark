@@ -165,6 +165,20 @@ else
   fail "app exits 2 with setting names when database settings are missing" "exit ${fast_fail_code}"
 fi
 
+# A value of the wrong type names the setting, never the value (it may be a secret). Exit 2,
+# except healthcheck: Docker reserves 2 for HEALTHCHECK commands, so it exits 1.
+typed_value="smoke-NEVER-ECHO-${RANDOM}"
+for spec in ":2" "bootstrap-db:2" "healthcheck:1"; do
+  command="${spec%%:*}" expected="${spec##*:}"
+  typed_output="$(docker run --rm -e Goldmark__Https__Port="${typed_value}" goldmark:local ${command} 2>&1)"
+  typed_code=$?
+  if [[ ${typed_code} -eq ${expected} && "${typed_output}" == *"Goldmark:Https:Port has a value that is not valid"* && "${typed_output}" != *"${typed_value}"* ]]; then
+    pass "a wrongly typed setting is exit ${expected} naming the setting, not the value (${command:-app})"
+  else
+    fail "a wrongly typed setting is exit ${expected} naming the setting, not the value (${command:-app})" "exit ${typed_code}"
+  fi
+done
+
 "${compose[@]}" up -d --no-build
 app_healthy() { [[ "$(docker inspect -f '{{.State.Health.Status}}' "${project}-app-1" 2>/dev/null)" == healthy ]]; }
 # Stop waiting early if a one-shot dependency already failed.
@@ -218,6 +232,7 @@ fi
 # --- Health endpoints ------------------------------------------------------------
 check "/health/live returns 200 Healthy" bash -c "[[ \"\$(curl -s --max-time 10 --cacert '${work}/app-cert.pem' ${base}/health/live)\" == Healthy ]]"
 check "/health/ready returns 200 Healthy (real query as the runtime login)" is_status /health/ready 200
+check "a mistyped health path is 404, not the SPA shell" is_status /health/readiness 404
 
 # --- SPA and headers -------------------------------------------------------------
 curl_tls -D "${work}/root.headers" -o "${work}/root.html" "${base}/" >/dev/null
