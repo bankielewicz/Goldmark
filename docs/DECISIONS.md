@@ -5,10 +5,10 @@ at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
 **Approval state (2026-10-19):** slice 1 is merged (PR #1). The owner approved
-the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slice 2b, in
-order, one PR each. The PRD text stays a draft (DEC-001); the build plan in
-DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1 (stack) is
-confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
+the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b
+and 5b, in order, one PR each. The PRD text stays a draft (DEC-001); the build
+plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
+(stack) is confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
 
 | ID | Decision | Area |
 |---|---|---|
@@ -372,9 +372,11 @@ confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - **Verified in Chromium and Google Chrome** (Playwright against the Compose stack, locally and in CI): React 19 +
   Vite 8 render with zero CSP/Trusted Types violations, in a secure context,
   and a raw `innerHTML` assignment is blocked.
-- **Risk for slice 5:** Fluent UI v9 injects styles at runtime (Griffel). It
-  must be verified against `style-src 'self'` before adoption. If it needs a
-  nonce or `unsafe-inline`, that comes back for a decision, not a silent change.
+- **Risk for slice 3** (moved from slice 5 by DEC-021): Fluent UI v9 injects
+  styles at runtime (Griffel). It must be verified against `style-src 'self'`
+  and `trusted-types 'none'` before adoption, as the first step of slice 3.
+  If it needs a nonce or `unsafe-inline`, that comes back for a decision, not
+  a silent change.
 
 ## DEC-018 CI design, and CodeQL / dependency review availability
 
@@ -409,8 +411,9 @@ confirmed. A2 (licensing, DCO) is pending. The other assumptions remain open.
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b |
 | Generated certificate renewal without a restart (#5, DEC-006) | 24 |
 | Owner-only ACL for the generated key on Windows dev hosts (#6, DEC-006) | 24 |
-| Types & attributes admin screen (UI #14; no slice in PRD §11) | 5 |
-| Settings screen (UI #20; no slice in PRD §11) | 24 |
+| Types & attributes admin screen (UI #14; no slice in PRD §11) | 5b |
+| Settings screen (UI #20; no slice in PRD §11) | P1 (DEC-021) |
+| Fluent UI v9 verification under the served CSP and Trusted Types (DEC-017) | 3, first step |
 | Authentication, deny-by-default fallback policy, M6 enumeration test | 3 |
 | OpenAPI document, `/api/v1/health` decision | 8 |
 | PowerShell module and Pester (no executable PowerShell exists yet) | 9 |
@@ -444,15 +447,22 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      (DEC-008) and #7. New **slice 2b** covers US-01 "use an existing SQL
      Server" (`docker-compose.external-sql.yml`) and the audit of adopted and
      shared-instance principals (#2, #3, #4). PRD numbering is unchanged.
-  2. **Screens without a slice:** UI #14 (Types & attributes admin) goes in
-     slice 5; UI #20 (Settings) goes in slice 24.
+  2. **Screens without a slice:** UI #14 (Types & attributes admin) gets its
+     own **slice 5b** (`slice/05b-types-admin`), after slice 5. UI #20
+     (Settings) becomes **P1**, built with the P1 slices.
   3. **#5 and #6** (TLS renewal without restart; Windows key ACL) go in slice 24.
+  4. **Fluent UI verification moves to slice 3** (from slice 5). It is the
+     first step of slice 3: verify Fluent UI v9 (Griffel) under the served CSP
+     (`style-src 'self'`, `trusted-types 'none'`). If it fails, stop and bring
+     options to the owner before building any screen (DEC-017).
 - **Rationale.** Slice 2 as written plus the deferred bootstrap work was too
   large to review as one PR; the existing-SQL work and the principal audit
   belong together (both only matter on a shared instance). The two screens
-  and the TLS items needed an owner so they are not lost.
-- **Working rules** for the build (gating, review rounds, design handoffs)
-  are recorded in `docs/HANDOFF.md`.
+  and the TLS items needed an owner so they are not lost. Slice 3 builds the
+  first screens, so Fluent must be proven there, before any screen depends
+  on it. Slice 5b and Settings as P1 are owner decisions (2026-10-19).
+- **Working rules** for the build (gating, review rounds, design handoffs,
+  models and sessions) are recorded in `docs/HANDOFF.md`.
 
 ---
 
