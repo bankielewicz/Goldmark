@@ -1,0 +1,41 @@
+# --- Secrets and local configuration: never commit ---
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+*.key
+*.pem
+!**/testdata/**/*.pem
+appsettings.*.local.json
+secrets.json
+.goldmark/
+
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.trx
+artifacts/
+
+# --- Node / web ---
+node_modules/
+web/dist/
+.pnpm-store/
+*.tsbuildinfo
+playwright-report/
+test-results/
+blob-report/
+
+# --- Editors / OS ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# --- Smoke test scratch ---
+tests/smoke/.work/
