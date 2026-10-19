@@ -8,6 +8,7 @@
 !.editorconfig
 !src/
 !web/
+!db/migrations/
 src/**/bin/
 src/**/obj/
 web/node_modules/

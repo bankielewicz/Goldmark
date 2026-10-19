@@ -18,6 +18,7 @@ internal static partial class ConfigurationPreflight
         Check(errors, DatabaseOptions.SectionName, () => configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>());
         Check(errors, HttpsOptions.SectionName, () => configuration.GetSection(HttpsOptions.SectionName).Get<HttpsOptions>());
         Check(errors, BootstrapOptions.SectionName, () => configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>());
+        Check(errors, MigrationOptions.SectionName, () => configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>());
         Check(errors, LoggingSetup.MinimumLevelKey, () => configuration.GetValue<LogEventLevel>(LoggingSetup.MinimumLevelKey));
         return errors;
     }

@@ -5,22 +5,31 @@ using Microsoft.Data.SqlClient;
 namespace Goldmark.Api.Commands;
 
 /// <summary>
-/// <c>bootstrap-db</c>: one-shot, idempotent creation of the Goldmark database and the
-/// least-privilege runtime login (slice 1 scope: CONNECT only, no schema). It runs with
-/// administrative credentials that only the bootstrap container receives.
+/// <c>bootstrap-db</c>: one-shot, idempotent creation of the Goldmark database and its two
+/// logins. It runs with administrative credentials that only the bootstrap container receives.
+/// <list type="bullet">
+/// <item>The <b>runtime login</b> (<c>Goldmark:Database:User</c>) gets a database user and
+/// nothing else here; <c>migrate</c> makes it a member of <c>goldmark_runtime</c>, the role the
+/// migrations define.</item>
+/// <item>The <b>migration login</b> (<c>Goldmark:Migration:User</c>) gets a database user that is
+/// a member of <c>db_owner</c> of this database only (DEC-024).</item>
+/// </list>
 /// <para>
-/// Goldmark only manages principals it created itself, recognised by a marker on the
-/// database user. A runtime login or database user that already exists without that marker
-/// is refused (exit 3) with nothing changed, unless the operator opts in to adopting it with
-/// <see cref="BootstrapOptions.AdoptExistingLogin"/>. Login, user and marker are created in
-/// one transaction. After provisioning, the login's effective permissions are checked as the
-/// login itself. Migrations and the migration login arrive in slice 2.
+/// Goldmark only manages principals it created itself, recognised by a marker on the database
+/// user whose value names the principal's purpose. A login or database user that already exists
+/// without that marker is refused (exit 3) with nothing changed, unless the operator opts in to
+/// adopting it with <see cref="BootstrapOptions.AdoptExistingLogin"/>. Both logins, both users,
+/// the markers and the <c>db_owner</c> membership are created in one transaction. Afterwards each
+/// login's effective permissions are checked as that login.
 /// </para>
 /// </summary>
 internal static class BootstrapDatabaseCommand
 {
     public const string Name = "bootstrap-db";
     public const string ManagedMarker = "goldmark:managed";
+    public const string RuntimeMarkerValue = "runtime-login";
+    public const string MigrationMarkerValue = "migration-login";
+    public const string RuntimeRole = "goldmark_runtime";
     private const int MaxPasswordLength = 128; // QUOTENAME input limit; longer input would yield NULL.
     private const int Refused = 3;
 
@@ -34,16 +43,17 @@ internal static class BootstrapDatabaseCommand
 
     private const string DatabaseExistsSql = "SELECT CASE WHEN DB_ID(@db) IS NULL THEN 0 ELSE 1 END;";
 
-    // Read-only. Run in the Goldmark database: user mapped to the login (by SID), whether that
-    // user carries Goldmark's marker, and whether a user of that name belongs to someone else.
+    // Read-only. Run in the Goldmark database: user mapped to the login (by SID), the value of
+    // Goldmark's marker on that user (NULL if none), and whether a user of that name belongs to
+    // someone else.
     private const string UserStateSql = """
         SET NOCOUNT ON;
         DECLARE @sid varbinary(85) = SUSER_SID(@login);
         DECLARE @uid int = (SELECT principal_id FROM sys.database_principals WHERE sid = @sid);
         SELECT
             CASE WHEN @uid IS NULL THEN 0 ELSE 1 END,
-            CASE WHEN EXISTS (SELECT 1 FROM sys.extended_properties
-                WHERE class = 4 AND major_id = @uid AND name = N'goldmark:managed') THEN 1 ELSE 0 END,
+            (SELECT CAST(value AS nvarchar(64)) FROM sys.extended_properties
+                WHERE class = 4 AND major_id = @uid AND name = N'goldmark:managed'),
             CASE WHEN EXISTS (SELECT 1 FROM sys.database_principals
                 WHERE name = @login AND (@sid IS NULL OR sid <> @sid)) THEN 1 ELSE 0 END;
         """;
@@ -67,13 +77,13 @@ internal static class BootstrapDatabaseCommand
         ROLLBACK TRANSACTION;
         """;
 
-    // Run in the Goldmark database. Login, user and marker change together or not at all.
-    // @adopt_user remaps an existing same-name user (adoption only).
+    // Run in the Goldmark database, inside the caller's transaction, once per principal.
+    // @adopt_user remaps an existing same-name user (adoption only). @db_owner adds the user to
+    // db_owner (migration login only).
     private const string ProvisionSql = """
         SET NOCOUNT ON;
         SET XACT_ABORT ON;
         DECLARE @sql nvarchar(max);
-        BEGIN TRANSACTION;
         IF SUSER_ID(@login) IS NULL
         BEGIN
             SET @sql = N'CREATE LOGIN ' + QUOTENAME(@login) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
@@ -108,17 +118,24 @@ internal static class BootstrapDatabaseCommand
         IF NOT EXISTS (SELECT 1 FROM sys.extended_properties
             WHERE class = 4 AND major_id = USER_ID(@user) AND name = N'goldmark:managed')
         BEGIN
-            EXEC sys.sp_addextendedproperty @name = N'goldmark:managed', @value = N'runtime-login',
+            EXEC sys.sp_addextendedproperty @name = N'goldmark:managed', @value = @marker,
                 @level0type = N'USER', @level0name = @user;
             SELECT N'marked database user as managed by Goldmark';
         END;
-        COMMIT TRANSACTION;
+
+        IF @db_owner = 1 AND IS_ROLEMEMBER(N'db_owner', @user) = 0
+        BEGIN
+            SET @sql = N'ALTER ROLE db_owner ADD MEMBER ' + QUOTENAME(@user) + N';';
+            EXEC sys.sp_executesql @sql;
+            SELECT N'added database user to db_owner';
+        END;
         """;
 
     // Executed as the runtime login. Returns one row per role membership or effective
     // permission beyond the baseline that a fresh CONNECT-only login has on SQL Server 2025
     // (measured: server CONNECT SQL + VIEW ANY DATABASE; database CONNECT + the two VIEW ANY
-    // COLUMN ... KEY DEFINITION grants that public holds). No rows = least privilege.
+    // COLUMN ... KEY DEFINITION grants that public holds), plus membership of goldmark_runtime,
+    // whose grants are schema- and object-level (checked by migrate). No rows = least privilege.
     // System views differ in collation, so every column is collated to the database default.
     internal const string VerifySql = """
         SET NOCOUNT ON;
@@ -127,7 +144,7 @@ internal static class BootstrapDatabaseCommand
         WHERE t.type = N'SERVER ROLE' AND r.name <> N'public'
         UNION ALL
         SELECT N'database role', name COLLATE DATABASE_DEFAULT
-        FROM sys.user_token WHERE type = N'ROLE' AND name <> N'public'
+        FROM sys.user_token WHERE type = N'ROLE' AND name NOT IN (N'public', N'goldmark_runtime')
         UNION ALL
         SELECT N'server permission', permission_name COLLATE DATABASE_DEFAULT
         FROM sys.fn_my_permissions(NULL, N'SERVER')
@@ -139,166 +156,243 @@ internal static class BootstrapDatabaseCommand
             N'VIEW ANY COLUMN MASTER KEY DEFINITION');
         """;
 
-    public static async Task<int> RunAsync()
+    // Executed as the migration login: db_owner of this database, and nothing at server level
+    // beyond the CONNECT-only baseline.
+    internal const string VerifyMigrationSql = """
+        SET NOCOUNT ON;
+        SELECT CAST(N'server role' AS nvarchar(32)) AS Kind, r.name COLLATE DATABASE_DEFAULT AS Name
+        FROM sys.login_token AS t JOIN sys.server_principals AS r ON r.sid = t.sid
+        WHERE t.type = N'SERVER ROLE' AND r.name <> N'public'
+        UNION ALL
+        SELECT N'database role', name COLLATE DATABASE_DEFAULT
+        FROM sys.user_token WHERE type = N'ROLE' AND name NOT IN (N'public', N'db_owner')
+        UNION ALL
+        SELECT N'server permission', permission_name COLLATE DATABASE_DEFAULT
+        FROM sys.fn_my_permissions(NULL, N'SERVER')
+        WHERE permission_name NOT IN (N'CONNECT SQL', N'VIEW ANY DATABASE')
+        UNION ALL
+        SELECT N'missing database role', N'db_owner' WHERE ISNULL(IS_ROLEMEMBER(N'db_owner'), 0) <> 1;
+        """;
+
+    /// <summary>A login Goldmark manages, with the settings and marker that identify it.</summary>
+    private sealed record Principal(
+        string Purpose, string Login, string Password, string MarkerValue, bool DbOwner, string UserVariable, string PasswordVariable);
+
+    private readonly record struct LoginState(string Type, bool PasswordMatches);
+
+    private readonly record struct UserState(bool Mapped, string? Marker, bool NameTakenByOther);
+
+    public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
     {
-        var configuration = CommandConfiguration.Build();
         var errors = ConfigurationPreflight.BindingErrors(configuration);
         var db = new DatabaseOptions();
+        var migration = new MigrationOptions();
         var bootstrap = new BootstrapOptions();
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
+            migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
-            errors = Validate(db, bootstrap);
+            errors = Validate(db, migration, bootstrap);
         }
 
         if (errors.Count > 0)
         {
-            await Console.Error.WriteLineAsync("bootstrap-db: invalid configuration:");
-            foreach (var error in errors)
+            await error.WriteLineAsync($"{Name}: invalid configuration:");
+            foreach (var e in errors)
             {
-                await Console.Error.WriteLineAsync($"  - {error}");
+                await error.WriteLineAsync($"  - {e}");
             }
 
             return 2;
         }
 
+        Principal[] principals =
+        [
+            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD"),
+            new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true,
+                "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD"),
+        ];
+
         var admin = SqlConnectionFactory.Build(db, bootstrap.AdminUser, bootstrap.AdminPassword, database: "master");
         admin.Pooling = false;
         try
         {
-            await using var connection = await OpenWithRetryAsync(admin.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds));
+            await using var connection = await CommandSql.OpenWithRetryAsync(
+                admin.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds), output, Name);
 
-            // 1. Read-only: decide everything before changing anything.
-            var login = await LoginStateAsync(connection, db);
+            // 1. Read-only: decide everything, for both logins, before changing anything.
             var databaseExists = await ScalarAsync(connection, DatabaseExistsSql, db) == 1;
-            var user = (Mapped: false, Managed: false, NameTakenByOther: false);
-            if (databaseExists)
+            var states = new List<(Principal Principal, LoginState? Login, UserState User)>();
+            foreach (var principal in principals)
             {
-                await connection.ChangeDatabaseAsync(db.Name);
-                user = await UserStateAsync(connection, db);
-                await connection.ChangeDatabaseAsync("master");
+                var login = await LoginStateAsync(connection, db, principal);
+                var user = new UserState(false, null, false);
+                if (databaseExists)
+                {
+                    await connection.ChangeDatabaseAsync(db.Name);
+                    user = await UserStateAsync(connection, db, principal);
+                    await connection.ChangeDatabaseAsync("master");
+                }
+
+                if (Refusal(principal, login, user, bootstrap) is { } reason)
+                {
+                    return await RefuseAsync(error, reason);
+                }
+
+                if (bootstrap.AdoptExistingLogin && !IsManaged(principal, login, user) && (login is not null || user.NameTakenByOther))
+                {
+                    Report(output, principal, $"adopting the existing {(login is not null ? "login" : "database user")} '{principal.Login}' (GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true)");
+                }
+
+                states.Add((principal, login, user));
             }
 
-            var managed = login is not null && user.Mapped && user.Managed;
-            if (login is { Type: not "S" } nonSql)
+            // 2. Provision. Passwords are checked against SQL Server's policy before the database
+            //    is created; logins, users, markers and db_owner membership then change together.
+            foreach (var (principal, login, _) in states)
             {
-                return await RefuseAsync($"'{db.User}' exists but is not a SQL Server login (type {nonSql.Type}).");
-            }
-
-            if (!managed && !bootstrap.AdoptExistingLogin && (login is not null || user.NameTakenByOther))
-            {
-                var what = login is not null ? $"login '{db.User}'" : $"database user '{db.User}'";
-                return await RefuseAsync(
-                    $"the {what} already exists and was not created by Goldmark. Nothing was changed. " +
-                    "Configure a different GOLDMARK_DB_USER, or set GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true to take it over " +
-                    "(its password is then set to GOLDMARK_DB_PASSWORD).");
-            }
-
-            if (bootstrap.AdoptExistingLogin && !managed && (login is not null || user.NameTakenByOther))
-            {
-                Report($"adopting the existing {(login is not null ? "login" : "database user")} '{db.User}' (GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true)");
-            }
-
-            // 2. Provision. The password is checked against SQL Server's policy before the
-            //    database is created; login, user and marker then change in one transaction.
-            if (login is not { PasswordMatches: true })
-            {
-                await ExecuteAsync(connection, PasswordPolicyProbeSql, db, bootstrap);
+                if (login is not { PasswordMatches: true })
+                {
+                    await ExecuteAsync(connection, PasswordPolicyProbeSql, db, principal, bootstrap);
+                }
             }
 
             if (!databaseExists)
             {
-                await ExecuteAsync(connection, CreateDatabaseSql, db, bootstrap);
-                Report("created database");
+                await ExecuteAsync(connection, CreateDatabaseSql, db, principals[0], bootstrap);
+                await output.WriteLineAsync($"{Name}: created database");
             }
 
             await connection.ChangeDatabaseAsync(db.Name);
-            foreach (var step in await StepsAsync(connection, ProvisionSql, db, bootstrap))
+            await using (var transaction = (SqlTransaction)await connection.BeginTransactionAsync())
             {
-                Report(step);
+                foreach (var principal in principals)
+                {
+                    foreach (var step in await StepsAsync(connection, transaction, db, principal, bootstrap))
+                    {
+                        Report(output, principal, step);
+                    }
+                }
+
+                await transaction.CommitAsync();
             }
 
-            // 3. Verify, as the runtime login, that it holds nothing beyond CONNECT.
-            var runtime = SqlConnectionFactory.Build(db);
-            runtime.Pooling = false;
-            await using var appConnection = new SqlConnection(runtime.ConnectionString);
-            await appConnection.OpenAsync();
-            var excess = await FindingsAsync(appConnection, VerifySql);
-            if (excess.Count > 0)
+            // 3. Verify each login's effective permissions, as that login.
+            if (await VerifyAsync(db, principals[0], VerifySql) is { Count: > 0 } runtimeExcess)
             {
-                return await RefuseAsync(
-                    $"the runtime login '{db.User}' has rights beyond CONNECT: {string.Join("; ", excess)}. Remove them.");
+                return await RefuseAsync(error,
+                    $"the runtime login '{db.User}' has rights beyond CONNECT and {RuntimeRole}: {string.Join("; ", runtimeExcess)}. Remove them.");
             }
 
-            Report($"verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT.");
+            await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT and {RuntimeRole}.");
+
+            if (await VerifyAsync(db, principals[1], VerifyMigrationSql) is { Count: > 0 } migrationFindings)
+            {
+                return await RefuseAsync(error,
+                    $"the migration login '{migration.User}' must be db_owner of '{db.Name}' and hold nothing else: {string.Join("; ", migrationFindings)}.");
+            }
+
+            await output.WriteLineAsync($"{Name}: verified migration login '{migration.User}' is db_owner of '{db.Name}' with no server roles or permissions beyond CONNECT.");
             return 0;
         }
         catch (SqlException ex)
         {
-            await Console.Error.WriteLineAsync($"bootstrap-db: SQL Server error {ex.Number}: {ex.Message}");
+            await error.WriteLineAsync($"{Name}: SQL Server error {ex.Number}: {ex.Message}");
             return 1;
         }
         catch (OperationCanceledException)
         {
-            await Console.Error.WriteLineAsync(
-                $"bootstrap-db: SQL Server did not accept connections within {bootstrap.WaitSeconds} s.");
+            await error.WriteLineAsync($"{Name}: SQL Server did not accept connections within {bootstrap.WaitSeconds} s.");
             return 1;
         }
     }
 
-    private static void Report(string message) => Console.WriteLine($"bootstrap-db: {message}");
+    private static bool IsManaged(Principal principal, LoginState? login, UserState user) =>
+        login is not null && user.Mapped && user.Marker == principal.MarkerValue;
 
-    private static async Task<int> RefuseAsync(string reason)
+    /// <summary>Why this principal must not be touched, or null if it may be provisioned.</summary>
+    private static string? Refusal(Principal principal, LoginState? login, UserState user, BootstrapOptions bootstrap)
     {
-        await Console.Error.WriteLineAsync($"bootstrap-db: refusing to continue: {reason}");
+        if (login is { Type: not "S" } nonSql)
+        {
+            return $"'{principal.Login}' exists but is not a SQL Server login (type {nonSql.Type}).";
+        }
+
+        if (user.Mapped && user.Marker is not null && user.Marker != principal.MarkerValue)
+        {
+            // Never let one managed principal be reused for the other purpose (e.g. swapped names).
+            return $"'{principal.Login}' is managed by Goldmark as the {user.Marker} and cannot be used as the {principal.Purpose} login. Nothing was changed.";
+        }
+
+        if (!IsManaged(principal, login, user) && !bootstrap.AdoptExistingLogin && (login is not null || user.NameTakenByOther))
+        {
+            var what = login is not null ? $"login '{principal.Login}'" : $"database user '{principal.Login}'";
+            return $"the {what} already exists and was not created by Goldmark. Nothing was changed. " +
+                $"Configure a different {principal.UserVariable}, or set GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true to take it over " +
+                $"(its password is then set to {principal.PasswordVariable}).";
+        }
+
+        return null;
+    }
+
+    private static void Report(TextWriter output, Principal principal, string message) =>
+        output.WriteLine($"{Name}: {principal.Purpose} login: {message}");
+
+    private static async Task<int> RefuseAsync(TextWriter error, string reason)
+    {
+        await error.WriteLineAsync($"{Name}: refusing to continue: {reason}");
         return Refused;
     }
 
-    private static SqlCommand Command(SqlConnection connection, string sql, DatabaseOptions db, BootstrapOptions? bootstrap = null)
+    private static SqlCommand Command(SqlConnection connection, string sql, DatabaseOptions db, Principal principal, BootstrapOptions? bootstrap = null)
     {
         var command = connection.CreateCommand();
         command.CommandText = sql;
         command.CommandTimeout = 60;
         command.Parameters.Add(new SqlParameter("@db", System.Data.SqlDbType.NVarChar, 128) { Value = db.Name });
-        command.Parameters.Add(new SqlParameter("@login", System.Data.SqlDbType.NVarChar, 128) { Value = db.User });
-        command.Parameters.Add(new SqlParameter("@password", System.Data.SqlDbType.NVarChar, 128) { Value = db.Password });
+        command.Parameters.Add(new SqlParameter("@login", System.Data.SqlDbType.NVarChar, 128) { Value = principal.Login });
+        command.Parameters.Add(new SqlParameter("@password", System.Data.SqlDbType.NVarChar, 128) { Value = principal.Password });
+        command.Parameters.Add(new SqlParameter("@marker", System.Data.SqlDbType.NVarChar, 64) { Value = principal.MarkerValue });
+        command.Parameters.Add(new SqlParameter("@db_owner", System.Data.SqlDbType.Bit) { Value = principal.DbOwner });
         command.Parameters.Add(new SqlParameter("@adopt_user", System.Data.SqlDbType.Bit) { Value = bootstrap?.AdoptExistingLogin ?? false });
         return command;
     }
 
-    private static async Task ExecuteAsync(SqlConnection connection, string sql, DatabaseOptions db, BootstrapOptions bootstrap)
+    private static async Task ExecuteAsync(SqlConnection connection, string sql, DatabaseOptions db, Principal principal, BootstrapOptions bootstrap)
     {
-        await using var command = Command(connection, sql, db, bootstrap);
+        await using var command = Command(connection, sql, db, principal, bootstrap);
         await command.ExecuteNonQueryAsync();
     }
 
     private static async Task<int> ScalarAsync(SqlConnection connection, string sql, DatabaseOptions db)
     {
-        await using var command = Command(connection, sql, db);
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.Add(new SqlParameter("@db", System.Data.SqlDbType.NVarChar, 128) { Value = db.Name });
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
 
-    private readonly record struct LoginState(string Type, bool PasswordMatches);
-
-    private static async Task<LoginState?> LoginStateAsync(SqlConnection connection, DatabaseOptions db)
+    private static async Task<LoginState?> LoginStateAsync(SqlConnection connection, DatabaseOptions db, Principal principal)
     {
-        await using var command = Command(connection, LoginStateSql, db);
+        await using var command = Command(connection, LoginStateSql, db, principal);
         await using var reader = await command.ExecuteReaderAsync();
         return await reader.ReadAsync() ? new LoginState(reader.GetString(0).Trim(), reader.GetInt32(1) == 1) : null;
     }
 
-    private static async Task<(bool Mapped, bool Managed, bool NameTakenByOther)> UserStateAsync(SqlConnection connection, DatabaseOptions db)
+    private static async Task<UserState> UserStateAsync(SqlConnection connection, DatabaseOptions db, Principal principal)
     {
-        await using var command = Command(connection, UserStateSql, db);
+        await using var command = Command(connection, UserStateSql, db, principal);
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
-        return (reader.GetInt32(0) == 1, reader.GetInt32(1) == 1, reader.GetInt32(2) == 1);
+        return new UserState(reader.GetInt32(0) == 1, reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetInt32(2) == 1);
     }
 
-    private static async Task<List<string>> StepsAsync(SqlConnection connection, string sql, DatabaseOptions db, BootstrapOptions bootstrap)
+    private static async Task<List<string>> StepsAsync(
+        SqlConnection connection, SqlTransaction transaction, DatabaseOptions db, Principal principal, BootstrapOptions bootstrap)
     {
-        await using var command = Command(connection, sql, db, bootstrap);
+        await using var command = Command(connection, ProvisionSql, db, principal, bootstrap);
+        command.Transaction = transaction;
         await using var reader = await command.ExecuteReaderAsync();
         var steps = new List<string>();
         do
@@ -312,110 +406,124 @@ internal static class BootstrapDatabaseCommand
         return steps;
     }
 
-    private static async Task<List<string>> FindingsAsync(SqlConnection connection, string sql)
+    private static async Task<List<string>> VerifyAsync(DatabaseOptions db, Principal principal, string sql)
     {
-        await using var command = connection.CreateCommand();
-        command.CommandText = sql;
-        await using var reader = await command.ExecuteReaderAsync();
-        var findings = new List<string>();
-        while (await reader.ReadAsync())
-        {
-            findings.Add($"{reader.GetString(0)} {reader.GetString(1)}");
-        }
-
-        return findings;
+        var builder = SqlConnectionFactory.Build(db, principal.Login, principal.Password);
+        builder.Pooling = false;
+        await using var connection = new SqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+        return await CommandSql.FindingsAsync(connection, sql);
     }
 
-    internal static List<string> Validate(DatabaseOptions db, BootstrapOptions bootstrap)
+    internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
     {
         var errors = new List<string>();
+        const string database = DatabaseOptions.SectionName;
+        const string migrations = MigrationOptions.SectionName;
+        const string admin = BootstrapOptions.SectionName;
         if (string.IsNullOrWhiteSpace(db.Host))
         {
-            errors.Add($"{DatabaseOptions.SectionName}:Host is required.");
+            errors.Add($"{database}:Host is required.");
+        }
+
+        if (db.Port is < 1 or > 65535)
+        {
+            errors.Add($"{database}:Port must be between 1 and 65535.");
         }
 
         if (!SqlIdentifier.IsValid(db.Name))
         {
-            errors.Add($"{DatabaseOptions.SectionName}:Name must be a simple identifier.");
+            errors.Add($"{database}:Name must be a simple identifier.");
         }
         else if (SqlIdentifier.IsSystemDatabase(db.Name))
         {
-            errors.Add($"{DatabaseOptions.SectionName}:Name must not be a SQL Server system database.");
+            errors.Add($"{database}:Name must not be a SQL Server system database.");
         }
 
-        if (!SqlIdentifier.IsValid(db.User) || string.Equals(db.User, "sa", StringComparison.OrdinalIgnoreCase))
+        LoginErrors(errors, $"{database}:User", db.User, bootstrap.AdminUser);
+        LoginErrors(errors, $"{migrations}:User", migration.User, bootstrap.AdminUser);
+        if (string.Equals(db.User, migration.User, StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add($"{DatabaseOptions.SectionName}:User must be a simple identifier and not 'sa'.");
-        }
-        else if (string.Equals(db.User, bootstrap.AdminUser, StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add($"{DatabaseOptions.SectionName}:User must differ from {BootstrapOptions.SectionName}:AdminUser.");
+            errors.Add($"{migrations}:User must differ from {database}:User.");
         }
 
         if (db.Password.Length is < 12 or > MaxPasswordLength)
         {
-            errors.Add($"{DatabaseOptions.SectionName}:Password must be 12 to {MaxPasswordLength} characters.");
+            errors.Add($"{database}:Password must be 12 to {MaxPasswordLength} characters.");
+        }
+
+        if (migration.Password.Length is < 12 or > MaxPasswordLength)
+        {
+            errors.Add($"{migrations}:Password must be 12 to {MaxPasswordLength} characters.");
         }
 
         if (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword))
         {
-            errors.Add($"{BootstrapOptions.SectionName}:AdminUser and AdminPassword are required.");
+            errors.Add($"{admin}:AdminUser and AdminPassword are required.");
         }
-        else if (string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+        else
         {
             // The app container would hold a credential that also authenticates as the administrator.
-            errors.Add($"{DatabaseOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
+            if (string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+            {
+                errors.Add($"{database}:Password must differ from {admin}:AdminPassword.");
+            }
+
+            if (string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+            {
+                errors.Add($"{migrations}:Password must differ from {admin}:AdminPassword.");
+            }
         }
 
-        if (db.Encrypt is not ("Strict" or "Mandatory"))
+        if (!string.IsNullOrEmpty(migration.Password) && string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
         {
-            errors.Add($"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.");
+            // Otherwise the app container's credential would also authenticate as db_owner.
+            errors.Add($"{migrations}:Password must differ from {database}:Password.");
         }
 
-        errors.AddRange(DatabaseOptionsValidator.CertificatePinErrors(db.ServerCertificatePath));
-
-        if (db.ConnectTimeoutSeconds is < 1 or > 120)
-        {
-            // 0 would mean "wait forever" to SqlClient.
-            errors.Add($"{DatabaseOptions.SectionName}:ConnectTimeoutSeconds must be between 1 and 120.");
-        }
+        errors.AddRange(CommonConnectionErrors(db));
 
         if (bootstrap.WaitSeconds is < 0 or > 900)
         {
-            errors.Add($"{BootstrapOptions.SectionName}:WaitSeconds must be between 0 and 900.");
+            errors.Add($"{admin}:WaitSeconds must be between 0 and 900.");
         }
 
         return errors;
     }
 
-    /// <summary>
-    /// Retries until SQL Server accepts the connection. The whole wait, including each
-    /// connection attempt, is bounded by <paramref name="wait"/> plus one connect timeout.
-    /// </summary>
-    private static async Task<SqlConnection> OpenWithRetryAsync(string connectionString, TimeSpan wait)
+    /// <summary>Connection settings every database command needs.</summary>
+    internal static IEnumerable<string> CommonConnectionErrors(DatabaseOptions db)
     {
-        var connectTimeout = TimeSpan.FromSeconds(new SqlConnectionStringBuilder(connectionString).ConnectTimeout);
-        using var overall = new CancellationTokenSource(wait + connectTimeout);
-        var deadline = DateTime.UtcNow + wait;
-        while (true)
+        if (db.Encrypt is not ("Strict" or "Mandatory"))
         {
-            var connection = new SqlConnection(connectionString);
-            try
-            {
-                await connection.OpenAsync(overall.Token);
-                return connection;
-            }
-            catch (SqlException ex) when (DateTime.UtcNow < deadline)
-            {
-                await connection.DisposeAsync();
-                Console.WriteLine($"bootstrap-db: SQL Server not ready yet (error {ex.Number}); retrying");
-                await Task.Delay(TimeSpan.FromSeconds(3), overall.Token);
-            }
-            catch
-            {
-                await connection.DisposeAsync();
-                throw;
-            }
+            yield return $"{DatabaseOptions.SectionName}:Encrypt must be 'Strict' or 'Mandatory'.";
+        }
+
+        foreach (var pin in DatabaseOptionsValidator.CertificatePinErrors(db.ServerCertificatePath))
+        {
+            yield return pin;
+        }
+
+        if (db.ConnectTimeoutSeconds is < 1 or > 120)
+        {
+            // 0 would mean "wait forever" to SqlClient.
+            yield return $"{DatabaseOptions.SectionName}:ConnectTimeoutSeconds must be between 1 and 120.";
+        }
+    }
+
+    private static void LoginErrors(List<string> errors, string setting, string login, string adminLogin)
+    {
+        if (!SqlIdentifier.IsValid(login))
+        {
+            errors.Add($"{setting} must be a simple identifier.");
+        }
+        else if (SqlIdentifier.IsReservedPrincipal(login))
+        {
+            errors.Add($"{setting} must not be 'sa' or a reserved database principal name (dbo, guest, sys, INFORMATION_SCHEMA, public, {RuntimeRole}).");
+        }
+        else if (string.Equals(login, adminLogin, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"{setting} must differ from {BootstrapOptions.SectionName}:AdminUser.");
         }
     }
 }

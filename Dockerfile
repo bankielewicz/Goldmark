@@ -36,6 +36,8 @@ COPY global.json NuGet.config Directory.Build.props Directory.Packages.props .ed
 COPY src/Goldmark.Api/Goldmark.Api.csproj src/Goldmark.Api/packages.lock.json src/Goldmark.Api/
 RUN dotnet restore src/Goldmark.Api/Goldmark.Api.csproj --locked-mode
 COPY src/ src/
+# Schema migrations are embedded in the API assembly; the migrate command applies them.
+COPY db/migrations/ db/migrations/
 RUN dotnet publish src/Goldmark.Api/Goldmark.Api.csproj -c Release --no-restore -o /app/publish -p:UseAppHost=false \
  && mkdir -p /layout/var/lib/goldmark/tls
 

@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="dbup-sqlserver" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Serilog.AspNetCore" />
     <!--
@@ -20,7 +21,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Forward-only migrations (db/migrations), applied by the migrate command. The logical
+         name is what DbUp records in its journal; never rename an applied script. -->
+    <EmbeddedResource Include="..\..\db\migrations\*.sql" LogicalName="Goldmark.Migrations.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Goldmark.Api.Tests" />
+    <InternalsVisibleTo Include="Goldmark.Api.IntegrationTests" />
   </ItemGroup>
 
 </Project>

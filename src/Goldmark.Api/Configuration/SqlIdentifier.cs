@@ -18,4 +18,13 @@ internal static partial class SqlIdentifier
 
     /// <summary>Goldmark must get its own database, never a system database.</summary>
     public static bool IsSystemDatabase(string value) => SystemDatabases.Contains(value);
+
+    // Built-in database principals, and the role Goldmark's migrations create. A login with one
+    // of these names cannot get a database user of its own name.
+    private static readonly HashSet<string> ReservedPrincipals =
+        new(["dbo", "guest", "sys", "INFORMATION_SCHEMA", "public", "goldmark_runtime"], StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Names a Goldmark-managed login and database user must not take.</summary>
+    public static bool IsReservedPrincipal(string value) =>
+        ReservedPrincipals.Contains(value) || string.Equals(value, "sa", StringComparison.OrdinalIgnoreCase);
 }
