@@ -13,10 +13,11 @@ public sealed class BootstrapOptions
     public string AdminPassword { get; set; } = "";
 
     /// <summary>
-    /// Allow changing the password of an <b>existing</b> runtime login to the configured one.
-    /// Off by default, so a login name that collides with another account is never modified.
+    /// Take over a runtime login or database user that exists but was not created by Goldmark
+    /// (its password is set to the configured one and it is marked as managed). Off by default:
+    /// such principals are refused and nothing is changed.
     /// </summary>
-    public bool RotatePassword { get; set; }
+    public bool AdoptExistingLogin { get; set; }
 
     /// <summary>How long to wait for SQL Server to accept connections.</summary>
     public int WaitSeconds { get; set; } = 120;

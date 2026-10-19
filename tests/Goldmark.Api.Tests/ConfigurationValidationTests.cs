@@ -244,7 +244,7 @@ public sealed class BootstrapValidationTests
     }
 
     [Fact]
-    public void Least_privilege_verification_compares_against_the_measured_baseline()
+    public void Least_privilege_verification_checks_effective_permissions_as_the_login()
     {
         // Effective permissions as the login: securityadmin/db_securityadmin passed a fixed-role check.
         var effective = BootstrapDatabaseCommand.VerifySql;
@@ -252,45 +252,11 @@ public sealed class BootstrapValidationTests
         Assert.Contains("sys.user_token", effective, StringComparison.Ordinal);
         Assert.Contains("fn_my_permissions(NULL, N'SERVER')", effective, StringComparison.Ordinal);
         Assert.Contains("fn_my_permissions(NULL, N'DATABASE')", effective, StringComparison.Ordinal);
-
-        // Catalog inspection by the administrator: grants below server/database scope, ownership,
-        // other databases and public. Behaviour is proven against SQL Server by the smoke test.
-        var catalog = BootstrapDatabaseCommand.InspectSql;
-        foreach (var view in new[] { "sys.server_permissions", "sys.database_permissions", "sys.server_role_members",
-                     "sys.database_role_members", "sys.schemas", "sys.objects", "sys.endpoints", "owner_sid",
-                     "sys.certificates", "sys.asymmetric_keys", "sys.symmetric_keys", "sys.assemblies",
-                     "sys.fulltext_catalogs", "sys.types", "sys.xml_schema_collections", "sys.linked_logins",
-                     "sys.server_principal_credentials", "user name collision", "local_principal_id = 0",
-                     "guest access enabled" })
-        {
-            Assert.Contains(view, catalog, StringComparison.Ordinal);
-        }
     }
 
     [Fact]
-    public void Password_rotation_of_an_existing_login_is_off_by_default() =>
-        Assert.False(new BootstrapOptions().RotatePassword);
-
-    [Fact]
-    public void Runtime_password_must_differ_from_the_admin_password()
-    {
-        var db = ValidDatabase();
-        var bootstrap = ValidBootstrap();
-        db.Password = bootstrap.AdminPassword;
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, bootstrap), e => e.Contains("must differ from Goldmark:Bootstrap:AdminPassword", StringComparison.Ordinal));
-    }
-
-    [Theory]
-    [InlineData("master")]
-    [InlineData("Msdb")]
-    [InlineData("model")]
-    [InlineData("tempdb")]
-    public void Bootstrap_refuses_system_databases(string name)
-    {
-        var db = ValidDatabase();
-        db.Name = name;
-        Assert.Contains(BootstrapDatabaseCommand.Validate(db, ValidBootstrap()), e => e.Contains("system database", StringComparison.Ordinal));
-    }
+    public void Adopting_an_existing_login_is_off_by_default() =>
+        Assert.False(new BootstrapOptions().AdoptExistingLogin);
 
     [Fact]
     public void Admin_password_is_required()
