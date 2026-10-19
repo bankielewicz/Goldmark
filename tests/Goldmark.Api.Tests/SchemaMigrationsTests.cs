@@ -151,6 +151,7 @@ public sealed class ContainerCommandsTests
 
         Assert.Contains("Goldmark:Migration:Password must differ from Goldmark:Database:Password.", errors);
         Assert.Contains("Goldmark:Migration:Password must differ from Goldmark:Bootstrap:AdminPassword.", errors);
+        Assert.Contains("Goldmark:Database:Password must differ from Goldmark:Bootstrap:AdminPassword.", errors);
         Assert.DoesNotContain(errors, e => e.Contains("Same-Pa55word-1", StringComparison.Ordinal));
     }
 

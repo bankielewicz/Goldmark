@@ -92,6 +92,12 @@ internal static class MigrateCommand
         FROM (VALUES (N'UPDATE'), (N'DELETE')) AS p(name)
         WHERE HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', p.name) = 1
         UNION ALL
+        -- A column-level GRANT overrides the table-level DENY, so check every column too.
+        SELECT N'permission on cmdb.AuditLog column', c.name COLLATE DATABASE_DEFAULT + N' UPDATE'
+        FROM sys.columns AS c
+        WHERE c.object_id = OBJECT_ID(N'cmdb.AuditLog')
+            AND HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', N'UPDATE', c.name, N'COLUMN') = 1
+        UNION ALL
         SELECT N'missing database role', N'goldmark_runtime' WHERE ISNULL(IS_ROLEMEMBER(N'goldmark_runtime'), 0) <> 1
         UNION ALL
         SELECT N'missing permission on schema cmdb', p.name
@@ -104,6 +110,16 @@ internal static class MigrateCommand
         UNION ALL
         SELECT N'missing permission on dbo.SchemaVersions', N'SELECT'
         WHERE ISNULL(HAS_PERMS_BY_NAME(N'dbo.SchemaVersions', N'OBJECT', N'SELECT'), 0) = 0;
+        """;
+
+    // Executed as the migration login, before anything is read or changed: it must be the user
+    // bootstrap-db created (or adopted) for this purpose. Its roles are checked with
+    // BootstrapDatabaseCommand.VerifyMigrationSql.
+    private const string MigrationMarkerSql = """
+        SET NOCOUNT ON;
+        SELECT CAST(N'missing marker' AS nvarchar(40)), N'goldmark:managed = migration-login'
+        WHERE NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 4 AND major_id = USER_ID()
+            AND name = N'goldmark:managed' AND CAST(value AS nvarchar(64)) = N'migration-login');
         """;
 
     public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
@@ -137,6 +153,18 @@ internal static class MigrateCommand
         {
             await using var connection = await CommandSql.OpenWithRetryAsync(
                 migrator.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds), output, Name);
+
+            // 0. Only the managed migration login, holding db_owner and nothing at server level,
+            //    may migrate, also when migrate runs without bootstrap-db (Codex on #14).
+            var principal = await CommandSql.FindingsAsync(connection, MigrationMarkerSql);
+            principal.AddRange(await CommandSql.FindingsAsync(connection, BootstrapDatabaseCommand.VerifyMigrationSql));
+            if (principal.Count > 0)
+            {
+                return await RefuseAsync(error,
+                    $"the migration login '{migration.User}' must be the one bootstrap-db manages, db_owner of '{db.Name}' " +
+                    $"and nothing else: {string.Join("; ", principal)}. Nothing was changed.");
+            }
+
             if (await ScalarAsync(connection, LockSql) < 0)
             {
                 return await RefuseAsync(error, "another migrate run holds the migration lock (waited 120 s).");
@@ -270,6 +298,11 @@ internal static class MigrateCommand
             {
                 errors.Add($"{MigrationOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
             }
+        }
+
+        if (!string.IsNullOrEmpty(db.Password) && string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+        {
+            errors.Add($"{DatabaseOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
         }
 
         errors.AddRange(BootstrapDatabaseCommand.CommonConnectionErrors(db));

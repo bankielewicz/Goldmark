@@ -213,7 +213,9 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
 - Effective permissions: an object-level `DENY` on a role beats a user-level
   `GRANT`, so `GRANT UPDATE ON cmdb.AuditLog TO goldmark_app` changes nothing
   (correctly accepted by `migrate`); removing the role's `DENY` is what grants
-  it (refused). Test effective rights, not grant rows.
+  it (refused). **But** a column-level `GRANT UPDATE (col)` to the role that
+  holds the table `DENY` overrides it (measured on SQL Server 2025), hence
+  `migrate`'s per-column check. Test effective rights, not grant rows.
 - `FOR SYSTEM_TIME ALL` leaves out zero-duration versions (two changes in the
   same tick). To count history in tests, query the history table directly.
 - DbUp creates its journal (`dbo.SchemaVersions`) before running the first
