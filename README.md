@@ -1,10 +1,10 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slices 1–2 of the MVP: an HTTPS host with health endpoints, an empty web UI,
-> a Docker Compose deployment with SQL Server 2025 Express, and the baseline
-> database schema with separate migration and runtime logins. There are no
-> CMDB features yet.
+> Slices 1–2b of the MVP: an HTTPS host with health endpoints, an empty web UI,
+> a Docker Compose deployment with SQL Server 2025 Express or an existing SQL
+> Server 2025, and the baseline database schema with separate migration and
+> runtime logins, audited on every start. There are no CMDB features yet.
 
 Goldmark (a working codename) is a planned self-hosted configuration
 management database (CMDB) for Windows- and VMware-heavy IT estates:
@@ -52,7 +52,7 @@ What starts:
 |---|---|
 | `sql-volume-init` | One-shot: prepares the SQL Server TLS volumes (no network, `CAP_CHOWN` only) |
 | `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict) |
-| `db-init` | One-shot, on every start: creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only), then applies the schema migrations as the migration login. It refuses, changing nothing, if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
+| `db-init` | One-shot, on every start: audits the SQL Server instance and both logins (the principal audit), creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only), then applies the schema migrations as the migration login. It refuses, changing nothing, if the audit finds a problem or if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
 | `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log |
 
 Stop with `docker compose -f deploy/docker-compose.yml down`. Add `-v` to also
@@ -61,6 +61,23 @@ delete all data, including the database and certificates.
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in
 [deploy/.env.example](deploy/.env.example). Backups are not covered yet (US-60, slice 24).
+
+### With an existing SQL Server
+
+To use a SQL Server 2025 instance you already run, fill in the "Existing SQL
+Server" section of `deploy/.env` (host, a dedicated administrator login with
+CONTROL SERVER, never `sa`, and the server certificate) and use the other
+Compose file:
+
+```sh
+docker compose -f deploy/docker-compose.external-sql.yml up -d --build
+```
+
+A DBA can also create the database and both logins in advance
+(`GOLDMARK_DB_BOOTSTRAP_MODE=Existing`); `db-init` then creates nothing. On a
+shared server, `db-init` refuses findings such as `guest` access to other
+databases until they are fixed or accepted by ID. Details, the DBA script and
+every finding: [docs/ops/external-sql-server.md](docs/ops/external-sql-server.md).
 
 ## Develop
 
@@ -156,7 +173,8 @@ tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
 tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
 tests/smoke/              Compose smoke test (real containers + browser)
 web/                      React + TypeScript + Vite SPA, browser-only; dependency policy
-deploy/                   docker-compose.yml, .env.example, SQL Server scripts
+deploy/                   docker-compose.yml (bundled SQL Server), docker-compose.external-sql.yml,
+                          .env.example, SQL Server scripts
 docs/                     PRD, decisions, operations and security notes
 ```
 
