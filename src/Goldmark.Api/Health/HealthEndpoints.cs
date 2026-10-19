@@ -14,7 +14,7 @@ internal static class HealthEndpoints
     {
         services.AddSingleton<ReadinessGate>();
         services.AddHealthChecks()
-            .AddCheck<SqlReadinessCheck>(SqlReadinessCheck.Name, tags: [ReadyTag], timeout: TimeSpan.FromSeconds(10));
+            .AddCheck<SqlReadinessCheck>(SqlReadinessCheck.Name, tags: [ReadyTag], timeout: ReadinessGate.ProbeTimeout);
         return services;
     }
 
@@ -36,6 +36,12 @@ internal static class HealthEndpoints
             .WithMetadata(ReadOnlyMethods)
             .AllowAnonymousByDesign("Readiness probe for container orchestrators; status text only.")
             .WithDisplayName("Health: ready");
+
+        // Any other /health path is a 404, never the SPA shell: a mistyped probe path must not
+        // report 200. Literal routes above take precedence over this catch-all.
+        endpoints.MapMethods("/health/{**path}", [HttpMethods.Get, HttpMethods.Head], () => Results.NotFound())
+            .AllowAnonymousByDesign("Catch-all 404 for unknown health paths; returns no data.")
+            .WithDisplayName("Health: not found");
 
         return endpoints;
     }

@@ -18,6 +18,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
     {
         ["Health: live"] = "/health/live",
         ["Health: ready"] = "/health/ready",
+        ["Health: not found"] = "/health/{**path}",
         ["API: not found"] = "/api/{**path}",
         ["SPA: shell"] = "{**path:nonfile}",
     };

@@ -45,6 +45,21 @@ public sealed class HealthEndpointTests(GoldmarkFactory factory) : IClassFixture
         Assert.Equal(HttpStatusCode.MethodNotAllowed, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/health")]
+    [InlineData("/health/readiness")]
+    [InlineData("/health/live/extra")]
+    public async Task Unknown_health_paths_are_404_not_the_SPA_shell(string path)
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.DoesNotContain("<html", body, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Health_endpoints_answer_HEAD()
     {
