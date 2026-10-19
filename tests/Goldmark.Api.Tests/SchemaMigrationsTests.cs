@@ -141,6 +141,20 @@ public sealed class ContainerCommandsTests
     }
 
     [Fact]
+    public void Migrate_validation_keeps_the_passwords_separate_when_run_on_its_own()
+    {
+        var db = new DatabaseOptions { Host = "sql", User = "goldmark_app", Password = "Same-Pa55word-1" };
+        var migration = new MigrationOptions { Password = "Same-Pa55word-1" };
+        var bootstrap = new BootstrapOptions { AdminPassword = "Same-Pa55word-1" };
+
+        var errors = MigrateCommand.Validate(db, migration, bootstrap);
+
+        Assert.Contains("Goldmark:Migration:Password must differ from Goldmark:Database:Password.", errors);
+        Assert.Contains("Goldmark:Migration:Password must differ from Goldmark:Bootstrap:AdminPassword.", errors);
+        Assert.DoesNotContain(errors, e => e.Contains("Same-Pa55word-1", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void Migrate_validation_rejects_reserved_and_identical_logins()
     {
         var db = new DatabaseOptions { Host = "sql", User = "dbo", Password = "x" };

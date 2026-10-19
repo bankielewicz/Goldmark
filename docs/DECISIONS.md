@@ -512,7 +512,9 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   4. adds the managed runtime user to `goldmark_runtime` (only a user carrying
      the `runtime-login` marker; otherwise exit 3);
   5. verifies, as the runtime login, that its effective rights are exactly the
-     role's (DEC-025); otherwise exit 3.
+     role's, with nothing extra and nothing missing (DEC-025); otherwise exit 3.
+     The runtime/migration/admin password separation is also enforced when
+     `migrate` runs on its own (Codex on #14).
 - **Exit codes** as for `bootstrap-db`: 0 ok, 1 SQL/connection error or failed
   script, 2 invalid configuration, 3 refused.
 - **Not covered:** down-migrations (forward-only by design); a script that
@@ -578,9 +580,12 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   `goldmark_runtime`; server and database permissions at the CONNECT
   baseline; schema `cmdb` permissions exactly the four DML ones; nothing on
   schema `dbo`; only `SELECT` on the journal; no effective `UPDATE`/`DELETE` on
-  the audit log. A user-level `GRANT UPDATE` on the audit log is correctly
-  accepted (the role's `DENY` still wins); removing the `DENY` is refused
-  (tested). `bootstrap-db`'s own check now allows the `goldmark_runtime`
+  the audit log. It also checks the other direction: every expected grant must
+  be present (the four DML rights on `cmdb`, `SELECT`/`INSERT` on the audit log,
+  `SELECT` on the journal), so a revoked grant fails `db-init` instead of the
+  application (Codex on #14). A user-level `GRANT UPDATE` on the audit log is
+  correctly accepted (the role's `DENY` still wins); removing the `DENY` is
+  refused (tested). `bootstrap-db`'s own check now allows the `goldmark_runtime`
   membership.
 - **Tested against SQL Server 2025** (21 denied statements, integration and
   smoke): DDL in `cmdb` and `dbo`, `DROP`, `ALTER`, index creation,
@@ -625,12 +630,13 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **CI.** New job `db-integration` (about 2 minutes; the container is ready in
   about 10 s). The `.NET` job now runs `Goldmark.Api.Tests` only, so the SQL
   tests do not run twice.
-- **Coverage** (59 tests): fresh install, idempotent re-run, concurrent
+- **Coverage** (63 tests): fresh install, idempotent re-run, concurrent
   `migrate`, temporal tables, ownership by `dbo`, default tenant, 21 denied
   runtime statements, allowed DML with history, both logins' rights,
   refusal/adoption of an unmanaged migration login, swapped purposes, server
   role on the migrator, password rotation, newer/diverged schema, extra
-  runtime grants, readiness healthy/older/newer with both versions logged.
+  runtime grants, revoked expected grants, readiness healthy/older/newer with
+  both versions logged.
 
 ## DEC-028 Applied migrations are immutable (hash manifest, CI)
 
@@ -712,7 +718,7 @@ done; **Not executed** = implemented but the check has not run (and why).
 
 Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.IntegrationTests`
 (Testcontainers, SQL Server 2025); "smoke" = `tests/smoke/compose-smoke.sh`. Local runs:
-155 in-process tests, 59 integration tests, 63 smoke checks, all passing.
+156 in-process tests, 63 integration tests, 63 smoke checks, all passing.
 
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|
@@ -725,8 +731,8 @@ Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.Integrati
 | 7 | App depends on `db-init` completing (owner, DEC-022) | **Met** | `deploy/docker-compose.yml` (`service_completed_successfully`); smoke: stack becomes healthy |
 | 8 | Readiness requires schema version == the build's, logs both, 503 on any mismatch (owner, DEC-023) | **Met** | Integration: healthy / older (0) / newer (9999), EventId 1003 with both values. Smoke: 503 on a newer schema, logged, recovers |
 | 9 | Migration password only in `db-init`; rejected if equal to the runtime or admin password (owner, DEC-024) | **Met** | Unit tests; smoke: exit 2 for an equal password; `docker inspect` of the app |
-| 10 | Runtime rights via `goldmark_runtime`, explicit DENY on AuditLog (owner, DEC-025) | **Met** | `0002_runtime_role.sql`; `migrate` verifies effective rights (integration: 6 tamper cases) |
+| 10 | Runtime rights via `goldmark_runtime`, explicit DENY on AuditLog (owner, DEC-025) | **Met** | `0002_runtime_role.sql`; `migrate` verifies effective rights in both directions (integration: 10 tamper cases) |
 | 11 | Integration tests: same SQL image digest as Compose, one container per collection (owner, DEC-027) | **Met** | Fixture reads `x-sql-image` from Compose; `SqlServerTests` collection |
 | 12 | Migration immutability: hash manifest, CI fails on a changed script (owner, DEC-028) | **Met (local)**; CI on the PR | `db/check-migrations.test.sh` (12 cases), CI job `migrations` |
 | 13 | #7: `Database:Port` validated; `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` rejected | **Met** | Unit tests (also `public`, `goldmark_runtime`, `sa`, for both logins) |
-| 14 | CI green | **Pending** | The PR's checks |
+| 14 | CI green | **Met** | PR #14: 12 checks green on the first push |

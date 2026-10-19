@@ -52,9 +52,11 @@ internal static class MigrateCommand
         """;
 
     // Executed as the runtime login after migration. Everything bootstrap-db checks, plus the
-    // schema- and object-level grants of goldmark_runtime (0002): DML on schema cmdb only, no
-    // UPDATE/DELETE on the audit log, nothing on schema dbo beyond reading the journal. Lower-
-    // scope grants on other objects are audited in slice 2b (#4). No rows = as expected.
+    // schema- and object-level grants of goldmark_runtime (0002), in both directions: nothing
+    // beyond DML on schema cmdb, no UPDATE/DELETE on the audit log, nothing on schema dbo beyond
+    // reading the journal; and every one of those grants present, so a revoked grant fails here
+    // rather than in the application. Lower-scope grants on other objects are audited in slice
+    // 2b (#4). No rows = exactly as expected.
     // Keep in step with the migrations that grant to goldmark_runtime: a new grant (for example
     // EXECUTE on a schema) must be allowed here in the same change, or migrate refuses.
     internal const string VerifyRuntimeSql = """
@@ -90,7 +92,18 @@ internal static class MigrateCommand
         FROM (VALUES (N'UPDATE'), (N'DELETE')) AS p(name)
         WHERE HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', p.name) = 1
         UNION ALL
-        SELECT N'missing database role', N'goldmark_runtime' WHERE ISNULL(IS_ROLEMEMBER(N'goldmark_runtime'), 0) <> 1;
+        SELECT N'missing database role', N'goldmark_runtime' WHERE ISNULL(IS_ROLEMEMBER(N'goldmark_runtime'), 0) <> 1
+        UNION ALL
+        SELECT N'missing permission on schema cmdb', p.name
+        FROM (VALUES (N'SELECT'), (N'INSERT'), (N'UPDATE'), (N'DELETE')) AS p(name)
+        WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb', N'SCHEMA', p.name), 0) = 0
+        UNION ALL
+        SELECT N'missing permission on cmdb.AuditLog', p.name
+        FROM (VALUES (N'SELECT'), (N'INSERT')) AS p(name)
+        WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', p.name), 0) = 0
+        UNION ALL
+        SELECT N'missing permission on dbo.SchemaVersions', N'SELECT'
+        WHERE ISNULL(HAS_PERMS_BY_NAME(N'dbo.SchemaVersions', N'OBJECT', N'SELECT'), 0) = 0;
         """;
 
     public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
@@ -181,10 +194,11 @@ internal static class MigrateCommand
             await using (var runtimeConnection = new SqlConnection(runtime.ConnectionString))
             {
                 await runtimeConnection.OpenAsync();
-                if (await CommandSql.FindingsAsync(runtimeConnection, VerifyRuntimeSql) is { Count: > 0 } excess)
+                if (await CommandSql.FindingsAsync(runtimeConnection, VerifyRuntimeSql) is { Count: > 0 } findings)
                 {
                     return await RefuseAsync(error,
-                        $"the runtime login '{db.User}' has rights beyond {BootstrapDatabaseCommand.RuntimeRole}: {string.Join("; ", excess)}. Remove them.");
+                        $"the runtime login '{db.User}' must hold exactly the rights of {BootstrapDatabaseCommand.RuntimeRole}: " +
+                        $"{string.Join("; ", findings)}. Restore the role's grants and remove any others.");
                 }
             }
 
@@ -242,6 +256,20 @@ internal static class MigrateCommand
         if (string.IsNullOrEmpty(migration.Password))
         {
             errors.Add($"{MigrationOptions.SectionName}:Password is required.");
+        }
+        else
+        {
+            // Same separation as bootstrap-db, also when migrate runs on its own: the app's
+            // credential must never authenticate as db_owner, nor the migrator as the admin.
+            if (string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
+            {
+                errors.Add($"{MigrationOptions.SectionName}:Password must differ from {DatabaseOptions.SectionName}:Password.");
+            }
+
+            if (string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+            {
+                errors.Add($"{MigrationOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
+            }
         }
 
         errors.AddRange(BootstrapDatabaseCommand.CommonConnectionErrors(db));

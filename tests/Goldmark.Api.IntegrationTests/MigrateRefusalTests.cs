@@ -29,7 +29,12 @@ public sealed class MigrateRefusalTests(SqlServerFixture sql)
     [InlineData("GRANT INSERT ON OBJECT::dbo.SchemaVersions TO {0};", "permission on dbo.SchemaVersions INSERT")]
     [InlineData("ALTER ROLE db_datawriter ADD MEMBER {0};", "database role db_datawriter")]
     [InlineData("GRANT CREATE TABLE TO {0};", "database permission CREATE TABLE")]
-    public async Task Migrate_refuses_a_runtime_login_with_effective_rights_beyond_its_role(string change, string? finding)
+    // A revoked grant must fail here, not later in the application (Codex on #14).
+    [InlineData("REVOKE SELECT ON SCHEMA::cmdb FROM goldmark_runtime;", "missing permission on schema cmdb SELECT")]
+    [InlineData("REVOKE UPDATE ON SCHEMA::cmdb FROM goldmark_runtime;", "missing permission on schema cmdb UPDATE")]
+    [InlineData("DENY INSERT ON OBJECT::cmdb.AuditLog TO goldmark_runtime;", "missing permission on cmdb.AuditLog INSERT")]
+    [InlineData("REVOKE SELECT ON OBJECT::dbo.SchemaVersions FROM goldmark_runtime;", "missing permission on dbo.SchemaVersions SELECT")]
+    public async Task Migrate_refuses_a_runtime_login_whose_effective_rights_differ_from_its_role(string change, string? finding)
     {
         var (installation, _) = await sql.ProvisionAsync();
         await sql.AsAdminAsync(installation.Database, string.Format(System.Globalization.CultureInfo.InvariantCulture, change, installation.RuntimeUser));
