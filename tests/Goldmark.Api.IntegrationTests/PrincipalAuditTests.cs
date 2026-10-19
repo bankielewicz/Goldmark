@@ -25,7 +25,7 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
     [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; DENY CONNECT SQL TO {0};", "login-connect-denied:{0}:{0}")]
     [InlineData("CREATE CREDENTIAL ItCred{2} WITH IDENTITY = N'it', SECRET = N'it-secret'; CREATE LOGIN {0} WITH PASSWORD = N'{1}'; ALTER LOGIN {0} WITH CREDENTIAL = ItCred{2};",
         "login-credential:{0}:ItCred{2}")]
-    [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; GRANT IMPERSONATE ON LOGIN::sa TO {0};", "server-grant:{0}:IMPERSONATE:SERVER_PRINCIPAL:sa")]
+    [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; GRANT IMPERSONATE ON LOGIN::sa TO {0};", "server-grant:{0}:IMPERSONATE:LOGIN:[sa]")]
     [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; GRANT VIEW SERVER STATE TO {0};", "server-grant:{0}:VIEW+SERVER+STATE:SERVER")]
     [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; ALTER SERVER ROLE bulkadmin ADD MEMBER {0};", "server-role:{0}:bulkadmin")]
     [InlineData("CREATE LOGIN {0} WITH PASSWORD = N'{1}'; CREATE DATABASE ItMapped{2}; EXEC ItMapped{2}.sys.sp_executesql N'CREATE USER {0} FOR LOGIN {0};';",
@@ -56,8 +56,8 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
 
     [Theory]
     [InlineData("ALTER ROLE db_datareader ADD MEMBER {0};", "database-role:{0}:db_datareader")]
-    [InlineData("CREATE USER it_other_user WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_other_user TO {0};", "database-grant:{0}:IMPERSONATE:USER:it_other_user")]
-    [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditLog TO {0};", "database-grant:{0}:UPDATE:OBJECT:cmdb.AuditLog")] // direct, even though the role's DENY wins
+    [InlineData("CREATE USER it_other_user WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_other_user TO {0};", "database-grant:{0}:IMPERSONATE:USER:[it_other_user]")]
+    [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditLog TO {0};", "database-grant:{0}:UPDATE:OBJECT:[cmdb].[AuditLog]")] // direct, even though the role's DENY wins
     [InlineData("DENY CONNECT TO {0};", "database-connect-denied:{0}:{0}")]
     [InlineData("EXEC('CREATE SCHEMA it_owned'); ALTER AUTHORIZATION ON SCHEMA::it_owned TO {0};", "owns:{0}:schema:it_owned")]
     [InlineData("EXEC('CREATE SCHEMA it_other'); GRANT SELECT ON SCHEMA::it_other TO goldmark_runtime;", "database-securable:{0}:SCHEMA:it_other:SELECT")]
@@ -68,7 +68,7 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
     [InlineData("CREATE CERTIFICATE ItCert ENCRYPTION BY PASSWORD = N'Cert-Pa55word!' WITH SUBJECT = N'it'; GRANT CONTROL ON CERTIFICATE::ItCert TO goldmark_runtime;",
         "database-securable:{0}:CERTIFICATE:ItCert:CONTROL")]
     [InlineData("CREATE USER it_imp WITHOUT LOGIN; GRANT IMPERSONATE ON USER::it_imp TO goldmark_runtime;", "database-securable:{0}:USER:it_imp:IMPERSONATE")]
-    [InlineData("GRANT SELECT ON SCHEMA::cmdb TO public;", "goldmark-grant:{3}:public:SELECT:cmdb")]
+    [InlineData("GRANT SELECT ON SCHEMA::cmdb TO public;", "goldmark-grant:{3}:public:SELECT:SCHEMA:[cmdb]")]
     [InlineData("ALTER DATABASE CURRENT SET TRUSTWORTHY ON;", "goldmark-database-option:{3}:TRUSTWORTHY")]
     public async Task A_managed_runtime_login_changed_out_of_band_is_refused_on_the_next_run(string change, string expectedId) // #4
     {
@@ -80,6 +80,61 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
         Assert.Equal(3, refused.Code);
         Assert.Contains($"[{Format(expectedId, installation, "", 0)}]", refused.Error, StringComparison.Ordinal);
         Assert.DoesNotContain("GOLDMARK_DB_ACCEPTED_FINDINGS", refused.Error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_adopted_same_name_user_is_audited_before_it_is_remapped() // Codex on #17
+    {
+        var installation = sql.NewInstallation();
+        await sql.AsAdminAsync("master", $"CREATE DATABASE {installation.Database};");
+        await sql.AsAdminAsync(installation.Database,
+            $"CREATE USER {installation.RuntimeUser} WITHOUT LOGIN; ALTER ROLE db_owner ADD MEMBER {installation.RuntimeUser};");
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], Adopt);
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains($"[database-role:{installation.RuntimeUser}:db_owner]", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("Nothing was changed.", refused.Error, StringComparison.Ordinal);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master",
+            $"SELECT COUNT(*) FROM sys.server_principals WHERE name IN (N'{installation.RuntimeUser}', N'{installation.MigrationUser}');"));
+    }
+
+    [Fact]
+    public async Task A_Goldmark_database_owned_by_a_login_without_CONTROL_SERVER_is_refused() // Codex security review on #17
+    {
+        // A login allowed to create databases creates "Goldmark" first and stays its dbo.
+        var installation = sql.NewInstallation();
+        var creator = $"{installation.MigrationUser}_creator";
+        var creatorPassword = SqlServerFixture.Secret();
+        await sql.AsAdminAsync("master", $"CREATE LOGIN {creator} WITH PASSWORD = N'{creatorPassword}'; ALTER SERVER ROLE dbcreator ADD MEMBER {creator};");
+        await sql.ExecuteAsync(creator, creatorPassword, "master", $"CREATE DATABASE {installation.Database};");
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains($"[goldmark-database-owner:{installation.Database}:{creator}]", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("Nothing was changed.", refused.Error, StringComparison.Ordinal);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master",
+            $"SELECT COUNT(*) FROM sys.server_principals WHERE name IN (N'{installation.RuntimeUser}', N'{installation.MigrationUser}');"));
+
+        await sql.AsAdminAsync("master", $"ALTER AUTHORIZATION ON DATABASE::{installation.Database} TO sa;");
+        var owned = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
+        Assert.True(owned.Code == 0, owned.ToString());
+    }
+
+    [Fact]
+    public async Task Another_principal_with_rights_in_the_Goldmark_database_is_refused() // Codex security review on #17
+    {
+        var (installation, _) = await sql.ProvisionAsync();
+        await sql.AsAdminAsync(installation.Database, "CREATE USER it_extra WITHOUT LOGIN; ALTER ROLE db_datareader ADD MEMBER it_extra;");
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db"]);
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains($"[goldmark-database-principal:{installation.Database}:it_extra]", refused.Error, StringComparison.Ordinal);
+
+        await sql.AsAdminAsync(installation.Database, "ALTER ROLE db_datareader DROP MEMBER it_extra;");
+        Assert.Equal(0, (await sql.RunAsync(installation, ["bootstrap-db"])).Code); // CONNECT alone is not a finding
     }
 
     [Fact]
@@ -151,7 +206,7 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
             foreach (var database in PrincipalAudit.SystemDatabases)
             {
                 await connection.ChangeDatabaseAsync(database, TestContext.Current.CancellationToken);
-                measured[database] = [.. (await PrincipalAudit.PublicGrantsAsync(connection)).Select(g => PrincipalAudit.BaselineKey(g.Grantee, g.Permission, g.Target))];
+                measured[database] = [.. (await PrincipalAudit.PublicGrantsAsync(connection)).Select(g => PrincipalAudit.BaselineKey(g.Grantee, g.Permission, g.Class, g.Target))];
             }
         }
 
@@ -174,7 +229,7 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
         // A new database copies model, so a fresh Goldmark database has exactly the "*" set.
         var (installation, _) = await sql.SharedAsync("principal-audit");
         await using var goldmark = await sql.OpenAsync("sa", sql.SaPassword, installation.Database);
-        var own = (await PrincipalAudit.PublicGrantsAsync(goldmark)).Select(g => PrincipalAudit.BaselineKey(g.Grantee, g.Permission, g.Target)).ToHashSet(StringComparer.Ordinal);
+        var own = (await PrincipalAudit.PublicGrantsAsync(goldmark)).Select(g => PrincipalAudit.BaselineKey(g.Grantee, g.Permission, g.Class, g.Target)).ToHashSet(StringComparer.Ordinal);
         Assert.True(own.SetEquals(baseline["*"]), string.Join(", ", own.Except(baseline["*"]).Concat(baseline["*"].Except(own))));
     }
 }

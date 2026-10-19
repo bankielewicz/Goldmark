@@ -97,7 +97,7 @@ public sealed class InstanceAuditTests(SqlServerFixture sql)
             // A new database copies model, including guest's CONNECT: the Goldmark database itself is then open.
             var accepted = await sql.RunAsync(installation, ["bootstrap-db"], Accept("guest-connect:model"));
 
-            Assert.True(accepted.Code == 3 && accepted.Error.Contains($"[goldmark-grant:{installation.Database}:guest:CONNECT]", StringComparison.Ordinal), accepted.ToString());
+            Assert.True(accepted.Code == 3 && accepted.Error.Contains($"[goldmark-grant:{installation.Database}:guest:CONNECT:DATABASE]", StringComparison.Ordinal), accepted.ToString());
             Assert.Contains("The changes listed above were made", accepted.Error, StringComparison.Ordinal);
         }
         finally
@@ -119,7 +119,7 @@ public sealed class InstanceAuditTests(SqlServerFixture sql)
         {
             var refused = await sql.RunAsync(installation, ["bootstrap-db"]);
 
-            Assert.True(refused.Code == 3 && refused.Error.Contains($"[goldmark-grant:{installation.Database}:guest:CONNECT]", StringComparison.Ordinal), refused.ToString());
+            Assert.True(refused.Code == 3 && refused.Error.Contains($"[goldmark-grant:{installation.Database}:guest:CONNECT:DATABASE]", StringComparison.Ordinal), refused.ToString());
             Assert.DoesNotContain($"add goldmark-grant", refused.Error, StringComparison.Ordinal);
         }
         finally
@@ -202,9 +202,12 @@ public sealed class InstanceAuditTests(SqlServerFixture sql)
     }
 
     [Theory]
-    [InlineData("msdb", "GRANT SELECT ON dbo.sysjobs TO public;", "REVOKE SELECT ON dbo.sysjobs FROM public;", "system-grant:msdb:public:SELECT:dbo.sysjobs")]
-    [InlineData("master", "GRANT EXECUTE ON sys.xp_cmdshell TO public;", "REVOKE EXECUTE ON sys.xp_cmdshell FROM public;", "system-grant:master:public:EXECUTE:sys.xp_cmdshell")]
-    [InlineData("tempdb", "GRANT VIEW DATABASE STATE TO public;", "REVOKE VIEW DATABASE STATE FROM public;", "system-grant:tempdb:public:VIEW+DATABASE+STATE")]
+    [InlineData("msdb", "GRANT SELECT ON dbo.sysjobs TO public;", "REVOKE SELECT ON dbo.sysjobs FROM public;", "system-grant:msdb:public:SELECT:OBJECT:[dbo].[sysjobs]")]
+    [InlineData("master", "GRANT EXECUTE ON sys.xp_cmdshell TO public;", "REVOKE EXECUTE ON sys.xp_cmdshell FROM public;", "system-grant:master:public:EXECUTE:OBJECT:[sys].[xp_cmdshell]")]
+    [InlineData("tempdb", "GRANT VIEW DATABASE STATE TO public;", "REVOKE VIEW DATABASE STATE FROM public;", "system-grant:tempdb:public:VIEW+DATABASE+STATE:DATABASE")]
+    // A schema-wide grant named like a baseline object is not the baseline's grant (Codex on #17).
+    [InlineData("msdb", "EXEC(''CREATE SCHEMA [sys.all_objects]''); GRANT SELECT ON SCHEMA::[sys.all_objects] TO public;",
+        "REVOKE SELECT ON SCHEMA::[sys.all_objects] FROM public; DROP SCHEMA [sys.all_objects];", "system-grant:msdb:public:SELECT:SCHEMA:[sys.all_objects]")]
     public async Task Grants_to_public_or_guest_in_system_databases_beyond_the_measured_baseline_are_refused(
         string database, string grant, string revoke, string id) // #4
     {

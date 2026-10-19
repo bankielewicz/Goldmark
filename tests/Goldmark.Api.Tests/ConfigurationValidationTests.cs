@@ -440,7 +440,7 @@ public sealed class BootstrapValidationTests
 
     [Theory]
     [InlineData("guest-connect:Sales", null)]
-    [InlineData("guest-connect:Sales, linked-login-all-logins:LS1\nsystem-grant:msdb:public:EXECUTE:dbo.sp_x", null)]
+    [InlineData("guest-connect:Sales, linked-login-all-logins:LS1\nsystem-grant:msdb:public:EXECUTE:OBJECT:[dbo].[sp_x]", null)]
     [InlineData("cross-db-chaining", null)]
     [InlineData("server-role:goldmark_app:sysadmin", "cannot be accepted")]
     [InlineData("login-policy-off:goldmark_app", "cannot be accepted")]
@@ -490,8 +490,9 @@ public sealed class AuditFindingTests
     [InlineData("public-server-grant", new[] { "VIEW SERVER STATE", "SERVER" }, "public-server-grant:VIEW+SERVER+STATE:SERVER")]
     [InlineData("guest-connect", new[] { "a b" }, "guest-connect:a+b")]
     [InlineData("linked-login-all-logins", new[] { "host,1433" }, "linked-login-all-logins:host%2C1433")]
-    [InlineData("system-grant", new[] { "msdb", "public", "EXECUTE", "dbo.sp:x" }, "system-grant:msdb:public:EXECUTE:dbo.sp%3Ax")]
-    [InlineData("database-grant", new[] { "app", "SELECT", "OBJECT", "dbo.T (a+b%)" }, "database-grant:app:SELECT:OBJECT:dbo.T+%28a%2Bb%25%29")]
+    [InlineData("system-grant", new[] { "msdb", "public", "EXECUTE", "OBJECT", "[dbo].[sp:x]" }, "system-grant:msdb:public:EXECUTE:OBJECT:[dbo].[sp%3Ax]")]
+    [InlineData("system-grant", new[] { "msdb", "public", "SELECT", "SCHEMA", "[sys.all_objects]" }, "system-grant:msdb:public:SELECT:SCHEMA:[sys.all_objects]")]
+    [InlineData("database-grant", new[] { "app", "SELECT", "OBJECT", "[dbo].[T] ([a+b%])" }, "database-grant:app:SELECT:OBJECT:[dbo].[T]+%28[a%2Bb%25]%29")]
     [InlineData("server-grant", new[] { "app", "CONTROL SERVER", "SERVER", "" }, "server-grant:app:CONTROL+SERVER:SERVER")]
     [InlineData("guest-connect", new[] { "Ventes-été" }, "guest-connect:Ventes-%C3%A9t%C3%A9")]
     [InlineData("cross-db-chaining", new string[0], "cross-db-chaining")]
@@ -526,7 +527,8 @@ public sealed class AuditFindingTests
         string[] kinds =
         [
             "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
-            "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "login-disabled", "login-policy-off",
+            "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
+            "goldmark-database-principal", "login-disabled", "login-policy-off",
             "login-expiration-on", "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential",
             "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
             "database-grant", "database-connect-denied", "server-securable", "database-securable",
@@ -542,8 +544,9 @@ public sealed class AuditFindingTests
     public void The_measured_baseline_is_embedded()
     {
         var baseline = PrincipalAudit.Baseline.Value;
-        Assert.Contains(PrincipalAudit.BaselineKey("guest", "CONNECT", ""), baseline["tempdb"]);
-        Assert.Contains(PrincipalAudit.BaselineKey("public", "SELECT", "sys.objects"), baseline["*"]);
+        Assert.Contains(PrincipalAudit.BaselineKey("guest", "CONNECT", "DATABASE", ""), baseline["tempdb"]);
+        Assert.Contains(PrincipalAudit.BaselineKey("public", "SELECT", "OBJECT", "[sys].[objects]"), baseline["*"]);
+        Assert.DoesNotContain(PrincipalAudit.BaselineKey("public", "SELECT", "SCHEMA", "[sys].[objects]"), baseline["*"]);
         Assert.All(PrincipalAudit.SystemDatabases.Where(d => d != "model"), d => Assert.True(baseline.ContainsKey(d), d));
     }
 }
@@ -557,13 +560,38 @@ public sealed class FindingPolicyTests
     [Fact]
     public void Accepted_instance_findings_are_reported_but_do_not_refuse()
     {
-        var policy = FindingPolicy.Parse("GUEST-CONNECT:sales");
+        var policy = FindingPolicy.Parse("guest-connect:Sales");
         using var output = new StringWriter();
 
         var refused = policy.Refused([Guest, Guest], output, "bootstrap-db");
 
         Assert.Empty(refused);
         Assert.Equal(1, output.ToString().Split("accepted finding [guest-connect:Sales]").Length - 1);
+    }
+
+    [Fact]
+    public void Accepted_IDs_match_exactly_because_names_may_differ_only_by_case() // Codex on #17
+    {
+        var policy = FindingPolicy.Parse("guest-connect:Sales");
+        using var output = new StringWriter();
+        var lower = new AuditFinding("guest-connect", ["sales"]);
+
+        var refused = policy.Refused([Guest, lower], output, "bootstrap-db");
+
+        Assert.Same(lower, Assert.Single(refused));
+    }
+
+    [Fact]
+    public void Suggested_fixes_quote_names_so_a_pasted_fix_cannot_run_anything_else() // Codex on #17
+    {
+        var guest = new AuditFinding("guest-connect", ["x]; DROP DATABASE Goldmark;--"]).Description;
+        Assert.Contains("USE [x]]; DROP DATABASE Goldmark;--]; REVOKE CONNECT FROM guest;", guest, StringComparison.Ordinal);
+
+        var linked = new AuditFinding("linked-login-all-logins", ["a'; DROP DATABASE Goldmark;--"]).Description;
+        Assert.Contains("@rmtsrvname = N'a''; DROP DATABASE Goldmark;--', @locallogin = NULL;", linked, StringComparison.Ordinal);
+
+        var grant = new AuditFinding("system-grant", ["msdb", "public", "SELECT WITH GRANT OPTION", "OBJECT", "[dbo].[sysjobs]"]).Description;
+        Assert.Contains("Fix: USE [msdb]; REVOKE SELECT ON OBJECT::[dbo].[sysjobs] FROM [public] CASCADE;", grant, StringComparison.Ordinal);
     }
 
     [Fact]

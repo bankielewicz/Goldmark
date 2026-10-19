@@ -71,6 +71,11 @@ internal static class BootstrapDatabaseCommand
     // audit and provisioning need (PWDCOMPARE reads password hashes, which needs CONTROL SERVER).
     private const string AdminRightsSql = "SELECT ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, 'CONTROL SERVER'), 0);";
 
+    // Read-only. The migrations use SQL Server 2025's native json type (DEC-030: 2025 is the
+    // minimum), so an older server is refused before anything is created (Codex on #17).
+    private const string ServerVersionSql = "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS int);";
+    private const int MinimumMajorVersion = 17;
+
     // Identifiers and the password are parameters, quoted server-side with QUOTENAME,
     // because DDL statements cannot take parameters directly.
     // AUTO_CLOSE (on by default for new databases on Express) would close the database whenever
@@ -255,6 +260,12 @@ internal static class BootstrapDatabaseCommand
                     "Goldmark's logins. Nothing was changed.");
             }
 
+            if (await ScalarAsync(connection, ServerVersionSql, db) is var major and < MinimumMajorVersion)
+            {
+                return await RefuseAsync(error,
+                    $"Goldmark needs SQL Server 2025 (major version {MinimumMajorVersion}) or later; this server is major version {major}. Nothing was changed.");
+            }
+
             var databaseExists = await ScalarAsync(connection, DatabaseExistsSql, db) == 1;
             if (existing && !databaseExists)
             {
@@ -293,7 +304,7 @@ internal static class BootstrapDatabaseCommand
             }
 
             // The principal audit, from the administrator's side, before any change (DEC-031).
-            if (policy.Refused(await AdminAuditAsync(connection, db, principals, otherDatabases: true), output, Name) is { Count: > 0 } before)
+            if (policy.Refused(await AdminAuditAsync(connection, db, principals, bootstrap, otherDatabases: true), output, Name) is { Count: > 0 } before)
             {
                 return await RefuseAsync(error, $"{FindingPolicy.Describe(before)}{Environment.NewLine}Nothing was changed.");
             }
@@ -335,7 +346,7 @@ internal static class BootstrapDatabaseCommand
             await connection.ChangeDatabaseAsync("master");
 
             // 3. Audit again: principals created by this run had nothing to check before.
-            if (policy.Refused(await AdminAuditAsync(connection, db, principals, otherDatabases: false), output, Name) is { Count: > 0 } after)
+            if (policy.Refused(await AdminAuditAsync(connection, db, principals, bootstrap, otherDatabases: false), output, Name) is { Count: > 0 } after)
             {
                 return await RefuseAsync(error, $"{FindingPolicy.Describe(after)}{Environment.NewLine}The changes listed above were made; fix these and run db-init again.");
             }
@@ -378,7 +389,8 @@ internal static class BootstrapDatabaseCommand
         }
     }
 
-    private static async Task<List<AuditFinding>> AdminAuditAsync(SqlConnection connection, DatabaseOptions db, Principal[] principals, bool otherDatabases)
+    private static async Task<List<AuditFinding>> AdminAuditAsync(
+        SqlConnection connection, DatabaseOptions db, Principal[] principals, BootstrapOptions bootstrap, bool otherDatabases)
     {
         var findings = await PrincipalAudit.EnvironmentAsync(connection, db.Name);
         if (otherDatabases)
@@ -386,9 +398,10 @@ internal static class BootstrapDatabaseCommand
             findings.AddRange(await PrincipalAudit.DatabasesAsync(connection, db.Name, principals[0].Login, principals[1].Login));
         }
 
+        findings.AddRange(await PrincipalAudit.GoldmarkDatabaseAsync(connection, db.Name, principals[0].Login, principals[1].Login));
         foreach (var principal in principals)
         {
-            findings.AddRange(await PrincipalAudit.PrincipalAsync(connection, db.Name, principal.Login, principal.ExpectedRole));
+            findings.AddRange(await PrincipalAudit.PrincipalAsync(connection, db.Name, principal.Login, principal.ExpectedRole, bootstrap.AdoptExistingLogin));
         }
 
         return findings;
@@ -408,14 +421,15 @@ internal static class BootstrapDatabaseCommand
         if (user.Mapped && user.Name == "dbo")
         {
             return $"the {principal.Purpose} login '{principal.Login}' owns the database '{database}' (it is its dbo). Nothing was changed. " +
-                $"Fix: ALTER AUTHORIZATION ON DATABASE::[{database}] TO <another login>;";
+                $"Fix: ALTER AUTHORIZATION ON DATABASE::{AuditFinding.Q(database)} TO <a login with CONTROL SERVER>;";
         }
 
         if (user.Mapped && !string.Equals(user.Name, principal.Login, StringComparison.Ordinal))
         {
             // migrate finds the user by name, so a differently named user would fail there (#15).
             return $"the database user mapped to the {principal.Purpose} login '{principal.Login}' in '{database}' is named '{user.Name}'; " +
-                $"Goldmark requires it to have the login's name. Nothing was changed. Fix: USE [{database}]; ALTER USER [{user.Name}] WITH NAME = [{principal.Login}];";
+                $"Goldmark requires it to have the login's name. Nothing was changed. " +
+                $"Fix: USE {AuditFinding.Q(database)}; ALTER USER {AuditFinding.Q(user.Name!)} WITH NAME = {AuditFinding.Q(principal.Login)};";
         }
 
         if (user.Mapped && user.Marker is not null && user.Marker != principal.MarkerValue)

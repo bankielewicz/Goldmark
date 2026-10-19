@@ -364,10 +364,13 @@ else
   fail "an existing login not created by Goldmark is refused with nothing changed" "exit ${refused_code}, ${foreign_state}"
 fi
 
-# Opt-in adoption takes it over: password set, user created and marked.
-adopted="$(db_init -e Goldmark__Database__User=smoke_foreign -e Goldmark__Database__Password="${app_password}" -e Goldmark__Bootstrap__AdoptExistingLogin=true)"; adopted_code=$?
-adopted_marker="$(sql_as sa "${sa_password}" "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 4 AND major_id = USER_ID('smoke_foreign') AND name = N'goldmark:managed';")"
-sql_as sa "${sa_password}" "DROP USER smoke_foreign; USE master; DROP LOGIN smoke_foreign;" >/dev/null
+# Opt-in adoption takes it over: password set, user created and marked. Its own database and
+# migration login: the principal audit refuses any other principal with rights in the database,
+# such as goldmark_app (Codex on #17), and a login already mapped into another database.
+adopted="$(db_init -e Goldmark__Database__User=smoke_foreign -e Goldmark__Database__Password="${app_password}" -e Goldmark__Bootstrap__AdoptExistingLogin=true \
+  -e Goldmark__Database__Name=GoldmarkAdoptProbe -e Goldmark__Migration__User=smoke_adopt_migrator)"; adopted_code=$?
+adopted_marker="$(sql_as sa "${sa_password}" "SELECT COUNT(*) FROM GoldmarkAdoptProbe.sys.extended_properties AS e JOIN GoldmarkAdoptProbe.sys.database_principals AS u ON u.principal_id = e.major_id WHERE e.class = 4 AND u.name = N'smoke_foreign' AND e.name = N'goldmark:managed';")"
+sql_as sa "${sa_password}" "USE master; DROP DATABASE GoldmarkAdoptProbe; DROP LOGIN smoke_foreign; DROP LOGIN smoke_adopt_migrator;" >/dev/null
 if [[ ${adopted_code} -eq 0 && "${adopted}" == *"adopting the existing login"* && "${adopted_marker}" == 1 ]]; then
   pass "GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true adopts and marks an existing login"
 else

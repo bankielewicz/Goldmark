@@ -21,7 +21,8 @@ runtime login only.
 ## Requirements
 
 - **SQL Server 2025** (Express, Standard or Enterprise; Linux or Windows). Goldmark
-  uses the native `json` type.
+  uses the native `json` type; `bootstrap-db` refuses an older server (exit 3)
+  before it creates anything.
 - **TCP** reachable from the Docker host, SQL Server authentication enabled (mixed
   mode). Windows authentication is not supported yet.
 - **Encryption.** `GOLDMARK_DB_ENCRYPT=Strict` (TDS 8, default) or `Mandatory`
@@ -92,7 +93,8 @@ which the migrations create, and refuses any other right.
 
 ## What `db-init` checks on every run
 
-1. The administrator has CONTROL SERVER; in Mode `Existing`, the database exists.
+1. The administrator has CONTROL SERVER, the server is SQL Server 2025 or later, and
+   in Mode `Existing` the database exists.
 2. Each login is a SQL login, its database user has the login's name, it is not
    managed by Goldmark for the other purpose, and (Mode `Existing`) everything above
    is in place.
@@ -121,7 +123,9 @@ run. It has two layers:
   role, a group or `guest` are found too.
 
 Every finding has an **ID** (`kind:part[:part…]`, names encoded so an ID never
-contains a comma, colon or space) and a fix. For example:
+contains a comma, colon or space) and a fix. Securable targets in IDs are written
+as `QUOTENAME` does (`OBJECT:[dbo].[sysjobs]`), and every name in a suggested fix is
+quoted, so a pasted fix never runs anything else. For example:
 
 ```text
 bootstrap-db: refusing to continue: the principal audit found 1 problem(s):
@@ -138,6 +142,8 @@ on a shared server. You may accept those **by ID**:
 GOLDMARK_DB_ACCEPTED_FINDINGS=guest-connect:Sales,system-grant:msdb:public:SELECT:dbo.sysjobs
 ```
 
+- IDs match exactly, including case: on a case-sensitive server `Sales` and
+  `sales` are different databases.
 - An accepted finding is still reported on every run (`accepted finding [...]`).
 - An accepted ID that no longer occurs is a warning, so the list does not go stale.
 - A malformed ID, or the ID of a finding that cannot be accepted, is exit 2.
@@ -152,7 +158,7 @@ Acceptable kinds (about the shared instance):
 | `guest-connect:<db>` | `guest` has `CONNECT` in another database (default only in master, tempdb, msdb), so every login can enter it (#2) |
 | `linked-login-all-logins:<server>` | A linked server maps every login to a fixed remote login (#3). The default self-credential mapping is not reported |
 | `remote-login-all-logins:<server>` | A remote-login mapping for every login (#3) |
-| `system-grant:<db>:<grantee>:<permission>[:<target>]` | A grant to `public` or `guest` in master, msdb, tempdb or model beyond SQL Server 2025's own (#4; measured baseline in `src/Goldmark.Api/Commands/Audit/`) |
+| `system-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in master, msdb, tempdb or model beyond SQL Server 2025's own (#4; measured baseline in `src/Goldmark.Api/Commands/Audit/`) |
 | `cross-db-chaining` | The server option `cross db ownership chaining` is on |
 | `database-unreadable:<db>:<error>` | A database could not be read (for example a non-readable secondary), so it was not checked |
 
@@ -160,7 +166,9 @@ Kinds that must be fixed (about Goldmark's logins or database):
 
 | Kind | Meaning |
 |---|---|
-| `goldmark-grant:<db>:<grantee>:<permission>[:<target>]` | A grant to `public` or `guest` in the Goldmark database beyond a new database's default (a grant in `model` is copied into new databases) |
+| `goldmark-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in the Goldmark database beyond a new database's default (a grant in `model` is copied into new databases) |
+| `goldmark-database-owner:<db>:<owner>` | The Goldmark database is owned by a login without CONTROL SERVER (for example one that created it before Goldmark did): its owner controls everything in it |
+| `goldmark-database-principal:<db>:<principal>` | Another user or application role in the Goldmark database holds a role, a permission beyond `CONNECT`, or owns a schema or object |
 | `goldmark-database-option:<db>:<option>` | `TRUSTWORTHY` or `DB_CHAINING` is on for the Goldmark database |
 | `public-server-grant:<permission>:<class>[:<target>]` | A server-level grant to `public`: every login, Goldmark's included, holds it |
 | `login-disabled`, `login-policy-off`, `login-expiration-on`, `login-expired`, `login-locked`, `login-must-change` `:<login>` | Login state that weakens the password or makes Goldmark stop working on its own |
@@ -170,7 +178,7 @@ Kinds that must be fixed (about Goldmark's logins or database):
 | `owns:<login>:<kind>:<name>` | The login owns a database, a schema, an object or another securable (everything Goldmark uses is owned by `dbo`, DEC-029) |
 | `linked-login:<login>:<server>`, `remote-login:<login>:<server>` | A mapping for this login (#3) |
 | `mapped-into:<login>:<db>`, `database-access:<login>:<db>:<user>` | The login has a user in another database (directly or through a group) |
-| `database-role:<login>:<role>`, `database-grant:<login>:<permission>:<class>[:<target>]` | In the Goldmark database, a role or a direct grant besides the expected ones (rights come only through `goldmark_runtime`, or `db_owner` for the migration login) |
+| `database-role:<login>:<role>`, `database-grant:<login>:<permission>:<class>[:<target>]` | In the Goldmark database, a role or a direct grant besides the expected ones (rights come only through `goldmark_runtime`, or `db_owner` for the migration login). When adopting, the same-name user that would be remapped to the login is checked before anything changes |
 | `database-connect-denied:<login>:<grantee>` | `CONNECT` on the Goldmark database is denied |
 | `server-securable:<login>:<class>:<name>:<permission>` | A right on another login, server role or endpoint (for example `IMPERSONATE`) |
 | `database-securable:<login>:<class>:<name>:<permission>` | For the runtime login, a right on anything in the Goldmark database besides DML on schema `cmdb` and `SELECT` on the migration journal |

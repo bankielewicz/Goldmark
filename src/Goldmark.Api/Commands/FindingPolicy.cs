@@ -4,7 +4,8 @@ namespace Goldmark.Api.Commands;
 
 /// <summary>
 /// The operator's accepted audit findings (<c>Goldmark:Bootstrap:AcceptedFindings</c>,
-/// <c>GOLDMARK_DB_ACCEPTED_FINDINGS</c>): finding IDs separated by commas or white space. Only
+/// <c>GOLDMARK_DB_ACCEPTED_FINDINGS</c>): finding IDs separated by commas or white space, matched
+/// exactly (case-sensitive: names may differ only by case on some servers). Only
 /// findings about the shared instance can be accepted (<see cref="PrincipalAudit.IsAcceptableKind"/>);
 /// an accepted finding is still reported, and an accepted ID that no longer occurs is a warning.
 /// </summary>
@@ -14,7 +15,8 @@ internal sealed partial class FindingPolicy
     public const string Variable = "GOLDMARK_DB_ACCEPTED_FINDINGS";
 
     private readonly HashSet<string> _accepted;
-    private readonly HashSet<string> _matched = new(StringComparer.OrdinalIgnoreCase);
+    // Ordinal: names in IDs may differ only by case on a case-sensitive server (Codex on #17).
+    private readonly HashSet<string> _matched = new(StringComparer.Ordinal);
 
     private FindingPolicy(HashSet<string> accepted) => _accepted = accepted;
 
@@ -50,7 +52,7 @@ internal sealed partial class FindingPolicy
         return errors;
     }
 
-    public static FindingPolicy Parse(string? setting) => new(new HashSet<string>(Split(setting), StringComparer.OrdinalIgnoreCase));
+    public static FindingPolicy Parse(string? setting) => new(new HashSet<string>(Split(setting), StringComparer.Ordinal));
 
     /// <summary>
     /// Reports accepted findings and returns those that refuse the run (each once, by ID).
@@ -58,7 +60,7 @@ internal sealed partial class FindingPolicy
     public List<AuditFinding> Refused(IEnumerable<AuditFinding> findings, TextWriter output, string command)
     {
         var refused = new List<AuditFinding>();
-        foreach (var finding in findings.DistinctBy(f => f.Id, StringComparer.OrdinalIgnoreCase))
+        foreach (var finding in findings.DistinctBy(f => f.Id, StringComparer.Ordinal))
         {
             if (finding.Acceptable && _accepted.Contains(finding.Id))
             {

@@ -45,7 +45,8 @@ internal static class PrincipalAudit
     // Columns of every audit query: Kind and up to four ID parts (NULL = absent).
     private const string FindingsTable = "DECLARE @f TABLE (Kind nvarchar(64), A nvarchar(256), B nvarchar(256), C nvarchar(256), D nvarchar(512));";
 
-    // Target of a database-scope permission row (database_permissions alias p), as class and name.
+    // Target of a database-scope permission row (database_permissions alias p), as class and
+    // name. Names are QUOTENAME'd, so a target is unambiguous and can be pasted into a REVOKE.
     private const string DatabaseTargetClass = """
         CASE p.class WHEN 0 THEN N'DATABASE' WHEN 1 THEN N'OBJECT' WHEN 3 THEN N'SCHEMA' WHEN 4 THEN N'USER'
             WHEN 5 THEN N'ASSEMBLY' WHEN 6 THEN N'TYPE' WHEN 10 THEN N'XML SCHEMA COLLECTION'
@@ -56,11 +57,26 @@ internal static class PrincipalAudit
     private const string DatabaseTargetName = """
         CASE p.class
             WHEN 0 THEN NULL
-            WHEN 1 THEN ISNULL(OBJECT_SCHEMA_NAME(p.major_id) + N'.' + OBJECT_NAME(p.major_id), N'#' + CAST(p.major_id AS nvarchar(12)))
-                + CASE WHEN p.minor_id > 0 THEN N' (' + ISNULL(COL_NAME(p.major_id, p.minor_id), N'#' + CAST(p.minor_id AS nvarchar(12))) + N')' ELSE N'' END
-            WHEN 3 THEN ISNULL(SCHEMA_NAME(p.major_id), N'#' + CAST(p.major_id AS nvarchar(12)))
-            WHEN 4 THEN ISNULL(USER_NAME(p.major_id), N'#' + CAST(p.major_id AS nvarchar(12)))
-            WHEN 6 THEN ISNULL(TYPE_NAME(p.major_id), N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 1 THEN ISNULL(QUOTENAME(OBJECT_SCHEMA_NAME(p.major_id)) + N'.' + QUOTENAME(OBJECT_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
+                + CASE WHEN p.minor_id > 0 THEN N' (' + ISNULL(QUOTENAME(COL_NAME(p.major_id, p.minor_id)), N'#' + CAST(p.minor_id AS nvarchar(12))) + N')' ELSE N'' END
+            WHEN 3 THEN ISNULL(QUOTENAME(SCHEMA_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 4 THEN ISNULL(QUOTENAME(USER_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 6 THEN ISNULL((SELECT QUOTENAME(SCHEMA_NAME(t.schema_id)) + N'.' + QUOTENAME(t.name) FROM sys.types AS t WHERE t.user_type_id = p.major_id),
+                N'#' + CAST(p.major_id AS nvarchar(12)))
+            ELSE N'#' + CAST(p.major_id AS nvarchar(12)) END
+        """;
+
+    // Class and name of a server-scope permission row (server_permissions alias p).
+    private const string ServerTargetClass = """
+        CASE p.class WHEN 100 THEN N'SERVER'
+            WHEN 101 THEN CASE (SELECT sp.type FROM sys.server_principals AS sp WHERE sp.principal_id = p.major_id) WHEN 'R' THEN N'SERVER ROLE' ELSE N'LOGIN' END
+            WHEN 105 THEN N'ENDPOINT' ELSE p.class_desc COLLATE DATABASE_DEFAULT END
+        """;
+
+    private const string ServerTargetName = """
+        CASE p.class WHEN 100 THEN NULL
+            WHEN 101 THEN ISNULL(QUOTENAME(SUSER_NAME(p.major_id)), N'#' + CAST(p.major_id AS nvarchar(12)))
+            WHEN 105 THEN ISNULL((SELECT QUOTENAME(e.name) FROM sys.endpoints AS e WHERE e.endpoint_id = p.major_id), N'#' + CAST(p.major_id AS nvarchar(12)))
             ELSE N'#' + CAST(p.major_id AS nvarchar(12)) END
         """;
 
@@ -68,13 +84,14 @@ internal static class PrincipalAudit
 
     /// <summary>
     /// Every grant to <c>public</c> and <c>guest</c> in the current database, as
-    /// (grantee, permission, target). Used for the system databases and the Goldmark database,
-    /// and by the test that keeps the measured baseline current.
+    /// (grantee, permission, class, target). The class keeps, for example, a schema named
+    /// <c>sys.all_objects</c> apart from the view (Codex on #17). Used for the system databases
+    /// and the Goldmark database, and by the test that keeps the measured baseline current.
     /// </summary>
     internal const string PublicGrantsSql = $"""
         SET NOCOUNT ON;
-        SELECT USER_NAME(p.grantee_principal_id), {PermissionName},
-            CASE WHEN p.class = 0 THEN N'' ELSE ISNULL({DatabaseTargetName}, N'') END
+        SELECT USER_NAME(p.grantee_principal_id), {PermissionName}, {DatabaseTargetClass},
+            ISNULL({DatabaseTargetName}, N'')
         FROM sys.database_permissions AS p
         WHERE p.grantee_principal_id IN (0, 2) AND p.state IN ('G', 'W');
         """;
@@ -95,10 +112,7 @@ internal static class PrincipalAudit
 
         -- Server-level grants to public, which every login inherits, beyond SQL Server's own
         -- (VIEW ANY DATABASE, CONNECT on the system endpoints; measured on SQL Server 2025).
-        INSERT @f SELECT N'public-server-grant', {PermissionName}, p.class_desc,
-            CASE p.class WHEN 100 THEN NULL WHEN 101 THEN SUSER_NAME(p.major_id)
-                WHEN 105 THEN (SELECT e.name FROM sys.endpoints AS e WHERE e.endpoint_id = p.major_id)
-                ELSE N'#' + CAST(p.major_id AS nvarchar(12)) END, NULL
+        INSERT @f SELECT N'public-server-grant', {PermissionName}, {ServerTargetClass}, {ServerTargetName}, NULL
         FROM sys.server_permissions AS p
         WHERE p.grantee_principal_id = 2 AND p.state IN ('G', 'W')
             AND NOT (p.class = 100 AND p.permission_name = N'VIEW ANY DATABASE' AND p.state = 'G')
@@ -151,11 +165,16 @@ internal static class PrincipalAudit
         SELECT Kind, A, B, C, D FROM @f;
         """;
 
-    // Run in the Goldmark database through sp_executesql (see PrincipalSql).
+    // Run in the Goldmark database through sp_executesql (see PrincipalSql). The user is the
+    // one mapped to the login; when adopting, a same-name user that bootstrap-db would remap to
+    // the login is audited too, before anything is changed (Codex on #17).
     private const string PrincipalInDatabaseSql = $"""
         SET NOCOUNT ON;
         {FindingsTable}
         DECLARE @uid int = (SELECT principal_id FROM sys.database_principals WHERE sid = @sid);
+        IF @uid IS NULL AND @adopt_user = 1
+            SET @uid = (SELECT principal_id FROM sys.database_principals
+                WHERE name = @login AND type NOT IN ('R', 'A') AND principal_id > 4);
         IF @uid IS NOT NULL
         BEGIN
             INSERT @f SELECT N'database-role', @login, r.name, NULL, NULL
@@ -201,6 +220,36 @@ internal static class PrincipalAudit
         SELECT Kind, A, B, C, D FROM @f;
         """;
 
+    // Run in the Goldmark database as the administrator. Who else controls it: an owner (dbo)
+    // without CONTROL SERVER, for example a login that created the database before Goldmark did
+    // (Codex security review on #17), and any other user or application role that holds a role,
+    // a permission beyond CONNECT, or owns something. Goldmark's two users and the built-in
+    // principals are expected.
+    private const string GoldmarkDatabaseSql = $"""
+        SET NOCOUNT ON;
+        {FindingsTable}
+        DECLARE @owner varbinary(85) = (SELECT owner_sid FROM sys.databases WHERE database_id = DB_ID());
+        DECLARE @owner_id int = (SELECT principal_id FROM sys.server_principals WHERE sid = @owner);
+        IF @owner <> 0x01 AND NOT EXISTS (
+                SELECT 1 FROM sys.server_role_members AS m
+                WHERE m.member_principal_id = @owner_id AND m.role_principal_id = SUSER_ID(N'sysadmin'))
+            AND NOT EXISTS (
+                SELECT 1 FROM sys.server_permissions AS p
+                WHERE p.grantee_principal_id = @owner_id AND p.class = 100 AND p.permission_name = N'CONTROL SERVER' AND p.state IN ('G', 'W'))
+            INSERT @f VALUES (N'goldmark-database-owner', DB_NAME(), ISNULL(SUSER_SNAME(@owner), N'#unknown'), NULL, NULL);
+
+        INSERT @f SELECT DISTINCT N'goldmark-database-principal', DB_NAME(), u.name, NULL, NULL
+        FROM sys.database_principals AS u
+        WHERE u.type NOT IN ('R') AND u.principal_id > 4
+            AND u.sid NOT IN (ISNULL(SUSER_SID(@login1), 0x00), ISNULL(SUSER_SID(@login2), 0x00))
+            AND (EXISTS (SELECT 1 FROM sys.database_role_members AS m WHERE m.member_principal_id = u.principal_id)
+                OR EXISTS (SELECT 1 FROM sys.database_permissions AS p WHERE p.grantee_principal_id = u.principal_id
+                    AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT'))
+                OR EXISTS (SELECT 1 FROM sys.schemas AS s WHERE s.principal_id = u.principal_id)
+                OR EXISTS (SELECT 1 FROM sys.objects AS o WHERE o.principal_id = u.principal_id));
+        SELECT Kind, A, B, C, D FROM @f;
+        """;
+
     // Run in master as the administrator, for one login (#4). Nothing is returned for a login
     // that does not exist yet (bootstrap-db is about to create it).
     private const string PrincipalSql = $"""
@@ -230,10 +279,7 @@ internal static class PrincipalAudit
             INSERT @f SELECT N'server-role', @login, r.name, NULL, NULL
             FROM sys.server_role_members AS m JOIN sys.server_principals AS r ON r.principal_id = m.role_principal_id
             WHERE m.member_principal_id = @pid;
-            INSERT @f SELECT N'server-grant', @login, {PermissionName}, p.class_desc,
-                CASE p.class WHEN 100 THEN NULL WHEN 101 THEN SUSER_NAME(p.major_id)
-                    WHEN 105 THEN (SELECT e.name FROM sys.endpoints AS e WHERE e.endpoint_id = p.major_id)
-                    ELSE N'#' + CAST(p.major_id AS nvarchar(12)) END
+            INSERT @f SELECT N'server-grant', @login, {PermissionName}, {ServerTargetClass}, {ServerTargetName}
             FROM sys.server_permissions AS p
             WHERE p.grantee_principal_id = @pid AND p.state IN ('G', 'W') AND NOT (p.class = 100 AND p.permission_name = N'CONNECT SQL' AND p.state = 'G');
 
@@ -253,12 +299,14 @@ internal static class PrincipalAudit
             INSERT @f SELECT N'remote-login', @login, s.name, NULL, NULL
             FROM sys.remote_logins AS l JOIN sys.servers AS s ON s.server_id = l.server_id WHERE l.local_principal_id = @pid;
 
-            IF DB_ID(@db) IS NOT NULL
-            BEGIN
-                DECLARE @exec nvarchar(300) = QUOTENAME(@db) + N'.sys.sp_executesql';
-                INSERT @f EXEC @exec @in_database, N'@sid varbinary(85), @login sysname, @expected_role sysname',
-                    @sid = @sid, @login = @login, @expected_role = @expected_role;
-            END;
+        END;
+
+        -- Also when the login does not exist yet: adopting a same-name user remaps it to the login.
+        IF DB_ID(@db) IS NOT NULL AND (@pid IS NOT NULL OR @adopt_user = 1)
+        BEGIN
+            DECLARE @exec nvarchar(300) = QUOTENAME(@db) + N'.sys.sp_executesql';
+            INSERT @f EXEC @exec @in_database, N'@sid varbinary(85), @login sysname, @expected_role sysname, @adopt_user bit',
+                @sid = @sid, @login = @login, @expected_role = @expected_role, @adopt_user = @adopt_user;
         END;
         SELECT Kind, A, B, C, D FROM @f;
         """;
@@ -370,9 +418,9 @@ internal static class PrincipalAudit
         foreach (var system in SystemDatabases)
         {
             await admin.ChangeDatabaseAsync(system);
-            foreach (var (grantee, permission, target) in await PublicGrantsAsync(admin))
+            foreach (var (grantee, permission, securable, target) in await PublicGrantsAsync(admin))
             {
-                var key = BaselineKey(grantee, permission, target);
+                var key = BaselineKey(grantee, permission, securable, target);
                 if (key == GuestConnect)
                 {
                     continue; // reported as guest-connect by DatabasesAsync (model; the others are SQL Server's default)
@@ -380,7 +428,7 @@ internal static class PrincipalAudit
 
                 if (!baseline["*"].Contains(key) && !(baseline.TryGetValue(system, out var own) && own.Contains(key)))
                 {
-                    findings.Add(new AuditFinding("system-grant", [system, grantee, permission, target]));
+                    findings.Add(new AuditFinding("system-grant", [system, grantee, permission, securable, target]));
                 }
             }
         }
@@ -389,11 +437,11 @@ internal static class PrincipalAudit
         if (await DatabaseExistsAsync(admin, database))
         {
             await admin.ChangeDatabaseAsync(database);
-            foreach (var (grantee, permission, target) in await PublicGrantsAsync(admin))
+            foreach (var (grantee, permission, securable, target) in await PublicGrantsAsync(admin))
             {
-                if (!baseline["*"].Contains(BaselineKey(grantee, permission, target)))
+                if (!baseline["*"].Contains(BaselineKey(grantee, permission, securable, target)))
                 {
-                    findings.Add(new AuditFinding("goldmark-grant", [database, grantee, permission, target]));
+                    findings.Add(new AuditFinding("goldmark-grant", [database, grantee, permission, securable, target]));
                 }
             }
 
@@ -410,9 +458,35 @@ internal static class PrincipalAudit
     public static Task<List<AuditFinding>> DatabasesAsync(SqlConnection admin, string database, string login1, string login2) =>
         QueryAsync(admin, DatabasesSql, ("@db", database), ("@login1", login1), ("@login2", login2));
 
-    /// <summary>Findings about one of Goldmark's logins (administrator side), run in master.</summary>
-    public static Task<List<AuditFinding>> PrincipalAsync(SqlConnection admin, string database, string login, string expectedRole) =>
-        QueryAsync(admin, PrincipalSql, ("@db", database), ("@login", login), ("@expected_role", expectedRole), ("@in_database", PrincipalInDatabaseSql));
+    /// <summary>
+    /// Findings about one of Goldmark's logins (administrator side), run in master. With
+    /// <paramref name="adoptUser"/>, a same-name database user that adoption would remap is audited too.
+    /// </summary>
+    public static Task<List<AuditFinding>> PrincipalAsync(SqlConnection admin, string database, string login, string expectedRole, bool adoptUser) =>
+        QueryAsync(admin, PrincipalSql, ("@db", database), ("@login", login), ("@expected_role", expectedRole),
+            ("@adopt_user", adoptUser), ("@in_database", PrincipalInDatabaseSql));
+
+    /// <summary>
+    /// The Goldmark database's owner and any other principal that holds rights in it
+    /// (administrator side). Nothing while the database does not exist; the connection is left in master.
+    /// </summary>
+    public static async Task<List<AuditFinding>> GoldmarkDatabaseAsync(SqlConnection admin, string database, string login1, string login2)
+    {
+        if (!await DatabaseExistsAsync(admin, database))
+        {
+            return [];
+        }
+
+        await admin.ChangeDatabaseAsync(database);
+        try
+        {
+            return await QueryAsync(admin, GoldmarkDatabaseSql, ("@login1", login1), ("@login2", login2));
+        }
+        finally
+        {
+            await admin.ChangeDatabaseAsync("master");
+        }
+    }
 
     /// <summary>
     /// Findings from the login's own effective rights; the connection must be in the Goldmark
@@ -421,24 +495,25 @@ internal static class PrincipalAudit
     public static Task<List<AuditFinding>> SelfAsync(SqlConnection asLogin, string database, bool runtime, bool databases = true) =>
         QueryAsync(asLogin, SelfSql, ("@db", database), ("@runtime", runtime), ("@databases", databases));
 
-    internal static async Task<List<(string Grantee, string Permission, string Target)>> PublicGrantsAsync(SqlConnection connection)
+    internal static async Task<List<(string Grantee, string Permission, string Class, string Target)>> PublicGrantsAsync(SqlConnection connection)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = PublicGrantsSql;
         command.CommandTimeout = 60;
         await using var reader = await command.ExecuteReaderAsync();
-        var rows = new List<(string, string, string)>();
+        var rows = new List<(string, string, string, string)>();
         while (await reader.ReadAsync())
         {
-            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            rows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
         }
 
         return rows;
     }
 
-    internal static string BaselineKey(string grantee, string permission, string target) => $"{grantee}|{permission}|{target}";
+    internal static string BaselineKey(string grantee, string permission, string securable, string target) =>
+        $"{grantee}|{permission}|{securable}|{target}";
 
-    private static readonly string GuestConnect = BaselineKey("guest", "CONNECT", "");
+    private static readonly string GuestConnect = BaselineKey("guest", "CONNECT", "DATABASE", "");
 
     /// <summary>Measured baseline: scope ("*" or a database) → grantee|permission|target.</summary>
     internal static readonly Lazy<Dictionary<string, HashSet<string>>> Baseline = new(LoadBaseline);
@@ -519,48 +594,68 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
 
     private string P(int index) => index < Parts.Count ? Parts[index] : "";
 
+    // Names in the suggested fixes come from catalogs and are not limited to simple identifiers,
+    // so they are quoted like QUOTENAME (identifiers) or as N'' literals (Codex on #17): a pasted
+    // fix can never run anything else. Securable targets arrive from SQL already QUOTENAME'd.
     public string Description => Kind switch
     {
-        "guest-connect" => $"guest can connect to database '{P(0)}', so every login, Goldmark's included, can enter it. Fix: USE [{P(0)}]; REVOKE CONNECT FROM guest;",
+        "guest-connect" => $"guest can connect to database '{P(0)}', so every login, Goldmark's included, can enter it. Fix: USE {Q(P(0))}; REVOKE CONNECT FROM guest;",
         "database-unreadable" => $"database '{P(0)}' could not be read (SQL Server error {P(1)}), so it was not checked for guest access.",
-        "linked-login-all-logins" => $"linked server '{P(0)}' maps every login to a fixed remote login. Fix: EXEC sp_droplinkedsrvlogin @rmtsrvname = N'{P(0)}', @locallogin = NULL;",
-        "remote-login-all-logins" => $"remote server '{P(0)}' accepts every login through a remote-login mapping. Fix: EXEC sp_dropremotelogin @remoteserver = N'{P(0)}';",
-        "public-server-grant" => $"public holds {P(0)} on {Target(P(1), P(2))}, which every login inherits. Fix: REVOKE {P(0)} {On(P(1), P(2))}FROM public;",
-        "system-grant" => $"{P(1)} holds {P(2)}{(P(3).Length > 0 ? $" on {P(3)}" : "")} in {P(0)}, beyond SQL Server 2025's default; every login inherits it. Fix: USE [{P(0)}]; REVOKE {P(2)}{(P(3).Length > 0 ? $" ON {P(3)}" : "")} FROM {P(1)};",
+        "linked-login-all-logins" => $"linked server '{P(0)}' maps every login to a fixed remote login. Fix: EXEC sp_droplinkedsrvlogin @rmtsrvname = {L(P(0))}, @locallogin = NULL;",
+        "remote-login-all-logins" => $"remote server '{P(0)}' accepts every login through a remote-login mapping. Fix: EXEC sp_dropremotelogin @remoteserver = {L(P(0))};",
+        "public-server-grant" => $"public holds {P(0)} on {Target(P(1), P(2))}, which every login inherits. Fix: REVOKE {Revocable(P(0))} {On(P(1), P(2))}FROM public{Cascade(P(0))};",
+        "system-grant" => $"{P(1)} holds {P(2)} on {Target(P(3), P(4))} in {P(0)}, beyond SQL Server 2025's default; every login inherits it. " +
+            $"Fix: USE {Q(P(0))}; REVOKE {Revocable(P(2))} {On(P(3), P(4))}FROM {Q(P(1))}{Cascade(P(2))};",
         "cross-db-chaining" => "the server option 'cross db ownership chaining' is on. Fix: EXEC sp_configure 'cross db ownership chaining', 0; RECONFIGURE;",
-        "goldmark-grant" => $"{P(1)} holds {P(2)}{(P(3).Length > 0 ? $" on {P(3)}" : "")} in the Goldmark database '{P(0)}'. Fix: USE [{P(0)}]; REVOKE {P(2)}{(P(3).Length > 0 ? $" ON {P(3)}" : "")} FROM {P(1)};",
-        "goldmark-database-option" => $"the Goldmark database '{P(0)}' has {P(1)} on. Fix: ALTER DATABASE [{P(0)}] SET {P(1)} OFF;",
-        "login-disabled" => $"login '{P(0)}' is disabled. Goldmark does not enable logins. Fix: ALTER LOGIN [{P(0)}] ENABLE; or configure another login.",
-        "login-policy-off" => $"login '{P(0)}' does not enforce SQL Server's password policy. Fix: ALTER LOGIN [{P(0)}] WITH CHECK_POLICY = ON;",
-        "login-expiration-on" => $"login '{P(0)}' has password expiration on, so Goldmark would stop working when it expires. Fix: ALTER LOGIN [{P(0)}] WITH CHECK_EXPIRATION = OFF;",
+        "goldmark-grant" => $"{P(1)} holds {P(2)} on {Target(P(3), P(4))} in the Goldmark database '{P(0)}'. Fix: USE {Q(P(0))}; REVOKE {Revocable(P(2))} {On(P(3), P(4))}FROM {Q(P(1))}{Cascade(P(2))};",
+        "goldmark-database-option" => $"the Goldmark database '{P(0)}' has {P(1)} on. Fix: ALTER DATABASE {Q(P(0))} SET {P(1)} OFF;",
+        "goldmark-database-owner" => $"the Goldmark database '{P(0)}' is owned by '{P(1)}', which does not hold CONTROL SERVER, so that login controls everything in it. " +
+            $"Fix: ALTER AUTHORIZATION ON DATABASE::{Q(P(0))} TO <a login with CONTROL SERVER>; (or drop the database if Goldmark did not create it)",
+        "goldmark-database-principal" => $"'{P(1)}' in the Goldmark database '{P(0)}' holds a role, a permission or an object; only Goldmark's two users may. " +
+            $"Fix: USE {Q(P(0))}; remove its roles, grants and ownership, or DROP USER {Q(P(1))};",
+        "login-disabled" => $"login '{P(0)}' is disabled. Goldmark does not enable logins. Fix: ALTER LOGIN {Q(P(0))} ENABLE; or configure another login.",
+        "login-policy-off" => $"login '{P(0)}' does not enforce SQL Server's password policy. Fix: ALTER LOGIN {Q(P(0))} WITH CHECK_POLICY = ON;",
+        "login-expiration-on" => $"login '{P(0)}' has password expiration on, so Goldmark would stop working when it expires. Fix: ALTER LOGIN {Q(P(0))} WITH CHECK_EXPIRATION = OFF;",
         "login-expired" => $"the password of login '{P(0)}' has expired.",
-        "login-locked" => $"login '{P(0)}' is locked out. Fix: ALTER LOGIN [{P(0)}] WITH PASSWORD = '...' UNLOCK; (then set the same password in Goldmark's settings)",
-        "login-must-change" => $"login '{P(0)}' must change its password at the next sign-in. Fix: ALTER LOGIN [{P(0)}] WITH PASSWORD = '...'; (without MUST_CHANGE)",
-        "login-connect-denied" => $"CONNECT SQL is denied to {P(1)}, so login '{P(0)}' cannot connect. Fix: REVOKE CONNECT SQL FROM [{P(1)}];",
-        "login-credential" => $"login '{P(0)}' is mapped to credential '{P(1)}'. Fix: ALTER LOGIN [{P(0)}] DROP CREDENTIAL [{P(1)}]; (or WITH NO CREDENTIAL)",
-        "server-role" => $"login '{P(0)}' is a member of server role {P(1)}. Fix: ALTER SERVER ROLE [{P(1)}] DROP MEMBER [{P(0)}];",
-        "server-grant" => $"login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))}. Fix: REVOKE {P(1)} {On(P(2), P(3))}FROM [{P(0)}];",
+        "login-locked" => $"login '{P(0)}' is locked out. Fix: ALTER LOGIN {Q(P(0))} WITH PASSWORD = '...' UNLOCK; (then set the same password in Goldmark's settings)",
+        "login-must-change" => $"login '{P(0)}' must change its password at the next sign-in. Fix: ALTER LOGIN {Q(P(0))} WITH PASSWORD = '...'; (without MUST_CHANGE)",
+        "login-connect-denied" => $"CONNECT SQL is denied to {P(1)}, so login '{P(0)}' cannot connect. Fix: REVOKE CONNECT SQL FROM {Q(P(1))};",
+        "login-credential" => $"login '{P(0)}' is mapped to credential '{P(1)}'. Fix: ALTER LOGIN {Q(P(0))} DROP CREDENTIAL {Q(P(1))}; (or WITH NO CREDENTIAL)",
+        "server-role" => $"login '{P(0)}' is a member of server role {P(1)}. Fix: ALTER SERVER ROLE {Q(P(1))} DROP MEMBER {Q(P(0))};",
+        "server-grant" => $"login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))}. Fix: REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM {Q(P(0))}{Cascade(P(1))};",
         "owns" => $"login '{P(0)}' owns {P(1)} '{P(2)}'. Fix: transfer it (ALTER AUTHORIZATION ... TO dbo, or to another owner).",
-        "linked-login" => $"login '{P(0)}' has a login mapping on linked server '{P(1)}'. Fix: EXEC sp_droplinkedsrvlogin @rmtsrvname = N'{P(1)}', @locallogin = N'{P(0)}';",
-        "remote-login" => $"login '{P(0)}' has a remote-login mapping on server '{P(1)}'. Fix: EXEC sp_dropremotelogin @remoteserver = N'{P(1)}', @loginame = N'{P(0)}';",
+        "linked-login" => $"login '{P(0)}' has a login mapping on linked server '{P(1)}'. Fix: EXEC sp_droplinkedsrvlogin @rmtsrvname = {L(P(1))}, @locallogin = {L(P(0))};",
+        "remote-login" => $"login '{P(0)}' has a remote-login mapping on server '{P(1)}'. Fix: EXEC sp_dropremotelogin @remoteserver = {L(P(1))}, @loginame = {L(P(0))};",
         "mapped-into" => $"login '{P(0)}' has a user in database '{P(1)}' and holds that user's rights there. Fix: drop that user, or configure another login.",
         "database-access" => $"login '{P(0)}' can enter database '{P(1)}' as user '{P(2)}'. Fix: drop that user (or the group's), or configure another login.",
-        "database-role" => $"the database user of login '{P(0)}' is a member of database role {P(1)}. Fix: ALTER ROLE [{P(1)}] DROP MEMBER [{P(0)}];",
-        "database-grant" => $"the database user of login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))} directly; Goldmark's rights come only through its role. Fix: REVOKE {P(1)} {On(P(2), P(3))}FROM [{P(0)}];",
-        "database-connect-denied" => $"CONNECT on the Goldmark database is denied to {P(1)}, so login '{P(0)}' cannot use it. Fix: REVOKE CONNECT FROM [{P(1)}];",
-        "server-securable" => $"login '{P(0)}' holds {P(3)} on {P(1)} '{P(2)}'. Fix: REVOKE {P(3)} ON {P(1)}::[{P(2)}] FROM [{P(0)}]; (or from the role or group that grants it)",
+        "database-role" => $"the database user of login '{P(0)}' is a member of database role {P(1)}. Fix: ALTER ROLE {Q(P(1))} DROP MEMBER {Q(P(0))};",
+        "database-grant" => $"the database user of login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))} directly; Goldmark's rights come only through its role. " +
+            $"Fix: REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM {Q(P(0))}{Cascade(P(1))};",
+        "database-connect-denied" => $"CONNECT on the Goldmark database is denied to {P(1)}, so login '{P(0)}' cannot use it. Fix: REVOKE CONNECT FROM {Q(P(1))};",
+        "server-securable" => $"login '{P(0)}' holds {P(3)} on {P(1)} '{P(2)}'. Fix: REVOKE {P(3)} ON {P(1)}::{Q(P(2))} FROM {Q(P(0))}; (or from the role or group that grants it)",
         "database-securable" => $"login '{P(0)}' holds {P(3)} on {P(1)} '{P(2)}' in the Goldmark database. Fix: revoke it from the user, role or group that grants it.",
         _ => $"{Kind}: {string.Join(", ", Parts)}",
     };
 
     private static string Target(string @class, string name) =>
-        @class is "SERVER" or "DATABASE" ? $"the {@class.ToLowerInvariant()}" : $"{Securable(@class)} '{name}'";
+        @class is "SERVER" or "DATABASE" ? $"the {@class.ToLowerInvariant()}" : $"{@class} {name}";
 
     // REVOKE ... ON <class>::<name>; nothing for the server or database itself.
-    private static string On(string @class, string name) =>
-        @class is "SERVER" or "DATABASE" ? "" : $"ON {Securable(@class)}::{name} ";
+    private static string On(string @class, string name) => @class is "SERVER" or "DATABASE" ? "" : $"ON {@class}::{name} ";
 
-    private static string Securable(string @class) => @class == "SERVER_PRINCIPAL" ? "LOGIN" : @class.Replace('_', ' ');
+    private const string GrantOption = " WITH GRANT OPTION";
+
+    // REVOKE names the permission without WITH GRANT OPTION, and then needs CASCADE.
+    private static string Revocable(string permission) =>
+        permission.EndsWith(GrantOption, StringComparison.Ordinal) ? permission[..^GrantOption.Length] : permission;
+
+    private static string Cascade(string permission) => permission.EndsWith(GrantOption, StringComparison.Ordinal) ? " CASCADE" : "";
+
+    /// <summary>An identifier as QUOTENAME writes it: in brackets, with <c>]</c> doubled.</summary>
+    internal static string Q(string name) => $"[{name.Replace("]", "]]", StringComparison.Ordinal)}]";
+
+    /// <summary>A Unicode string literal, with <c>'</c> doubled.</summary>
+    internal static string L(string value) => $"N'{value.Replace("'", "''", StringComparison.Ordinal)}'";
 
     /// <summary>
     /// Keeps letters, digits and <c>_ . - $ # @ \ / [ ]</c>; a space becomes <c>+</c> and anything

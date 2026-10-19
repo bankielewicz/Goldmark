@@ -771,6 +771,19 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   SQL Server image update changes it. A fresh Goldmark database has exactly the
   "every database" set (tested). Other CUs or editions may differ slightly; those
   differences are acceptable `system-grant` findings.
+- **Review round 1 (Codex on #17), fixed:**
+  - grants are compared by grantee, permission, **securable class** and target, so a
+    schema named like a baseline view is not mistaken for it;
+  - securable targets are `QUOTENAME`'d in IDs, and every name in a suggested fix
+    is quoted (`[...]`, `N'...'`), so pasting a fix cannot run injected SQL;
+  - accepted IDs match **ordinally** (case-sensitive servers);
+  - when adopting, a same-name user that would be remapped is audited **before**
+    any change;
+  - new must-fix kinds: `goldmark-database-owner`: the Goldmark database is owned
+    by a login without CONTROL SERVER, for example a lower-privileged login that
+    created it first and stayed its dbo (security review). `goldmark-database-principal`:
+    another user or application role in it holds a role, a permission beyond
+    `CONNECT`, or owns a schema or object.
 - **Rights come only through the role.** A direct grant to a Goldmark user other
   than `CONNECT` is a finding even when a role's `DENY` currently overrides it
   (for example `GRANT UPDATE ON cmdb.AuditLog` to the runtime user). `migrate`'s
@@ -829,6 +842,9 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   and for managed users (an out-of-band rename). A login that owns the Goldmark
   database (mapped as `dbo`) is refused with the `ALTER AUTHORIZATION` fix.
   `migrate` keeps finding the user by name.
+- **SQL Server 2025 or later is checked first** (`ProductMajorVersion` ≥ 17, exit 3,
+  nothing changed), so an older server never gets a database and logins that the
+  first migration then cannot use (Codex on #17).
 - **`AUTO_CLOSE OFF`** on the database `bootstrap-db` creates. On Express, new
   databases close whenever their last connection ends. Without this, every
   unpooled readiness probe (DEC-008) and every audit pass would reopen the
@@ -931,8 +947,9 @@ Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.Integrati
 
 ## Slice 2b acceptance mapping
 
-Same status vocabulary as slice 1. Local runs (agent's sandbox): 204 in-process tests,
-121 integration tests (two SQL Server 2025 containers), 72 smoke checks (63 before), all passing.
+Same status vocabulary as slice 1. Local runs (agent's sandbox), after review round 1: 207
+in-process tests, 125 integration tests (two SQL Server 2025 containers), 72 smoke checks (63
+before), all passing.
 
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|
@@ -947,4 +964,5 @@ Same status vocabulary as slice 1. Local runs (agent's sandbox): 204 in-process 
 | 9 | #15: a login mapped to a differently named user is refused with a clear message (owner: refuse) | **Met** | `PrincipalAuditTests` (adopted `it_other_name`: refused, then adopted after the rename; managed user renamed out of band) |
 | 10 | The audit runs whenever a principal is adopted or revalidated, for both logins, in both deployments (DEC-021) | **Met** | Every `bootstrap-db` run; both Compose files; integration covers both logins; smoke covers both files |
 | 11 | Findings accepted by ID (owner) | **Met** | `FindingPolicyTests`, validation tests (exit 2 for malformed or must-fix IDs), integration accept-and-warn cycle, smoke |
-| 12 | CI green | **Not executed** at the time of writing | PR checks |
+| 12 | Codex round 1 (#17): securable class in baseline keys, older servers refused, adopted same-name user audited first, quoted fixes, exact ID matching, database owner and other principals | **Met** | Unit tests (quoting, exact matching); integration: schema named like a baseline view, adopted `db_owner` user refused with nothing changed, database created first by a `dbcreator` login refused, extra principal with a role refused. The version check has no test: it would need a pre-2025 image |
+| 13 | CI green | **Met** on the first push (PR #17, 12 checks); round 1 pending | PR checks |
