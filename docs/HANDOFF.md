@@ -22,10 +22,10 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2b | pending | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments | US-01 existing-SQL criteria; #2–#4 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log writes + screen | US-07 | 16 |
-| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/search?q=`); Dapper introduced here | US-10/11/53; search p95 on 25k synthetic CIs | 4, 5 |
+| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/search?q=`); Dapper introduced here | US-10/11; US-53 for `/ci/{id}` and `/search?q=`; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen | Admin can manage CI types/attributes through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-40 | 5 (tab), 6 |
-| 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 5 (tab), "as of" controls |
+| 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
 | 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision | US-06/50/54; CI fails on an unreviewed breaking OpenAPI diff | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression | US-20/21; re-ingest → 0 history rows | — |
@@ -37,7 +37,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 16 | pending | `slice/16-ad-collector` | AD collector, cluster classification, OU exclusions, data-quality lists | US-33 | — |
 | 17 | pending | `slice/17-sql-collector` | SQL collector: instances, DBs, AGs, replicas, listeners | US-34 | — |
 | 18 | pending | `slice/18-fc-storage` | FC LUN paths, storage groups, mapping screen | US-35; M4 | 10 |
-| 19 | pending | `slice/19-impact-engine` | Impact engine, redundancy semantics, explanation paths | US-41; M8 | 7 |
+| 19 | pending | `slice/19-impact-engine` | Impact engine, redundancy semantics, explanation paths, `/impact?ci={id}[&ci=…]` deep link | US-41; M8; US-53 for `/impact` | 7 |
 | 20 | pending | `slice/20-business-services` | Business services, ownership, lifecycle | US-12/13/14 | 8 |
 | 21 | pending | `slice/21-csv-import` | CSV import wizard + quickstart sample dataset | US-25; M5 | 13 |
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
@@ -47,8 +47,8 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 26 | pending (P1) | `slice/26-ethernet-neighbors` | Ethernet neighbor links (ID-CDP) + NetworkDevice placeholders | US-36; M3 | — |
 | 27 | pending (P1) | `slice/27-fc-hba-rdm` | FC HBA inventory + RDM→VM links | US-37 | — |
 | 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52 | 7 (saved scenarios), 19 (replay) |
-| 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3 | 5 and 6 (badges, links), 21 |
-| 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2 | — |
+| 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3; a sample external app (test fixture) can annotate and link without any CMDB UI code change | 5 and 6 (badges, links), 21 |
+| 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2; the sample app resyncs correctly after a simulated outage | — |
 | P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28 | Screen 20 | 20 |
 
 P1 slices wait until slice 24 ships unless the owner pulls one forward.
@@ -255,9 +255,10 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
   BuildKit secret on the two network steps (`pnpm install`, `dotnet restore`):
   `--mount=type=secret,id=sandbox_ca,target=/tmp/sandbox-ca.pem` plus
   `NODE_EXTRA_CA_CERTS` / `SSL_CERT_FILE`. Keep the copy **outside the repo**
-  (e.g. `/tmp/Dockerfile.sandbox`) and pass it with `-f`, using the repo as
-  the build context:
-  `docker build -f /tmp/Dockerfile.sandbox --secret id=sandbox_ca,src=/etc/ssl/certs/ca-certificates.crt -t goldmark:local /workspace/repo`.
+  (e.g. `/tmp/Dockerfile.sandbox`) and pass it with `-f`; run from the repo
+  root (the checkout path differs between sandboxes) so `.` is the build
+  context:
+  `docker build -f /tmp/Dockerfile.sandbox --secret id=sandbox_ca,src=/etc/ssl/certs/ca-certificates.crt -t goldmark:local .`.
   Regenerate the copy whenever the Dockerfile changes. Never commit it
   (DEC-020).
 - The Docker daemon dies often. Restart:
