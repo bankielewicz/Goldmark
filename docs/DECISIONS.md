@@ -4,7 +4,7 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-19):** slices 1 and 2 are merged (PRs #1, #14); slice 2b is in review. The owner approved
+**Approval state (2026-10-19):** slices 1, 2 and 2b are merged (PRs #1, #14, #17); slice 2c is next. The owner approved
 the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b, 2c
 and 5b, in order, one PR each. Docker Compose is the first distribution, not the
 target deployment (DEC-030). The PRD text stays a draft (DEC-001); the build
@@ -980,4 +980,5 @@ before), all passing.
 | 11 | Findings accepted by ID (owner) | **Met** | `FindingPolicyTests`, validation tests (exit 2 for malformed or must-fix IDs), integration accept-and-warn cycle, smoke |
 | 12 | Codex round 1 (#17): securable class in baseline keys, older servers refused, adopted same-name user audited first, quoted fixes, exact ID matching, database owner and other principals | **Met** | Unit tests (quoting, exact matching); integration: schema named like a baseline view, adopted `db_owner` user refused with nothing changed, database created first by a `dbcreator` login refused, extra principal with a role refused. The version check has no test: it would need a pre-2025 image |
 | 13 | Codex round 2 (#17): owner through server roles, role ownership and `CONNECT WITH GRANT OPTION`, grants to `goldmark_runtime` on system objects, databases not online, names for every securable class, unknown kinds not echoed | **Met** | Integration: nested server role with CONTROL SERVER accepted; role owned by another user refused; `CONNECT WITH GRANT OPTION` refused; `SELECT ON sys.objects` to the role refused; offline database refused, accepted, fixed; certificate grant named `[ItCert2]`; the login's own view still finds role-granted rights. Unit: unknown kind not echoed |
-| 14 | CI green | **Met** on the first push and on round 1 (PR #17, 12 checks); round 2 pending | PR checks |
+| 14 | CI green | **Met** | PR #17: 12 checks green on every push |
+| 15 | Codex round 3 (past the two-round limit) | Owner: fix the docs example, defer the rest | Docs fixed in PR #17; #18 and #19 deferred to 2c, #20 to the availability-group slice |

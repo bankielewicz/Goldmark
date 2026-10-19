@@ -5,11 +5,11 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-19:** slices 1 (PR #1) and 2 (PR #14) are merged, with the
-handoff and docs PRs #11, #13 and #16. Slice 2b (`slice/02b-existing-sql`) is in
-review. Next: **slice 2c** (generated database credentials), once 2b is merged.
-Its notes are in §3. Docker Compose is the first distribution, not the target
-deployment (DEC-030, rule 8).
+**As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14) and 2b (PR #17) are merged,
+with the handoff and docs PRs #11, #13 and #16. Next: **slice 2c** (generated
+database credentials, #18, #19); its notes are in §3. The owner sets its model
+(rule 5 does not name one; Opus was suggested). Docker Compose is the first
+distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -22,8 +22,8 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 |---|---|---|---|---|---|
 | 1 | **done** (PR #1) | `claude/slice-01-scaffold` | Skeleton, CI, Dockerfile, Compose (SQL Server 2025 Express), `/health/*`, Serilog JSON, web skeleton with NFR-SEC-9 controls | `docker compose up` serves health + empty SPA; CI green; unlisted npm dependency fails CI | — |
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
-| 2b | **in review** | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
-| 2c | **next** | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested | — |
+| 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
+| 2c | **next** | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
@@ -142,25 +142,28 @@ Slice 2b's decisions are DEC-030…DEC-033. For 2c (DEC-032):
   generation there applies to the migration and runtime logins in Mode `Create`.
 - The principal audit already treats every login it manages the same way, so it
   needs no change for generated names.
-- **Audit follow-ups from PR #17 (Codex round 3, deferred by the owner; issues
-  labelled `slice-2`):** report securables in the Goldmark database owned by
-  `public`, except the built-in schemas; evaluate the database owner's
-  *effective* CONTROL SERVER, honouring a `DENY` (impersonate the owner). The
-  third follow-up, availability-group permission targets shown as `#id`, belongs
-  to the AG slice (DEC-030).
+- **Audit follow-ups from PR #17** (Codex round 3, deferred to 2c by the owner):
+  - #18: report securables in the Goldmark database owned by `public`, except the
+    built-in schemas;
+  - #19: evaluate the database owner's *effective* CONTROL SERVER, honouring a
+    `DENY` (impersonate the owner).
+
+  The third follow-up, #20 (availability-group permission targets shown as
+  `#id`), belongs to the availability-group slice (DEC-030).
 
 ## 4. Open issues and owners
 
 | Item | Owner slice |
 |---|---|
 | #7 `bootstrap-db`: validate `Database:Port`; reject `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` | 2 (closed by PR #14) |
-| #2 guest access to other databases on a shared SQL Server | 2b (closed by the slice-2b PR) |
-| #3 wildcard linked-server and remote-login mappings | 2b (closed by the slice-2b PR) |
-| #4 audit of adopted and shared-instance principals beyond database scope | 2b (closed by the slice-2b PR) |
-| #15 `migrate`: runtime user found by name, adopted user may have another name | 2b (closed by the slice-2b PR: `bootstrap-db` refuses a differently named user, DEC-032) |
+| #2 guest access to other databases on a shared SQL Server | 2b (closed by PR #17) |
+| #3 wildcard linked-server and remote-login mappings | 2b (closed by PR #17) |
+| #4 audit of adopted and shared-instance principals beyond database scope | 2b (closed by PR #17) |
+| #15 `migrate`: runtime user found by name, adopted user may have another name | 2b (closed by PR #17: `bootstrap-db` refuses a differently named user, DEC-032) |
 | Generated credentials, `sa` disabled in the bundled deployment | 2c (DEC-032) |
-| Audit follow-ups from PR #17 round 3: securables owned by `public`; the database owner's effective CONTROL SERVER with `DENY` | 2c (issues labelled `slice-2`) |
-| Availability-group permission targets shown as `#id` | the AG slice (DEC-030) |
+| #18 principal audit: securables in the Goldmark database owned by `public` | 2c (`slice-2`) |
+| #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (`slice-2`) |
+| #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication, availability groups | owner: place in the plan (DEC-030) |
 | Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
 | #5 renew the generated TLS certificate without a restart | 24 |
