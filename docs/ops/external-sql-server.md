@@ -139,7 +139,7 @@ Some findings are about other databases or the instance, which you may not contr
 on a shared server. You may accept those **by ID**:
 
 ```sh
-GOLDMARK_DB_ACCEPTED_FINDINGS=guest-connect:Sales,system-grant:msdb:public:SELECT:dbo.sysjobs
+GOLDMARK_DB_ACCEPTED_FINDINGS=guest-connect:Sales,system-grant:msdb:public:SELECT:OBJECT:[dbo].[sysjobs]
 ```
 
 - IDs match exactly, including case: on a case-sensitive server `Sales` and

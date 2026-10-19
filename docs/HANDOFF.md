@@ -142,6 +142,12 @@ Slice 2b's decisions are DEC-030…DEC-033. For 2c (DEC-032):
   generation there applies to the migration and runtime logins in Mode `Create`.
 - The principal audit already treats every login it manages the same way, so it
   needs no change for generated names.
+- **Audit follow-ups from PR #17 (Codex round 3, deferred by the owner; issues
+  labelled `slice-2`):** report securables in the Goldmark database owned by
+  `public`, except the built-in schemas; evaluate the database owner's
+  *effective* CONTROL SERVER, honouring a `DENY` (impersonate the owner). The
+  third follow-up, availability-group permission targets shown as `#id`, belongs
+  to the AG slice (DEC-030).
 
 ## 4. Open issues and owners
 
@@ -153,6 +159,8 @@ Slice 2b's decisions are DEC-030…DEC-033. For 2c (DEC-032):
 | #4 audit of adopted and shared-instance principals beyond database scope | 2b (closed by the slice-2b PR) |
 | #15 `migrate`: runtime user found by name, adopted user may have another name | 2b (closed by the slice-2b PR: `bootstrap-db` refuses a differently named user, DEC-032) |
 | Generated credentials, `sa` disabled in the bundled deployment | 2c (DEC-032) |
+| Audit follow-ups from PR #17 round 3: securables owned by `public`; the database owner's effective CONTROL SERVER with `DENY` | 2c (issues labelled `slice-2`) |
+| Availability-group permission targets shown as `#id` | the AG slice (DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication, availability groups | owner: place in the plan (DEC-030) |
 | Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
 | #5 renew the generated TLS certificate without a restart | 24 |
