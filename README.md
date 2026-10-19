@@ -49,7 +49,7 @@ What starts:
 |---|---|
 | `sql-volume-init` | One-shot: prepares the SQL Server TLS volumes (no network, `CAP_CHOWN` only) |
 | `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict) |
-| `db-init` | One-shot: creates the `Goldmark` database and the least-privilege runtime login. It refuses, changing nothing, if that login already exists with extra rights or a different password (see `GOLDMARK_DB_ROTATE_PASSWORD`) |
+| `db-init` | One-shot: creates the `Goldmark` database and the least-privilege runtime login. It refuses, changing nothing, if that login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
 | `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem |
 
 Stop with `docker compose -f deploy/docker-compose.yml down`. Add `-v` to also

@@ -178,35 +178,28 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
   install in CI and in the Docker build) fails on any of the following:
   - a direct dependency that is not allow-listed, or is listed in the wrong section;
   - an unpinned or non-registry version;
-  - a banned package in `package.json` or anywhere in the lockfile;
-  - a lockfile entry not resolved from the registry with an integrity hash;
-  - a missing or weakened pnpm/npm setting, or any policy exclusion;
+  - a banned package anywhere in `package.json` or the lockfile (including
+    aliases and peer names);
+  - a missing or weakened pnpm/npm setting, or any setting outside the reviewed lists;
   - an unapproved build script;
   - install lifecycle scripts in `package.json`;
-  - a lockfile not in pnpm's canonical layout (review finding). The check
-    reads the lockfile line by line, so YAML-equivalent spellings that pnpm
-    would accept are rejected rather than skipped: quoted or re-indented
-    section keys, unknown top-level keys, anchors, aliases, tags, flow-style
-    sections, tabs and extra documents.
-
-- **Two stages (review findings).** The pre-install check reads the
-  lockfile as text, and two Codex rounds showed that a hand-written reader
-  can be bypassed by YAML-equivalent spellings. So:
-  1. Pre-install (`check-dependency-policy.mjs`) rejects any lockfile that is
-     not in pnpm's canonical layout (quoted plain keys, non-canonical or
-     missing resolutions, re-indentation, anchors and so on), so equivalent
-     spellings fail rather than slip through.
-  2. Post-install, pre-build (`check-installed-tree.mjs`) asks pnpm itself
-     (`pnpm list --json --depth Infinity`) what it installed. Every package
-     must resolve to the npm registry tarball for its own name and version,
-     and no banned name may appear anywhere, including behind an alias. This
-     removes the parser gap: it checks what pnpm actually resolved. Install
-     scripts are disabled, so no fetched code has run before this check.
-     It runs in CI before lint, build and tests, before the smoke test uses
-     Playwright, and in the Docker web stage before the build.
-
-  Double-quoted or escaped keys are rejected too, since pnpm writes neither.
-  Together they have 44 tests.
+  - a lockfile that does not parse against the lockfile schema (owner
+    decision, after two review findings). `pnpm-lock.yaml` is **parsed
+    structurally** as the YAML subset pnpm 11 writes: block mappings, block
+    sequences, and the flow forms used for `resolution`, `engines`, `cpu`,
+    `os` and `libc`. Every node is validated against the schema of the five
+    sections and their known keys. Each package needs exactly one
+    `resolution: {integrity: sha512-…}`. Anything else fails rather than
+    being read differently: unknown sections or keys, duplicate keys, double
+    quotes or escapes, quoted plain keys, odd or jumping indentation, anchors,
+    aliases, tags, extra documents, and protocols or URLs in values.
+- **Second stage after install** (`scripts/check-installed-tree.mjs`): asks
+  pnpm what it installed (`pnpm list --json --depth Infinity`). Every package
+  must resolve to the registry tarball for its own name and version, and no
+  banned name may appear. It runs before lint, build and tests in CI, before
+  the smoke test uses Playwright, and in the Docker web stage. Install
+  scripts are disabled, so nothing fetched has run before it.
+- Together the two stages have 48 tests.
 - **Banned packages:** the PRD's `next`, `react-server-dom-*`, `@remix-run/*`,
   extended with `@react-router/*` (framework/server packages; `react-router`
   stays allowed for library mode) and `@vitejs/plugin-rsc`.
@@ -276,79 +269,44 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 - `bootstrap-db` (one-shot `db-init` container) idempotently creates the
   `Goldmark` database and the runtime login with **CONNECT only**. DDL takes
   QUOTENAME'd parameters.
-- **Everything is inspected before anything is changed** (review findings).
-  No database, login or user is created or altered on a run that refuses.
-  An existing login must be an enabled SQL login with nothing beyond the
-  baseline measured for a fresh login on SQL Server 2025. Otherwise bootstrap
-  **refuses (exit 3) and changes nothing**. The inspection runs as the
-  administrator, in the Goldmark database or in master while that database
-  does not exist yet, and covers:
-  - server and database role memberships;
-  - explicit grants at every scope (server, endpoints, logins, database,
-    schemas, objects, users), so for example `CONTROL ON SCHEMA` and
-    `IMPERSONATE ON LOGIN` are caught;
-  - ownership of every catalog that records an owner: databases, endpoints,
-    server principals, audits and event notifications on the server; objects,
-    schemas, principals, types, XML schema collections, assemblies,
-    certificates, asymmetric and symmetric keys, scoped credentials, full-text
-    catalogs and stoplists, search property lists, Service Broker objects,
-    event notifications and external languages, libraries and models in the
-    database;
-  - linked-server, remote-login and credential mappings of the login, and
-    wildcard mappings for all logins that supply a shared remote credential
-    (SQL Server's default self-credential mappings are not counted);
-  - `guest` access enabled in any database other than master, tempdb and
-    msdb (their defaults), including `model`;
-  - mappings into other databases;
-  - non-default grants to `public`;
-  - a database user with the login's name but another SID (for example a
-    restored database). It is refused, never silently remapped.
+- **Goldmark only manages principals it created** (owner decision after
+  six Codex review rounds). The database user it creates carries the
+  extended property `goldmark:managed`. If the configured runtime login, or
+  a database user of that name, already exists without the marker, bootstrap
+  **refuses (exit 3) and changes nothing**, before any database is created.
+  The operator can opt in to taking it over with
+  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`; its password is then set to
+  `GOLDMARK_DB_PASSWORD` and it is marked as managed.
+- Login, user and marker are created in **one transaction**. The password is
+  first checked against SQL Server's policy inside a rolled-back
+  transaction, so a rejected password leaves no database, login or user
+  behind. Changing `GOLDMARK_DB_PASSWORD` rotates the managed login's password.
+- **Kept:** after provisioning, bootstrap connects as the runtime login and
+  refuses (exit 3) if its *effective* permissions exceed the baseline
+  measured for a fresh login on SQL Server 2025:
+  - server roles besides `public` (`sys.login_token`);
+  - database roles besides `public` (`sys.user_token`);
+  - server permissions beyond `CONNECT SQL` and `VIEW ANY DATABASE`;
+  - database permissions beyond `CONNECT` and public's two
+    `VIEW ANY COLUMN … KEY DEFINITION` grants.
 
-  The baseline is the measured set for a fresh login: on the server, the
-  login's `CONNECT SQL`, and public's `VIEW ANY DATABASE` and `CONNECT` on
-  system endpoints; in the database, the user's `CONNECT`, and public's two
-  `VIEW ANY COLUMN … KEY DEFINITION` grants and `SELECT` on system objects.
-  DENYs are ignored because they only remove rights.
-- An existing login is also refused if it can stop working on its own
-  (`CHECK_EXPIRATION = ON`, expired, locked out, must change its password),
-  if it does not enforce the password policy (`CHECK_POLICY = OFF`), or if
-  its connection is denied (`DENY CONNECT SQL` on the login or public, or
-  `DENY CONNECT` in the Goldmark database). Goldmark creates its login with
-  `CHECK_POLICY = ON, CHECK_EXPIRATION = OFF` (review findings).
-- Provisioning order: the login is created or rotated **before** the
-  database, so SQL Server's password policy can still reject the password
-  without leaving an empty database behind. A new login starts with master as
-  its default database; it is switched to the Goldmark database once that
-  exists (review finding).
-- **An existing login's password is never changed** unless
-  `GOLDMARK_DB_ROTATE_PASSWORD=true` (`Goldmark:Bootstrap:RotatePassword`) is
-  set for that run, and never for a login that fails inspection. A name that
-  collides with another account is therefore left alone. If the configured
-  password already matches, nothing is changed.
-- After provisioning, the login is checked twice and bootstrap refuses on any
-  excess: from the catalog (above), and as itself through its effective
-  permissions (`sys.login_token`, `sys.user_token`, `fn_my_permissions`). The
-  first fixed-role check passed a login holding `securityadmin` and
-  `db_securityadmin` (review finding).
-- Refuse rather than revoke: such rights were granted outside Goldmark.
-  Slice 2 adds the runtime DML grants to the baseline.
-- The connect timeout must be 1–120 s (0 means "forever" to SqlClient), and
-  the whole wait is cancelled at `WaitSeconds` plus one connect timeout, so
-  `db-init` cannot hang the stack.
-- A pinned SQL certificate (`ServerCertificatePath`) must parse as PEM or
-  DER at startup, not merely exist (review finding).
-- The runtime password must differ from the administrator password, and the
-  database name must not be a system database (master, model, msdb, tempdb,
-  distribution, mssqlsystemresource) (review findings).
-- **Scope boundary.** Bootstrap certifies the runtime login and the server
-  conditions every login inherits, for the bundled SQL Server Express and for
-  a dedicated instance. It does not try to prove a shared, long-lived
-  enterprise instance is safe; the external-SQL deployment in slice 2 will
-  document the DBA-side requirements instead.
-- **Open (owner decision):** grants added to `guest` or `public` in master,
-  msdb or tempdb are inherited by every login and are not inspected yet.
-  Checking them needs per-database baselines (msdb has many default public
-  grants that vary by CU). See the PR for the options.
+  The first fixed-role check passed a login holding `securityadmin` and
+  `db_securityadmin` (review finding). Slice 2 adds the runtime DML grants to
+  the baseline.
+- **Removed and deferred to slice 2** (issues labelled `slice-2`): the
+  administrator-side audit of pre-existing principals. That covered explicit
+  grants below database scope, ownership of securables, linked-server, remote
+  and credential mappings including wildcard mappings, `guest` access in
+  other databases, `guest`/`public` grants in system databases, and
+  password-policy, expiry and deny state of adopted logins. It only matters
+  when adopting principals or sharing an instance; the bundled SQL Server is
+  fresh and Goldmark-created logins are refused if anything else touched them.
+- Validation: the runtime password must differ from the administrator
+  password, be 12–128 characters, and the runtime login must not be the
+  admin login or `sa`. The database name must not be a system database.
+  The connect timeout must be 1–120 s, and the whole wait is cancelled at
+  `WaitSeconds` plus one connect timeout. A pinned SQL certificate must
+  parse as PEM or DER at startup.
 - The migration login and DML grants arrive with slice 2.
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.
@@ -416,6 +374,7 @@ scaffold. A2 (licensing, DCO) is pending. The other assumptions remain open.
 | Item | Slice |
 |---|---|
 | Migration login, DML grants, readiness schema check | 2 |
+| Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases, wildcard linked-server and remote mappings, ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (GitHub issues labelled `slice-2`) | 2 |
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2 |
 | Authentication, deny-by-default fallback policy, M6 enumeration test | 3 |
 | OpenAPI document, `/api/v1/health` decision | 8 |

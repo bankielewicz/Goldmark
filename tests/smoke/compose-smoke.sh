@@ -249,77 +249,60 @@ else
   fail "db-init is idempotent (re-run succeeds without re-creating the database)" "exit ${rerun_code}"
 fi
 
-# A pre-existing runtime login is inspected before anything is changed.
+# --- bootstrap-db: only principals Goldmark created are managed ----------------------
 db_init() { "${compose[@]}" run --rm --no-deps "$@" db-init 2>&1; }
-app_password_works() { [[ "$(sql_as goldmark_app "$1" "SELECT 42;")" == 42 ]]; }
+login_password_works() { # login password: can it authenticate (to master, where every login can connect)?
+  [[ "$(docker exec -e SQLCMDPASSWORD="$2" "${project}-sqlserver-1" /opt/mssql-tools18/bin/sqlcmd \
+    -S localhost -U "$1" -d master -Ns -J /goldmark/sql-tls-private/sqlserver.crt -F sqlserver \
+    -l 10 -h -1 -W -b -Q "SET NOCOUNT ON; SELECT 42;" 2>&1)" == 42 ]]
+}
 other_password="$(secret)"
 
-sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin ADD MEMBER goldmark_app; ALTER ROLE db_securityadmin ADD MEMBER goldmark_app;" >/dev/null
-refused="$(db_init -e Goldmark__Database__Password="${other_password}" -e Goldmark__Bootstrap__RotatePassword=true)"; refused_code=$?
-if [[ ${refused_code} -eq 3 && "${refused}" == *"server role securityadmin"* && "${refused}" == *"database role db_securityadmin"* && "${refused}" == *"Nothing was changed"* ]] \
-   && app_password_works "${app_password}"; then
-  pass "db-init refuses a privileged existing login (securityadmin/db_securityadmin) without touching its password, even with rotation on"
-else
-  fail "db-init refuses a privileged existing login without touching its password" "exit ${refused_code}"
-fi
-sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin DROP MEMBER goldmark_app; ALTER ROLE db_securityadmin DROP MEMBER goldmark_app;" >/dev/null
+marker="$(sql_as sa "${sa_password}" "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 4 AND major_id = USER_ID('goldmark_app') AND name = N'goldmark:managed';")"
+check "the runtime database user carries the goldmark:managed marker" [ "${marker}" == 1 ]
 
-# Server-scoped grants must be issued from master.
-sql_as sa "${sa_password}" "GRANT CONTROL ON SCHEMA::dbo TO goldmark_app; USE master; GRANT IMPERSONATE ON LOGIN::sa TO goldmark_app;" >/dev/null
-refused="$(db_init)"; refused_code=$?
-sql_as sa "${sa_password}" "REVOKE CONTROL ON SCHEMA::dbo FROM goldmark_app; USE master; REVOKE IMPERSONATE ON LOGIN::sa FROM goldmark_app;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"CONTROL ON SCHEMA"* && "${refused}" == *"IMPERSONATE ON SERVER_PRINCIPAL"* ]]; then
-  pass "db-init refuses schema- and login-scoped grants (CONTROL ON SCHEMA, IMPERSONATE ON LOGIN)"
+rotated="$(db_init -e Goldmark__Database__Password="${other_password}")"; rotated_code=$?
+restored="$(db_init)"; restored_code=$?
+if [[ ${rotated_code} -eq 0 && "${rotated}" == *"changed login password"* && ${restored_code} -eq 0 ]] \
+   && login_password_works goldmark_app "${app_password}"; then
+  pass "changing GOLDMARK_DB_PASSWORD rotates the managed login (rotated and back)"
 else
-  fail "db-init refuses schema- and login-scoped grants" "exit ${refused_code}: ${refused:0:600}"
+  fail "changing GOLDMARK_DB_PASSWORD rotates the managed login" "exit ${rotated_code}/${restored_code}"
 fi
 
-refused="$(db_init -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
-if [[ ${refused_code} -eq 3 && "${refused}" == *"different password"* ]] && app_password_works "${app_password}"; then
-  pass "db-init does not change an existing login's password unless rotation is requested"
+# A login that exists but was not created by Goldmark: refused, nothing changed, no database created.
+sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_foreign WITH PASSWORD = N'${other_password}';" >/dev/null
+refused="$(db_init -e Goldmark__Database__User=smoke_foreign -e Goldmark__Database__Name=GoldmarkForeignProbe -e Goldmark__Database__Password="${app_password}")"; refused_code=$?
+foreign_state="$(sql_as sa "${sa_password}" "SELECT CASE WHEN DB_ID('GoldmarkForeignProbe') IS NULL THEN 'no-db' ELSE 'db' END;")"
+if [[ ${refused_code} -eq 3 && "${refused}" == *"was not created by Goldmark"* && "${foreign_state}" == no-db ]] \
+   && login_password_works smoke_foreign "${other_password}"; then
+  pass "an existing login not created by Goldmark is refused with nothing changed (password, database)"
 else
-  fail "db-init does not change an existing login's password unless rotation is requested" "exit ${refused_code}"
+  fail "an existing login not created by Goldmark is refused with nothing changed" "exit ${refused_code}, ${foreign_state}"
 fi
 
-rotated="$(db_init -e Goldmark__Database__Password="${other_password}" -e Goldmark__Bootstrap__RotatePassword=true)"; rotated_code=$?
-restored="$(db_init -e Goldmark__Bootstrap__RotatePassword=true)"; restored_code=$?
-if [[ ${rotated_code} -eq 0 && "${rotated}" == *"rotated login password"* && ${restored_code} -eq 0 ]] && app_password_works "${app_password}"; then
-  pass "explicit rotation changes the password (rotated and rotated back)"
+# Opt-in adoption takes it over: password set, user created and marked.
+adopted="$(db_init -e Goldmark__Database__User=smoke_foreign -e Goldmark__Database__Password="${app_password}" -e Goldmark__Bootstrap__AdoptExistingLogin=true)"; adopted_code=$?
+adopted_marker="$(sql_as sa "${sa_password}" "SELECT COUNT(*) FROM sys.extended_properties WHERE class = 4 AND major_id = USER_ID('smoke_foreign') AND name = N'goldmark:managed';")"
+sql_as sa "${sa_password}" "DROP USER smoke_foreign; USE master; DROP LOGIN smoke_foreign;" >/dev/null
+if [[ ${adopted_code} -eq 0 && "${adopted}" == *"adopting the existing login"* && "${adopted_marker}" == 1 ]]; then
+  pass "GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true adopts and marks an existing login"
 else
-  fail "explicit rotation changes the password" "exit ${rotated_code}/${restored_code}"
+  fail "GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true adopts and marks an existing login" "exit ${adopted_code}"
 fi
 
-# Rights every login inherits from the environment are refused as well.
-sql_as sa "${sa_password}" "USE master; CREATE DATABASE SmokeGuest; EXEC sp_addlinkedserver N'SMOKE_LS'; EXEC sp_addlinkedsrvlogin N'SMOKE_LS', 'false', NULL, N'shared', N'${other_password}';" >/dev/null
-sql_as sa "${sa_password}" "USE SmokeGuest; GRANT CONNECT TO guest;" >/dev/null
-refused="$(db_init)"; refused_code=$?
-sql_as sa "${sa_password}" "USE master; EXEC sp_droplinkedsrvlogin N'SMOKE_LS', NULL; EXEC sp_dropserver N'SMOKE_LS'; DROP DATABASE SmokeGuest;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"guest access enabled in database SmokeGuest"* && "${refused}" == *"(all logins)"* ]]; then
-  pass "db-init refuses guest access in another database and shared wildcard linked-server mappings"
-else
-  fail "db-init refuses guest access in another database and shared wildcard linked-server mappings" "exit ${refused_code}"
-fi
-
-# Refusals change nothing: no database (here: the login is already mapped into Goldmark,
-# so using it for another database is refused) and no login (name collision) is created.
-refused="$(db_init -e Goldmark__Database__Name=GoldmarkSmokeProbe)"; refused_code=$?
-probe_db="$(sql_as sa "${sa_password}" "SELECT CASE WHEN DB_ID('GoldmarkSmokeProbe') IS NULL THEN 'absent' ELSE 'present' END;")"
-if [[ ${refused_code} -eq 3 && "${refused}" == *"mapped into database Goldmark"* && "${probe_db}" == absent ]]; then
-  pass "a refused run creates no database (login already mapped elsewhere)"
-else
-  fail "a refused run creates no database" "exit ${refused_code}, database ${probe_db}"
-fi
+# A database user with the login's name that is not Goldmark's: refused before the login is created.
 sql_as sa "${sa_password}" "CREATE USER smoke_collision WITHOUT LOGIN;" >/dev/null
 refused="$(db_init -e Goldmark__Database__User=smoke_collision -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
 probe_login="$(sql_as sa "${sa_password}" "SELECT CASE WHEN SUSER_ID('smoke_collision') IS NULL THEN 'absent' ELSE 'present' END;")"
 sql_as sa "${sa_password}" "DROP USER smoke_collision;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"belongs to a different login"* && "${probe_login}" == absent ]]; then
-  pass "a database user with the login's name but another SID is refused before the login is created"
+if [[ ${refused_code} -eq 3 && "${refused}" == *"database user 'smoke_collision' already exists"* && "${probe_login}" == absent ]]; then
+  pass "an existing database user not created by Goldmark is refused before the login is created"
 else
-  fail "a database user with the login's name but another SID is refused" "exit ${refused_code}, login ${probe_login}"
+  fail "an existing database user not created by Goldmark is refused" "exit ${refused_code}, login ${probe_login}"
 fi
 
-# A password SQL Server's policy rejects fails before any database is created.
+# A password SQL Server's policy rejects fails before any database, login or user exists.
 weak="$(db_init -e Goldmark__Database__User=smoke_weak -e Goldmark__Database__Name=GoldmarkWeakProbe -e Goldmark__Database__Password=aaaaaaaaaaaaaaaa)"; weak_code=$?
 weak_state="$(sql_as sa "${sa_password}" "SELECT CONCAT(CASE WHEN DB_ID('GoldmarkWeakProbe') IS NULL THEN 'no-db' ELSE 'db' END, ',', CASE WHEN SUSER_ID('smoke_weak') IS NULL THEN 'no-login' ELSE 'login' END);")"
 if [[ ${weak_code} -ne 0 && "${weak_state}" == "no-db,no-login" ]]; then
@@ -328,34 +311,21 @@ else
   fail "a password rejected by SQL Server policy leaves no database or login behind" "exit ${weak_code}, ${weak_state}"
 fi
 
-# An existing login that can stop working on its own (expiration policy) is refused.
-sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_expiring WITH PASSWORD = N'${other_password}', CHECK_POLICY = ON, CHECK_EXPIRATION = ON;" >/dev/null
-refused="$(db_init -e Goldmark__Database__User=smoke_expiring -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
-sql_as sa "${sa_password}" "USE master; DROP LOGIN smoke_expiring;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"can stop working on its own"* ]]; then
-  pass "an existing login with CHECK_EXPIRATION = ON is refused"
+# The post-provisioning effective-permission check still refuses a privileged runtime login.
+sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin ADD MEMBER goldmark_app; ALTER ROLE db_securityadmin ADD MEMBER goldmark_app;" >/dev/null
+refused="$(db_init)"; refused_code=$?
+sql_as sa "${sa_password}" "ALTER SERVER ROLE securityadmin DROP MEMBER goldmark_app; ALTER ROLE db_securityadmin DROP MEMBER goldmark_app;" >/dev/null
+if [[ ${refused_code} -eq 3 && "${refused}" == *"server role securityadmin"* && "${refused}" == *"database role db_securityadmin"* ]]; then
+  pass "the effective-permission check refuses a runtime login holding securityadmin/db_securityadmin"
 else
-  fail "an existing login with CHECK_EXPIRATION = ON is refused" "exit ${refused_code}"
-fi
-
-# Logins without password policy, or with a denied connection, are refused before any change.
-sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_nopolicy WITH PASSWORD = N'${other_password}', CHECK_POLICY = OFF;" >/dev/null
-refused="$(db_init -e Goldmark__Database__User=smoke_nopolicy -e Goldmark__Database__Password="${other_password}")"; refused_code=$?
-sql_as sa "${sa_password}" "USE master; DROP LOGIN smoke_nopolicy;" >/dev/null
-sql_as sa "${sa_password}" "USE master; DENY CONNECT SQL TO goldmark_app;" >/dev/null
-denied="$(db_init)"; denied_code=$?
-sql_as sa "${sa_password}" "USE master; REVOKE CONNECT SQL FROM goldmark_app; GRANT CONNECT SQL TO goldmark_app;" >/dev/null
-if [[ ${refused_code} -eq 3 && "${refused}" == *"CHECK_POLICY = OFF"* && ${denied_code} -eq 3 && "${denied}" == *"connection denied"* ]]; then
-  pass "logins without password policy or with DENY CONNECT SQL are refused before any change"
-else
-  fail "logins without password policy or with DENY CONNECT SQL are refused" "exit ${refused_code}/${denied_code}"
+  fail "the effective-permission check refuses a privileged runtime login" "exit ${refused_code}"
 fi
 
 accepted="$(db_init)"
 if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
-  pass "db-init accepts the login again once the extra rights are removed"
+  pass "db-init accepts the login again once the extra roles are removed"
 else
-  fail "db-init accepts the login again once the extra rights are removed"
+  fail "db-init accepts the login again once the extra roles are removed"
 fi
 
 # --- Readiness failure and recovery ----------------------------------------------
