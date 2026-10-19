@@ -5,9 +5,9 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-19:** slice 1 merged (PR #1, `main` at `3821851`). The handoff
-PR (`docs/handoff-slice-2`: this file + DEC-021) merges before slice 2 starts.
-Next: slice 2, with its decisions already approved (§3).
+**As of 2026-10-19:** slices 1 (PR #1) and the handoff (PR #11) are merged;
+slice 2 (`slice/02-db-baseline`) is in review. Next: **slice 2b** (Opus,
+rule 5), once slice 2 is merged. Its open points are in §3.
 
 ## 1. Slice plan and status
 
@@ -18,15 +18,15 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | # | Status | Branch | Scope | Done when | Screens |
 |---|---|---|---|---|---|
 | 1 | **done** (PR #1) | `claude/slice-01-scaffold` | Skeleton, CI, Dockerfile, Compose (SQL Server 2025 Express), `/health/*`, Serilog JSON, web skeleton with NFR-SEC-9 controls | `docker compose up` serves health + empty SPA; CI green; unlisted npm dependency fails CI | — |
-| 2 | **next** | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. Decisions in §3 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
-| 2b | pending | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments | US-01 existing-SQL criteria; #2–#4 closed | — |
+| 2 | **in review** | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
+| 2b | **next** | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments | US-01 existing-SQL criteria; #2–#4 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
-| 4 | pending | `slice/04-audit-log` | Audit log writes + screen | US-07 | 16 |
-| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/search?q=`); Dapper introduced here | US-10/11; US-53 for `/ci/{id}` and `/search?q=`; search p95 on 25k synthetic CIs | 4, 5 |
-| 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen | Admin can manage CI types/attributes through the UI | 14 |
-| 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-40 | 5 (tab), 6 |
+| 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
+| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
+| 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
+| 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
 | 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
-| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision | US-06/50/54; CI fails on an unreviewed breaking OpenAPI diff | 18 |
+| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression | US-20/21; re-ingest → 0 history rows | — |
 | 11 | pending | `slice/11-provenance` | Provenance, precedence, overrides | US-22, FR-RC-3/6 | 5 (badges, override) |
@@ -37,16 +37,16 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 16 | pending | `slice/16-ad-collector` | AD collector, cluster classification, OU exclusions, data-quality lists | US-33 | — |
 | 17 | pending | `slice/17-sql-collector` | SQL collector: instances, DBs, AGs, replicas, listeners | US-34 | — |
 | 18 | pending | `slice/18-fc-storage` | FC LUN paths, storage groups, mapping screen | US-35; M4 | 10 |
-| 19 | pending | `slice/19-impact-engine` | Impact engine, redundancy semantics, explanation paths, `/impact?ci={id}[&ci=…]` deep link | US-41; M8; US-53 for `/impact` | 7 |
-| 20 | pending | `slice/20-business-services` | Business services, ownership, lifecycle | US-12/13/14 | 8 |
+| 19 | pending | `slice/19-impact-engine` | Impact engine, redundancy semantics, explanation paths, `/impact?ci={id}[&ci=…]` deep link, CI detail "Impact" tab | US-41; M8; US-53 for `/impact` | 5 (Impact tab), 7 |
+| 20 | pending | `slice/20-business-services` | Business services, ownership, lifecycle | US-12/13/14 | 4 (lifecycle/owner filters), 5 (lifecycle/owner edit), 8 |
 | 21 | pending | `slice/21-csv-import` | CSV import wizard + quickstart sample dataset | US-25; M5 | 13 |
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
-| 23 | pending | `slice/23-data-quality-history` | Data quality + global change history | Screens 11, 15 | 11, 15 |
-| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6 | US-60, NFR-SEC-7 | — |
+| 23 | pending | `slice/23-data-quality-history` | Data quality + global change history, dashboard data-quality counts and recent-changes feed | Screens 11, 15 and the dashboard additions | 3 (counts, recent changes), 11, 15 |
+| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6; relative-link check (#12) | US-60, NFR-SEC-7; #5, #6 and the #12 link check closed | — |
 | 25 | pending (P1) | `slice/25-oidc` | OIDC sign-in (Entra) + group→role mapping | US-05 | 1 (Microsoft sign-in), 17 (group mappings) |
-| 26 | pending (P1) | `slice/26-ethernet-neighbors` | Ethernet neighbor links (ID-CDP) + NetworkDevice placeholders | US-36; M3 | — |
+| 26 | pending (P1) | `slice/26-ethernet-neighbors` | Ethernet neighbor links (ID-CDP) + NetworkDevice placeholders, non-switch neighbor summary | US-36; M3 | 11 (CDP summary) |
 | 27 | pending (P1) | `slice/27-fc-hba-rdm` | FC HBA inventory + RDM→VM links | US-37 | — |
-| 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52 | 7 (saved scenarios), 19 (replay) |
+| 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52; NFR-SEC-6 pseudonymized export (keyed HMAC, as in the readiness probe) | 7 (saved scenarios), 19 (replay) |
 | 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3; a sample external app (test fixture) can annotate and link without any CMDB UI code change | 5 and 6 (badges, links), 21 |
 | 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2; the sample app resyncs correctly after a simulated outage | — |
 | P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28 | Screen 20 | 20 |
@@ -97,52 +97,40 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    - if blocked (install failure, missing credential, network block), stop and
      say exactly what is needed;
    - keep chat updates short; details go in PR descriptions and `DECISIONS.md`.
+7. **Every slice, in addition to its own criteria** (from Codex on PR #11):
+   - every new mutation writes audit records and tests them (US-07; slice 4
+     builds the log itself);
+   - every new UI function is available through `/api/v1` (US-50; slice 8
+     builds the API infrastructure);
+   - every new endpoint declares an access policy and is in the
+     authorization enumeration test (M6, from slice 3).
 
-## 3. Slice 2: approved decisions (owner, 2026-10-19)
+## 3. Next slice (2b): notes
 
-Record each as a DEC in the slice-2 PR.
+Slice 2's approved decisions are recorded as DEC-022…DEC-029. For 2b:
 
-1. **Migrations run in `db-init`, not the app.** New `migrate` command in the
-   same image, run by the one-shot `db-init` container as `goldmark_migrator`.
-   The app container holds only the runtime login. This deviates from US-01's
-   wording ("the app runs DbUp on start"); record it. The app depends on
-   `db-init` with `condition: service_completed_successfully`.
-2. **Readiness schema check.** Readiness requires schema version == the
-   version the app was built for, logs both values, and returns 503 on any
-   mismatch (older or newer).
-3. **Migration login.** `goldmark_migrator`, created by `bootstrap-db`, is
-   `db_owner` of the Goldmark database only: no server roles, not sysadmin.
-   (`db_ddladmin` + reader/writer is not enough: migrations must GRANT/DENY.)
-   New secret `GOLDMARK_DB_MIGRATION_PASSWORD` in `.env.example` and Compose;
-   it reaches only `db-init`, never the app container. Reject it if it equals
-   the runtime or admin password. The migrator is a `goldmark:managed`
-   principal under the same refusal rules as the runtime login.
-4. **Runtime permissions.** Defined in migrations on a database role
-   (`goldmark_runtime`); the runtime user is a member. Explicit
-   `DENY UPDATE, DELETE` on AuditLog. No DDL (which also blocks `TRUNCATE` and
-   turning off system versioning on the temporal tables).
-5. **Dependencies approved:** `dbup-sqlserver` 7.2.0 and
-   `Testcontainers.MsSql` 4.16.0 (both compatible with the SqlClient 7.1.1 pin
-   and past the 7-day rule). Dapper waits for slice 5.
-6. **Tests.** Permission tests run against real SQL Server 2025 in the smoke
-   test and in a separate xUnit integration project (Testcontainers) using the
-   same SQL Server image digest as Compose, one shared container per test
-   collection, so unit tests stay fast.
-7. **Migration immutability.** DbUp does not checksum scripts. Commit a hash
-   manifest of migration scripts; CI fails if an existing script changes.
-   New migrations append; applied ones are never edited.
+- The principal audit (#2–#4) must run whenever `bootstrap-db` adopts or
+  revalidates a principal, for **both** logins (runtime and migration) and in
+  both deployments (DEC-021, Codex on #11).
+- `bootstrap-db` already distinguishes the two managed logins by marker value
+  (`runtime-login`, `migration-login`); `migrate` verifies the runtime login's
+  schema- and object-level rights only for `cmdb`, `dbo` and the audit log.
+  Grants on other objects and ownership chains are #4.
+- On an existing SQL Server, the operator may not allow `CREATE LOGIN`; 2b
+  needs an answer for pre-created logins (adoption is the current path).
 
 ## 4. Open issues and owners
 
 | Item | Owner slice |
 |---|---|
-| #7 `bootstrap-db`: validate `Database:Port`; reject `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` | 2 |
+| #7 `bootstrap-db`: validate `Database:Port`; reject `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` | 2 (closed by the slice-2 PR) |
 | #2 guest access to other databases on a shared SQL Server | 2b |
 | #3 wildcard linked-server and remote-login mappings | 2b |
 | #4 audit of adopted and shared-instance principals beyond database scope | 2b |
 | Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
 | #5 renew the generated TLS certificate without a restart | 24 |
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
+| #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3) | owner: merge **together**, see §5.2 |
 | Dependabot PR #9 (`web-dev-tooling` group, 3 updates) | owner: merge when CI (incl. the npm policy job) is green |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
@@ -174,11 +162,13 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
 
 ### 5.2 CI quirks
 
-- 11 checks per PR: npm policy (before install), Web, .NET, Compose smoke,
-  Dependency review, CodeQL ×3 + the CodeQL status, code scanning,
-  submit-nuget. A full run takes about 4 minutes; smoke is the long pole.
-  Slice 2 adds the Testcontainers integration tests; keep their runtime in
-  check (shared container per collection).
+- 13 checks per PR: npm policy (before install), Web, .NET (in-process tests
+  only), SQL Server integration tests (Testcontainers, about 2 min), Migration
+  immutability, Compose smoke, Dependency review, CodeQL ×3 + the CodeQL
+  status, code scanning, submit-nuget. Smoke is the long pole.
+- The `migrations` job needs `fetch-depth: 0` to read the base revision's
+  `db/migrations.sha256`; it compares with the PR base, or with
+  `github.event.before` on pushes to `main`.
 - GitHub's Docker did not apply `COPY --chmod` to the TLS directory (it was
   `0755`); the app forces `0700` at start (`a583c22`). Don't rely on image
   modes for secrets.
@@ -214,9 +204,23 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
   the `goldmark_runtime` role membership and its grants to this baseline
   (`VerifySql`).
 - `bootstrap-db` manages only principals carrying the `goldmark:managed`
-  extended property; others are refused (exit 3) unless
-  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`. Exit codes: 0 ok, 1 SQL/connection
-  error, 2 invalid configuration, 3 refused.
+  extended property; its value names the purpose (`runtime-login`,
+  `migration-login`). Others are refused (exit 3) unless
+  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`. Exit codes (all database commands):
+  0 ok, 1 SQL/connection error, 2 invalid configuration, 3 refused.
+- `db-init` runs `bootstrap-db migrate` (chained in-process; the image has no
+  shell). Any positional first argument is a command: a typo exits 2.
+- Effective permissions: an object-level `DENY` on a role beats a user-level
+  `GRANT`, so `GRANT UPDATE ON cmdb.AuditLog TO goldmark_app` changes nothing
+  (correctly accepted by `migrate`); removing the role's `DENY` is what grants
+  it (refused). **But** a column-level `GRANT UPDATE (col)` to the role that
+  holds the table `DENY` overrides it (measured on SQL Server 2025), hence
+  `migrate`'s per-column check. Test effective rights, not grant rows.
+- `FOR SYSTEM_TIME ALL` leaves out zero-duration versions (two changes in the
+  same tick). To count history in tests, query the history table directly.
+- DbUp creates its journal (`dbo.SchemaVersions`) before running the first
+  script, so a migration can `GRANT` on it. Scripts run one transaction each,
+  with variable substitution off.
 - `Microsoft.Data.SqlClient` refuses globalization-invariant mode; the runtime
   image is the chiseled `-extra` (ICU) variant.
 
@@ -244,12 +248,30 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
   not valid base64, but throws on valid base64 that is not valid DER.
 - Docker reserves exit code 2 for `HEALTHCHECK` commands; `healthcheck`
   returns 1 for every failure.
+- Integration tests (Testcontainers): the fixture reads the SQL image from
+  `deploy/docker-compose.yml` and runs the real `sql-entrypoint.sh`, with the
+  TLS directories on tmpfs. Docker's archive API cannot read files on tmpfs,
+  so the certificate is read with `exec cat`. The resource reaper (Ryuk) is
+  disabled (DEC-027). SQL Server is ready in about 10 s.
+- Analyzer CA1711 rejects type names ending in `Collection` (xUnit collection
+  definitions are named `…Tests`).
 
 ### 5.5 The agent's sandbox (local verification)
 
 - Run `source /root/.goldmark-env` first (Node at `/opt/node24`, .NET at
   `/opt/dotnet`). Use `NUGET_CERT_REVOCATION_MODE=offline` locally only (CRL
   hosts are unreachable); CI checks online.
+- **A new session's sandbox may be fresh** (slice 2 found no
+  `/root/.goldmark-env`, no .NET SDK, Node 22 only). The Microsoft download
+  hosts (`dot.net`, `builds.dotnet.microsoft.com`) do not resolve. Recovery:
+  - Node: `nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.xz`, verified
+    against `SHASUMS256.txt`, unpacked to `/opt/node24`; then
+    `corepack enable --install-directory /opt/node24/bin`.
+  - .NET: pull the digest-pinned SDK image from the Dockerfile, then
+    `docker create` + `docker cp <id>:/usr/share/dotnet /opt/dotnet`.
+  - Recreate `/root/.goldmark-env`: `DOTNET_ROOT=/opt/dotnet`,
+    `PATH=/opt/node24/bin:/opt/dotnet:$PATH`,
+    `NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt`.
 - The sandbox sits behind a TLS-inspecting proxy, so the committed Dockerfile
   cannot build as-is locally. Build from a copy that mounts the proxy CA as a
   BuildKit secret on the two network steps (`pnpm install`, `dotnet restore`):
@@ -278,6 +300,7 @@ Labels in use: `slice-2` (now covers 2 and 2b), `deferred`.
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-021 and the slice-1 acceptance mapping.
+- `docs/DECISIONS.md`: DEC-001…DEC-029, the slice-1 and slice-2 acceptance
+  mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/security/endpoint-access.md`.

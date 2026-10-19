@@ -1,4 +1,4 @@
-# Goldmark + bundled SQL Server 2025 Express (US-01, slice 1).
+# Goldmark + bundled SQL Server 2025 Express (US-01, slices 1-2).
 #
 #   cp deploy/.env.example deploy/.env    # then fill in every required value
 #   docker compose -f deploy/docker-compose.yml up -d --build --wait
@@ -54,16 +54,21 @@ services:
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
 
-  # One-shot: creates the database and the least-privilege runtime login (idempotent).
+  # One-shot, idempotent. bootstrap-db (as sa) creates the database, the least-privilege
+  # runtime login and the migration login (db_owner of this database only); migrate (as the
+  # migration login) applies the schema migrations and grants the runtime login its role.
+  # Only this container receives the sa and migration passwords; the app never does.
   db-init:
     image: goldmark:${GOLDMARK_IMAGE_TAG:-local}
     pull_policy: never
-    command: ["bootstrap-db"]
+    command: ["bootstrap-db", "migrate"]
     environment:
       Goldmark__Database__Host: sqlserver
       Goldmark__Database__User: ${GOLDMARK_DB_USER:-goldmark_app}
       Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:?Set GOLDMARK_DB_PASSWORD in deploy/.env}
       Goldmark__Database__ServerCertificatePath: /run/goldmark/sql-tls/sqlserver.crt
+      Goldmark__Migration__User: ${GOLDMARK_DB_MIGRATION_USER:-goldmark_migrator}
+      Goldmark__Migration__Password: ${GOLDMARK_DB_MIGRATION_PASSWORD:?Set GOLDMARK_DB_MIGRATION_PASSWORD in deploy/.env}
       Goldmark__Bootstrap__AdminUser: sa
       Goldmark__Bootstrap__AdminPassword: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in deploy/.env}
       Goldmark__Bootstrap__AdoptExistingLogin: ${GOLDMARK_DB_ADOPT_EXISTING_LOGIN:-false}

@@ -4,12 +4,9 @@ using Goldmark.Api.Hosting;
 using Microsoft.Extensions.Options;
 
 // Container helper commands share the image and configuration but never start the web host.
-switch (args.FirstOrDefault())
+if (ContainerCommands.IsCommand(args.FirstOrDefault()))
 {
-    case HealthCheckCommand.Name:
-        return await HealthCheckCommand.RunAsync();
-    case BootstrapDatabaseCommand.Name:
-        return await BootstrapDatabaseCommand.RunAsync();
+    return await ContainerCommands.RunAsync(args, CommandConfiguration.Build(), Console.Out, Console.Error);
 }
 
 var builder = WebApplication.CreateBuilder(args);

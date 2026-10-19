@@ -4,7 +4,7 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-19):** slice 1 is merged (PR #1). The owner approved
+**Approval state (2026-10-19):** slice 1 is merged (PR #1); slice 2 is in review. The owner approved
 the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b
 and 5b, in order, one PR each. The PRD text stays a draft (DEC-001); the build
 plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
@@ -33,6 +33,14 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-019 | Deferred to later slices | Scope |
 | DEC-020 | Constraints of the build sandbox (not of the product) | Process |
 | DEC-021 | Approved MVP build plan (amended PRD §11) | Process |
+| DEC-022 | Migrations run in `db-init` (`migrate`), never in the app | Database |
+| DEC-023 | Readiness requires the expected schema version | API |
+| DEC-024 | Migration login: `db_owner` of the Goldmark database only | Database |
+| DEC-025 | Runtime permissions through the `goldmark_runtime` role | Database |
+| DEC-026 | Slice-2 NuGet dependencies: DbUp, Testcontainers | Supply chain |
+| DEC-027 | Database integration tests against real SQL Server 2025 | Testing |
+| DEC-028 | Applied migrations are immutable (hash manifest, CI) | Database |
+| DEC-029 | Baseline schema (0001) choices | Database |
 
 ---
 
@@ -148,7 +156,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   with `EndpointAccess` metadata and `AllowAnonymous`. Every slice-1 endpoint is
   classified in `docs/security/endpoint-access.md`, and `EndpointInventoryTests`
   fails on any unclassified endpoint (seed of the M6 enumeration test, slice 3).
-- **Pending:** a schema-version compatibility check joins readiness in slice 2,
+- **Done in slice 2 (DEC-023):** a schema-version compatibility check joins readiness in slice 2,
   with the migrations.
 - **Deviation:** PRD §5.7 also lists `health` among `/api/v1` resources. Only
   `/health/*` (US-01) exists; whether `/api/v1/health` is needed is deferred to slice 8 (API contract).
@@ -178,7 +186,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 - **Tests:** `xunit.v3` 4.0.2 on Microsoft.Testing.Platform and
   `Microsoft.AspNetCore.Mvc.Testing` 10.0.12. `Microsoft.NET.Test.Sdk` and
   `xunit.runner.visualstudio` were removed: they are VSTest packages that MTP does not need.
-- **Not added (deferred until used):** Dapper, DbUp, Testcontainers.
+- **Not added (deferred until used):** Dapper (slice 5). DbUp and Testcontainers were added in slice 2 (DEC-026).
 
 ## DEC-011 npm supply-chain controls and dependency allow-list (NFR-SEC-9)
 
@@ -313,8 +321,8 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
     `VIEW ANY COLUMN … KEY DEFINITION` grants.
 
   The first fixed-role check passed a login holding `securityadmin` and
-  `db_securityadmin` (review finding). Slice 2 adds the runtime DML grants to
-  the baseline.
+  `db_securityadmin` (review finding). Slice 2 adds membership of
+  `goldmark_runtime` to the baseline (DEC-025).
 - **Removed and deferred to slice 2b** (DEC-021; issues labelled `slice-2`): the
   administrator-side audit of pre-existing principals. That covered explicit
   grants below database scope, ownership of securables, linked-server, remote
@@ -333,7 +341,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   `WaitSeconds` plus one connect timeout. A pinned SQL certificate must
   parse as PEM or DER at startup; `bootstrap-db` applies the same check before
   connecting (review finding).
-- The migration login and DML grants arrive with slice 2.
+- The migration login and DML grants arrived with slice 2 (DEC-024, DEC-025).
 - The `sa` password exists only in the `sqlserver` and `db-init` containers.
   The app receives only the runtime login.
 - Secrets reach containers as environment variables from `deploy/.env`
@@ -406,7 +414,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 
 | Item | Slice |
 |---|---|
-| Migration login, DML grants, readiness schema check; `bootstrap-db` port and reserved-name validation (#7) | 2 |
+| Migration login, DML grants, readiness schema check; `bootstrap-db` port and reserved-name validation (#7) | 2 (done: DEC-022…DEC-029) |
 | Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b |
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b |
 | Generated certificate renewal without a restart (#5, DEC-006) | 24 |
@@ -470,6 +478,216 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Working rules** for the build (gating, review rounds, design handoffs,
   models and sessions) are recorded in `docs/HANDOFF.md`.
 
+## DEC-022 Migrations run in `db-init` (`migrate`), never in the app
+
+- **Decision (owner, 2026-10-19).** A new `migrate` command in the same image
+  applies the schema migrations with DbUp, as the migration login (DEC-024).
+  The one-shot `db-init` container runs `bootstrap-db migrate`; the app
+  depends on it with `condition: service_completed_successfully`. The app
+  container holds only the runtime login.
+- **Deviation from US-01.** US-01 says "the app runs DbUp migrations on start
+  using a separate migration login". Here the *image* runs them on every
+  `docker compose up`, but in `db-init`, not in the app process. Rationale:
+  the app container never holds a credential that can run DDL, so a
+  compromised app cannot alter the schema, the role grants or the audit log's
+  protection. The outcome US-01 asks for (migrations on start, separate
+  migration login, DML-only runtime) is met.
+- **Command chaining.** Database commands can be chained
+  (`bootstrap-db migrate`); they run in order and the first non-zero exit
+  stops the chain. The chiseled image has no shell, so chaining is done by the
+  program. Any positional first argument is a command, so a typo
+  (`bootstrap-dbb`) exits 2 instead of starting a web host that never exits
+  and blocks the app.
+- **How `migrate` works:**
+  0. verifies the login it connected as: it must carry the `migration-login`
+     marker and hold `db_owner` and nothing at server level, also when
+     `migrate` runs without `bootstrap-db`; otherwise exit 3 before anything is
+     read or changed (Codex on #14);
+  1. takes an exclusive application lock
+     (`sp_getapplock`, session-owned, 120 s), so concurrent runs cannot apply
+     a script twice (tested);
+  2. refuses (exit 3, nothing changed) if the journal contains a script this
+     build does not have: the database was migrated by a newer or different
+     build;
+  3. runs DbUp with the scripts embedded in the API assembly
+     (`db/migrations/NNNN_name.sql`, logical name `Goldmark.Migrations.*`),
+     journal `dbo.SchemaVersions`, **one transaction per script**, variable
+     substitution off, 10-minute script timeout;
+  4. adds the managed runtime user to `goldmark_runtime` (only a user carrying
+     the `runtime-login` marker; otherwise exit 3);
+  5. verifies, as the runtime login, that its effective rights are exactly the
+     role's, with nothing extra and nothing missing (DEC-025); otherwise exit 3.
+     The runtime/migration/admin passwords must all differ, also when
+     `migrate` runs on its own (Codex on #14).
+- **Exit codes** as for `bootstrap-db`: 0 ok, 1 SQL/connection error or failed
+  script, 2 invalid configuration, 3 refused.
+- **Not covered:** down-migrations (forward-only by design); a script that
+  cannot run in a transaction would need DbUp's per-script options (none so
+  far).
+
+## DEC-023 Readiness requires the expected schema version
+
+- **Decision (owner, 2026-10-19).** `/health/ready` is healthy only when the
+  database's schema version **equals** the version the build expects. Older
+  (migrations not applied) and newer (a newer build migrated it) are both
+  `503`. Both values are logged at Warning (EventId 1003,
+  `DatabaseSchemaVersion`, `ExpectedSchemaVersion`); the response stays
+  `Unhealthy` with no detail.
+- **Versions.** The build's version is the number of its newest embedded
+  script; the database's is the newest `Goldmark.Migrations.NNNN_*` entry in
+  the journal (0 if there is none, or if the journal is not visible). The
+  probe reads the journal as the runtime login, which holds `SELECT` on it and
+  nothing else in `dbo`. The query replaces slice 1's `SELECT 1`, so the probe
+  is still one query on one unpooled connection, coalesced and cached (DEC-008).
+
+## DEC-024 Migration login: `db_owner` of the Goldmark database only
+
+- **Decision (owner, 2026-10-19).** `goldmark_migrator` (configurable,
+  `GOLDMARK_DB_MIGRATION_USER`) is created by `bootstrap-db` and is a member of
+  `db_owner` of the Goldmark database only: no server roles, not sysadmin, no
+  rights in other databases. `db_ddladmin` plus reader/writer is not enough,
+  because migrations must `GRANT`/`DENY`.
+- **Secret.** New required `GOLDMARK_DB_MIGRATION_PASSWORD`. It reaches only
+  `db-init`, never the app container (smoke-tested via `docker inspect`). It
+  must be 12–128 characters and differ from the runtime and admin passwords
+  (exit 2), so the app's credential can never authenticate as `db_owner`.
+- **Same rules as the runtime login (DEC-015).** `goldmark:managed` marker,
+  refusal of unmarked existing principals unless
+  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`, password rotation, policy probe
+  before anything is created. Both logins, both users, both markers and the
+  `db_owner` membership are created in **one transaction**.
+- **Marker values name the purpose** (`runtime-login`, `migration-login`). A
+  managed principal configured for the other purpose (for example swapped
+  names) is refused, so the runtime login can never be turned into `db_owner`
+  by a configuration mistake (tested).
+- **Verified as the login** after provisioning: no server role besides
+  `public`, no server permission beyond the CONNECT baseline, no database role
+  besides `public` and `db_owner`, and `db_owner` present.
+- **#7 (closed here).** `bootstrap-db` rejects `Database:Port` outside
+  1–65535, and login names `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA`,
+  `public`, `goldmark_runtime` and `sa` for both logins (exit 2). The two
+  logins and the admin login must all differ.
+
+## DEC-025 Runtime permissions through the `goldmark_runtime` role
+
+- **Decision (owner, 2026-10-19).** Runtime rights are defined in a migration
+  (`0002_runtime_role.sql`) on the database role `goldmark_runtime`, owned by
+  `dbo`; `migrate` makes the runtime user a member. The role has:
+  - `SELECT, INSERT, UPDATE, DELETE` on schema `cmdb` (the application tables);
+  - an explicit `DENY UPDATE, DELETE` on `cmdb.AuditLog` (append-only, US-07);
+  - `SELECT` on `dbo.SchemaVersions` (readiness, DEC-023);
+  - no DDL, so also no `TRUNCATE`, no `ALTER TABLE`, no
+    `SYSTEM_VERSIONING = OFF`, no `IDENTITY_INSERT`, no security administration.
+- **Why schema-level DML:** new application tables in `cmdb` get DML without a
+  grant per table, and an object-level `DENY` still wins over it.
+- **Verified as the runtime login** by `migrate`: roles exactly `public` and
+  `goldmark_runtime`; server and database permissions at the CONNECT
+  baseline; schema `cmdb` permissions exactly the four DML ones; nothing on
+  schema `dbo`; only `SELECT` on the journal; no effective `UPDATE`/`DELETE` on
+  the audit log. It also checks the other direction: every expected grant must
+  be present (the four DML rights on `cmdb`, `SELECT`/`INSERT` on the audit log,
+  `SELECT` on the journal), so a revoked grant fails `db-init` instead of the
+  application (Codex on #14). A user-level `GRANT UPDATE` on the audit log is
+  correctly accepted (the role's `DENY` still wins); removing the `DENY` is
+  refused (tested).
+- **Column-level grants (measured on SQL Server 2025).** A column-level
+  `GRANT UPDATE (col)` to the **role** that holds the table-level `DENY`
+  overrides it, and the runtime login can then update that column. The same
+  grant to the user does not. `migrate` therefore checks `UPDATE` on every
+  audit-log column (`HAS_PERMS_BY_NAME … 'COLUMN'`); the integration tests
+  prove both the override and the refusal (Codex on #14). `bootstrap-db`'s own check now allows the `goldmark_runtime`
+  membership.
+- **Tested against SQL Server 2025** (21 denied statements, integration and
+  smoke): DDL in `cmdb` and `dbo`, `DROP`, `ALTER`, index creation,
+  `SYSTEM_VERSIONING = OFF`, DML on history tables, `UPDATE`/`DELETE`/
+  `TRUNCATE`/`MERGE … DELETE`/`IDENTITY_INSERT` on the audit log, writes to
+  the journal, `GRANT`, role and user changes. Each denied statement is
+  followed by a check that nothing changed.
+- **Out of scope (2b, #4):** auditing grants on other individual objects and
+  ownership chains. Audit-log retention (NFR-LOG-3) will need a delete path
+  that is not the runtime login (slice 4).
+
+## DEC-026 Slice-2 NuGet dependencies: DbUp, Testcontainers
+
+- **Approved by the owner (2026-10-19):** `dbup-sqlserver` 7.2.0 (2026-02-24)
+  and `Testcontainers.MsSql` 4.16.0 (2026-10-08), both past the 7-day rule.
+  `dbup-sqlserver` requires `Microsoft.Data.SqlClient` ≥ 6.1.4; the 7.1.1 pin
+  (DEC-010) satisfies it, so the runtime tree gains only `dbup-core` 6.1.1.
+- **Test-only transitive packages** (via Testcontainers): `Docker.DotNet.Enhanced*`
+  4.3.3, `SSH.NET` 2026.0.0, `BouncyCastle.Cryptography` 2.7.0, `SharpZipLib`
+  1.4.2, `Microsoft.Bcl.AsyncInterfaces` 6.0.0 and older Windows-only shims.
+  All are older than 7 days, signed by nuget.org and pass NuGetAudit. They are
+  never in the image (the Dockerfile restores only `Goldmark.Api`).
+- Dapper still waits for slice 5.
+
+## DEC-027 Database integration tests against real SQL Server 2025
+
+- **Decision (owner, 2026-10-19).** A separate project,
+  `tests/Goldmark.Api.IntegrationTests`, runs against a real SQL Server
+  container started by Testcontainers. One container per test collection;
+  tests isolate themselves with their own database and login names. The
+  in-process tests (`Goldmark.Api.Tests`) stay fast and need no Docker.
+- **Same image as production.** The fixture reads the digest-pinned image from
+  `deploy/docker-compose.yml` (`x-sql-image`), so Dependabot's bump moves both,
+  and starts it through `deploy/sqlserver/sql-entrypoint.sh` and
+  `healthcheck.sh`. The tests therefore run against TDS 8 strict with the
+  generated certificate pinned, exactly as the app does, through the app's own
+  `SqlConnectionFactory`.
+- **Testcontainers' resource reaper (Ryuk) is disabled.** It is a privileged
+  container with the Docker socket, pulled by tag; the fixture disposes its
+  container itself. A crashed test run can leave a container behind locally;
+  CI runners are ephemeral.
+- **CI.** New job `db-integration` (about 2 minutes; the container is ready in
+  about 10 s). The `.NET` job now runs `Goldmark.Api.Tests` only, so the SQL
+  tests do not run twice.
+- **Coverage** (68 tests): fresh install, idempotent re-run, concurrent
+  `migrate`, temporal tables, ownership by `dbo`, default tenant, 21 denied
+  runtime statements, allowed DML with history, both logins' rights,
+  refusal/adoption of an unmanaged migration login, swapped purposes, server
+  role on the migrator, password rotation, newer/diverged schema, extra
+  runtime grants, revoked expected grants, column-level audit-log grants, an
+  unmanaged or over-privileged migration login, readiness healthy/older/newer
+  with both versions logged.
+
+## DEC-028 Applied migrations are immutable (hash manifest, CI)
+
+- **Decision (owner, 2026-10-19).** DbUp records script names only, so an
+  edited script would never run where it was already applied. Applied
+  scripts are never edited; new scripts are appended.
+- `db/migrations.sha256` lists every script with its SHA-256, in order.
+  `db/check-migrations.sh [base]` fails when:
+  - a script is unlisted, or a listed one is missing or changed;
+  - numbering is not contiguous from `0001`, or a name is not `NNNN_lower_snake.sql`;
+  - with a base revision, the base's manifest is not an unchanged prefix of
+    the current one. This catches an edit *together with* its manifest line,
+    as well as renames, removals and reordering.
+- CI job `migrations` runs a self-test (12 cases: each tampering case fails,
+  appending passes) and then the check against the PR base (or the previous
+  `main` commit on push). `.gitattributes` forces LF, so hashes match on every
+  OS.
+- In the product, `migrate` also refuses a database whose journal has a script
+  the build does not contain (DEC-022).
+
+## DEC-029 Baseline schema (0001) choices
+
+- **Schema `cmdb`**, owned by `dbo`, for application tables; DbUp's journal
+  stays in `dbo`. Separating them lets the runtime role have DML on all
+  application tables without any write access to the journal. Every schema
+  object and the role are owned by `dbo`, never by the migration login.
+- Tables per PRD §9.2: `Tenant` (the single default tenant
+  `00000000-0000-0000-0000-000000000001` is seeded), `CiType`, `Ci`
+  (system-versioned, history `cmdb.CiHistory`), `RelationshipType`,
+  `Relationship` (system-versioned, history `cmdb.RelationshipHistory`),
+  `AuditLog`.
+- `Ci.Id` and `Relationship.Id` are `uniqueidentifier` values supplied by the
+  application (UUID v7, FR-CM-1). `Attributes` uses SQL Server 2025's native
+  `json` type (default `{}`). `LifecycleState` and `ImpactPropagation` are
+  constrained to the PRD's values. Relationships cannot point to themselves
+  and are unique per (from, type, to).
+- Left to later slices on purpose: built-in CI and relationship types (5),
+  `ChangedBy` defaults from `SESSION_CONTEXT` (7), content-hash semantics
+  (10), `Source` foreign key (13), promoted attributes and further indexes (5).
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -497,12 +715,35 @@ done; **Not executed** = implemented but the check has not run (and why).
 | 15 | Liveness independent of SQL Server | **Met** | In-process + smoke (SQL Server stopped) |
 | 16 | Readiness runs a real query as a minimally privileged login, not `sa`; unhealthy when SQL Server is down; recovers | **Met (local)** | Smoke: 503 within 60 s, 200 after restart; privileges `0000`; DDL denied |
 | 17 | Health endpoints' access policy identified | **Met** | DEC-008, `endpoint-access.md`, inventory test |
-| 18 | Readiness checks schema compatibility | **Deferred to slice 2** (instructed) | DEC-008 |
+| 18 | Readiness checks schema compatibility | **Deferred to slice 2** (instructed); met in slice 2 | DEC-008, DEC-023 |
 | 19 | HTTPS on by default; per-installation certificate persisted outside the image; replacement documented (US-01) | **Met (local)** | Smoke: served = volume; survives re-creation; key 0600; TLS < 1.2 refused |
 | 20 | Certificate trust and HSTS documented separately | **Met** | `docs/ops/tls-certificates.md`, `docs/ops/hsts.md` |
 | 21 | CSP, Trusted Types and ESLint controls; incompatibilities reported | **Met**; no incompatibility found | Browser test; ESLint config; Fluent UI risk noted (DEC-017) |
 | 22 | Fast in-process HTTP tests **and** a real Compose smoke test with health checks and bounded waits | **Met** | 80 xUnit tests; `compose-smoke.sh` |
 | 23 | Least-privilege workflow permissions | **Met** (static) | `ci.yml` |
 | 24 | `SECURITY.md` | **Met** | `SECURITY.md` |
-| 25 | US-01: DbUp migrations on start with a separate migration login; runtime login DML-only | **Unmet in slice 1** (slice 2) | DEC-015 |
+| 25 | US-01: DbUp migrations on start with a separate migration login; runtime login DML-only | **Unmet in slice 1**; met in slice 2, with migrations in `db-init` (DEC-022) | DEC-015, DEC-022, DEC-025 |
 | 26 | US-01: option to use an existing SQL Server | **Unmet in slice 1** (slice 2b, DEC-021) | DEC-019 |
+
+## Slice 2 acceptance mapping
+
+Same status vocabulary as slice 1. "Integration" = `tests/Goldmark.Api.IntegrationTests`
+(Testcontainers, SQL Server 2025); "smoke" = `tests/smoke/compose-smoke.sh`. Local runs:
+156 in-process tests, 68 integration tests, 63 smoke checks, all passing.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog (PRD §11) | **Met** | `0001_baseline.sql`; integration: tables, temporal type and history tables, `dbo` ownership |
+| 2 | Migrations idempotent (PRD §11) | **Met** | Integration: re-run applies nothing and leaves the journal identical; concurrent runs apply each script once. Smoke: re-run reports "no migrations to apply" |
+| 3 | Runtime login cannot run DDL (PRD §11, NFR-SEC-4) | **Met** | Integration: 21 denied statements, each followed by a no-change check. Smoke: `CREATE TABLE` denied, privileges `0000` |
+| 4 | Runtime login cannot UPDATE/DELETE the audit log (PRD §11, US-07) | **Met** | Integration: UPDATE, DELETE, TRUNCATE, MERGE…DELETE, IDENTITY_INSERT denied; INSERT/SELECT allowed. Smoke: the same against the Compose stack |
+| 5 | Separate migration and runtime logins (US-01, NFR-SEC-4) | **Met** | DEC-024, DEC-025; integration `MigrationLoginTests`; smoke: migrator `db_owner`, not sysadmin, no server roles |
+| 6 | Migrations run in `db-init`; the app holds only the runtime login (owner, DEC-022) | **Met**; deviation from US-01 wording recorded (DEC-022) | Smoke: the app container's environment has no migration or `sa` credential |
+| 7 | App depends on `db-init` completing (owner, DEC-022) | **Met** | `deploy/docker-compose.yml` (`service_completed_successfully`); smoke: stack becomes healthy |
+| 8 | Readiness requires schema version == the build's, logs both, 503 on any mismatch (owner, DEC-023) | **Met** | Integration: healthy / older (0) / newer (9999), EventId 1003 with both values. Smoke: 503 on a newer schema, logged, recovers |
+| 9 | Migration password only in `db-init`; rejected if equal to the runtime or admin password (owner, DEC-024) | **Met** | Unit tests; smoke: exit 2 for an equal password; `docker inspect` of the app |
+| 10 | Runtime rights via `goldmark_runtime`, explicit DENY on AuditLog (owner, DEC-025) | **Met** | `0002_runtime_role.sql`; `migrate` verifies effective rights in both directions, including per-column audit-log rights (integration: 12 tamper cases) |
+| 11 | Integration tests: same SQL image digest as Compose, one container per collection (owner, DEC-027) | **Met** | Fixture reads `x-sql-image` from Compose; `SqlServerTests` collection |
+| 12 | Migration immutability: hash manifest, CI fails on a changed script (owner, DEC-028) | **Met (local)**; CI on the PR | `db/check-migrations.test.sh` (12 cases), CI job `migrations` |
+| 13 | #7: `Database:Port` validated; `dbo`, `guest`, `sys`, `INFORMATION_SCHEMA` rejected | **Met** | Unit tests (also `public`, `goldmark_runtime`, `sa`, for both logins) |
+| 14 | CI green | **Met** | PR #14: 12 checks green on the first push |

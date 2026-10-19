@@ -3,6 +3,7 @@
     <Project Path="src/Goldmark.Api/Goldmark.Api.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Goldmark.Api.IntegrationTests/Goldmark.Api.IntegrationTests.csproj" />
     <Project Path="tests/Goldmark.Api.Tests/Goldmark.Api.Tests.csproj" />
   </Folder>
 </Solution>

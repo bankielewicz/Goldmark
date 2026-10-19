@@ -6,7 +6,9 @@ namespace Goldmark.Api.Health;
 
 /// <summary>
 /// Readiness: opens a fresh (unpooled) connection with the least-privilege runtime login and
-/// executes a real query. Slice 2 extends this with a schema-version compatibility check.
+/// reads the migration journal. Ready only when the database's schema version equals the
+/// version this build expects (DEC-023): an older schema (migrations not yet applied) and a
+/// newer one (a newer build migrated it) are both not ready, and both versions are logged.
 /// Failure details are logged (exception text only at Debug) and never returned to the caller.
 /// </summary>
 internal sealed partial class SqlReadinessCheck(
@@ -29,12 +31,25 @@ internal sealed partial class SqlReadinessCheck(
             await using var connection = new SqlConnection(builder.ConnectionString);
             await connection.OpenAsync(cancellationToken);
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT 1;";
+            command.CommandText = SchemaMigrations.AppliedScriptsSql;
             command.CommandTimeout = 5;
-            var result = await command.ExecuteScalarAsync(cancellationToken);
-            return result is 1
-                ? HealthCheckResult.Healthy()
-                : HealthCheckResult.Unhealthy("Unexpected result from readiness query.");
+            var applied = new List<string>();
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+            {
+                while (await reader.ReadAsync(cancellationToken))
+                {
+                    applied.Add(reader.GetString(0));
+                }
+            }
+
+            var version = SchemaMigrations.DatabaseVersion(applied);
+            if (version != SchemaMigrations.ExpectedVersion)
+            {
+                LogSchemaMismatch(logger, version, SchemaMigrations.ExpectedVersion);
+                return HealthCheckResult.Unhealthy("Database schema version does not match this build.");
+            }
+
+            return HealthCheckResult.Healthy();
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
         {
@@ -50,4 +65,8 @@ internal sealed partial class SqlReadinessCheck(
 
     [LoggerMessage(EventId = 1002, Level = LogLevel.Debug, Message = "Readiness check failure detail")]
     private static partial void LogNotReadyDetail(ILogger logger, Exception exception);
+
+    [LoggerMessage(EventId = 1003, Level = LogLevel.Warning,
+        Message = "Readiness check failed: database schema version {DatabaseSchemaVersion} does not match the version this build expects ({ExpectedSchemaVersion}); run the migrate command (db-init) with this build")]
+    private static partial void LogSchemaMismatch(ILogger logger, int databaseSchemaVersion, int expectedSchemaVersion);
 }
