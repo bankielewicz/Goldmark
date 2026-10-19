@@ -19,7 +19,7 @@ Working rules from HANDOFF that change how you act:
 
 ## Commands
 
-Toolchain is pinned and must match exactly: .NET SDK 10.0.402 (`global.json`, `rollForward: disable`), Node 24.21.0 (`.node-version`), pnpm 11.28.5 via Corepack (`corepack enable pnpm`).
+Toolchain is pinned and must match exactly: .NET SDK 10.0.402 (`global.json`, `rollForward: disable`), Node 24.21.0 (`.node-version`), pnpm 11.28.5 via Corepack (`corepack enable pnpm`; ignore pnpm's upgrade banner). On Linux/WSL the SDK needs ICU (`libicu`); don't work around it with invariant globalization, which `Microsoft.Data.SqlClient` refuses.
 
 Back end (solution `Goldmark.slnx`; tests use xUnit v3 on Microsoft Testing Platform):
 
@@ -28,7 +28,7 @@ dotnet restore Goldmark.slnx --locked-mode
 dotnet format Goldmark.slnx --verify-no-changes --no-restore   # lint/format, as CI runs it
 dotnet build Goldmark.slnx -c Release --no-restore
 dotnet test --solution Goldmark.slnx -c Release --no-build
-# One test class or method (xUnit v3 filters; not yet run in this repo):
+# One test class or method (xUnit v3 filters):
 dotnet test --project tests/Goldmark.Api.Tests -c Release --filter-class 'Goldmark.Api.Tests.HealthEndpointTests'
 dotnet test --project tests/Goldmark.Api.Tests -c Release --filter-method '*Readiness*'
 ```
