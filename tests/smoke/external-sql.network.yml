@@ -1,0 +1,12 @@
+# Smoke test only (tests/smoke/compose-smoke.sh): lets deploy/docker-compose.external-sql.yml
+# reach the bundled stack's SQL Server, which then plays the part of an existing server.
+services:
+  db-init:
+    networks: [default, smoke-sql]
+  app:
+    networks: [default, smoke-sql]
+
+networks:
+  smoke-sql:
+    name: goldmark-smoke_backend
+    external: true

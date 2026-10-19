@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compose smoke test (slices 1-2): runs the real deployment (deploy/docker-compose.yml)
+# Compose smoke test (slices 1-2b): runs the real deployment (deploy/docker-compose.yml)
 # with SQL Server 2025 Express and verifies, against live containers:
 #   - Compose refuses to start without the required secrets
 #   - the app fails fast (exit 2) when started without its database settings
@@ -13,6 +13,10 @@
 #   - the runtime login is least-privileged and SQL Server enforces TDS 8 strict
 #   - db-init is idempotent; migrations are applied by the migration login, which
 #     is db_owner of the Goldmark database only; its password never reaches the app
+#   - deploy/docker-compose.external-sql.yml against an existing SQL Server (the
+#     bundled one, as a stand-in): a dedicated administrator instead of sa, Mode
+#     Existing with DBA-created logins, and a principal-audit finding refused and
+#     then accepted by its ID
 #   - the runtime login cannot UPDATE/DELETE/TRUNCATE the audit log or switch off
 #     system versioning; readiness requires the schema version this build expects
 #   - logs are JSON and contain none of the generated secrets
@@ -51,6 +55,10 @@ EOF
 chmod 600 "${work}/.env"
 
 compose=(docker compose -p "${project}" -f "${repo}/deploy/docker-compose.yml" --env-file "${work}/.env")
+ext_project="${project}-ext"
+ext_port=$((port + 1))
+ext_compose=(docker compose -p "${ext_project}" -f "${repo}/deploy/docker-compose.external-sql.yml"
+  -f "${repo}/tests/smoke/external-sql.network.yml" --env-file "${work}/ext.env")
 
 results=()
 failures=0
@@ -86,6 +94,8 @@ cleanup() {
   if [[ "${GOLDMARK_SMOKE_KEEP:-}" == 1 ]]; then
     echo "Stack left running (project ${project})."
   else
+    # The external-SQL project uses the bundled stack's network: remove it first.
+    [[ -f "${work}/ext.env" ]] && "${ext_compose[@]}" down -v --remove-orphans >/dev/null 2>&1
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1
   fi
 }
@@ -119,6 +129,13 @@ if [[ $? -ne 0 && "${missing_output}" =~ required\ variable\ (SQLSERVER_ACCEPT_E
   pass "compose refuses to run without required secrets"
 else
   fail "compose refuses to run without required secrets" "${missing_output:0:200}"
+fi
+
+ext_missing="$(docker compose -p "${ext_project}-nosecrets" -f "${repo}/deploy/docker-compose.external-sql.yml" --env-file /dev/null config 2>&1)"
+if [[ $? -ne 0 && "${ext_missing}" =~ required\ variable\ (GOLDMARK_DB_HOST|GOLDMARK_DB_PASSWORD|GOLDMARK_DB_MIGRATION_PASSWORD|GOLDMARK_DB_ADMIN_USER|GOLDMARK_DB_ADMIN_PASSWORD)\ is\ missing ]]; then
+  pass "the external-SQL compose file refuses to run without its required settings"
+else
+  fail "the external-SQL compose file refuses to run without its required settings" "${ext_missing:0:200}"
 fi
 
 # --- Build context never contains git-ignored secrets ------------------------------
@@ -395,6 +412,88 @@ if [[ $? -eq 0 && "${accepted}" == *"verified runtime login"* ]]; then
 else
   fail "db-init accepts the login again once the extra roles are removed"
 fi
+
+# --- Slice 2b: an existing SQL Server (deploy/docker-compose.external-sql.yml) ---------
+# The bundled SQL Server stands in for an existing one: a DBA-style administrator login (not
+# sa), a database and logins created in advance (Mode Existing), and its own app on port+1.
+dba_password="$(secret)"; ext_app_password="$(secret)"; ext_migration_password="$(secret)"
+docker cp "${project}-sqlserver-1:/goldmark/sql-tls-public/sqlserver.crt" "${work}/external-sql.crt" >/dev/null
+chmod 644 "${work}/external-sql.crt"
+sql_as sa "${sa_password}" "USE master; CREATE LOGIN smoke_dba WITH PASSWORD = N'${dba_password}'; ALTER SERVER ROLE sysadmin ADD MEMBER smoke_dba;" >/dev/null
+sql_as smoke_dba "${dba_password}" "USE master; CREATE DATABASE GoldmarkExt; ALTER DATABASE GoldmarkExt SET AUTO_CLOSE OFF;
+  CREATE LOGIN ext_app WITH PASSWORD = N'${ext_app_password}', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+  CREATE LOGIN ext_migrator WITH PASSWORD = N'${ext_migration_password}', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+  EXEC GoldmarkExt.sys.sp_executesql N'CREATE USER ext_app FOR LOGIN ext_app; CREATE USER ext_migrator FOR LOGIN ext_migrator; ALTER ROLE db_owner ADD MEMBER ext_migrator;';" >/dev/null
+printf '%s\n' \
+  "GOLDMARK_DB_HOST=sqlserver" \
+  "GOLDMARK_DB_NAME=GoldmarkExt" \
+  "GOLDMARK_SQL_SERVER_CERT_FILE=${work}/external-sql.crt" \
+  "GOLDMARK_DB_ADMIN_USER=smoke_dba" \
+  "GOLDMARK_DB_ADMIN_PASSWORD=${dba_password}" \
+  "GOLDMARK_DB_BOOTSTRAP_MODE=Existing" \
+  "GOLDMARK_DB_USER=ext_app" \
+  "GOLDMARK_DB_PASSWORD=${ext_app_password}" \
+  "GOLDMARK_DB_MIGRATION_USER=ext_migrator" \
+  "GOLDMARK_DB_MIGRATION_PASSWORD=${ext_migration_password}" \
+  "GOLDMARK_HTTPS_PORT=${ext_port}" \
+  "GOLDMARK_TLS_HOSTNAMES=localhost,127.0.0.1" > "${work}/ext.env"
+chmod 600 "${work}/ext.env"
+ext_config="$("${ext_compose[@]}" config 2>&1)"
+if [[ "${ext_config}" != *"mcr.microsoft.com/mssql"* && "${ext_config}" == *"Goldmark__Database__ServerCertificatePath: /run/goldmark/sql-tls/server.crt"* ]]; then
+  pass "the external-SQL file has no SQL Server container and pins the configured certificate"
+else
+  fail "the external-SQL file has no SQL Server container and pins the configured certificate"
+fi
+
+"${ext_compose[@]}" up -d --no-build >/dev/null 2>&1
+ext_app_healthy() { [[ "$(docker inspect -f '{{.State.Health.Status}}' "${ext_project}-app-1" 2>/dev/null)" == healthy ]]; }
+ext_init_failed() { [[ "$(docker inspect -f '{{.State.Status}} {{.State.ExitCode}}' "${ext_project}-db-init-1" 2>/dev/null)" =~ ^exited\ [1-9] ]]; }
+ext_done() { ext_app_healthy || ext_init_failed; }
+if wait_until 180 ext_done && ext_app_healthy; then
+  ext_init_log="$("${ext_compose[@]}" logs --no-color --no-log-prefix db-init 2>&1)"
+  pass "external SQL Server: db-init (Mode Existing, administrator smoke_dba) and the app start healthy"
+else
+  ext_init_log="$("${ext_compose[@]}" logs --no-color --no-log-prefix db-init 2>&1)"
+  fail "external SQL Server: db-init (Mode Existing, administrator smoke_dba) and the app start healthy" "$(tail -n 5 <<< "${ext_init_log}" | cut -c1-300)"
+fi
+if [[ "${ext_init_log}" == *"runtime login: using the existing login 'ext_app' (Mode Existing: nothing is created)"* \
+      && "${ext_init_log}" == *"principal audit passed for both logins and the instance"* && "${ext_init_log}" != *"bootstrap-db: created"* \
+      && "${ext_init_log}" != *"changed login password"* ]]; then
+  pass "Mode Existing creates nothing and the principal audit passes"
+else
+  fail "Mode Existing creates nothing and the principal audit passes"
+fi
+docker cp "${ext_project}-app-1:/var/lib/goldmark/tls/goldmark.crt" "${work}/ext-app-cert.pem" >/dev/null 2>&1
+ext_ready() { [[ "$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert "${work}/ext-app-cert.pem" "https://localhost:${ext_port}/health/ready")" == 200 ]]; }
+check "external SQL Server: /health/ready is 200 (runtime login ext_app, pinned SQL certificate)" wait_until 60 ext_ready
+ext_app_env_clean() {
+  ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${ext_project}-app-1" \
+    | grep -qF -e "${dba_password}" -e "${ext_migration_password}" -e 'Goldmark__Migration__' -e 'Goldmark__Bootstrap__'
+}
+check "external SQL Server: the app container never receives the administrator or migration credentials" ext_app_env_clean
+ext_db_init() { "${ext_compose[@]}" run --rm --no-deps "$@" db-init 2>&1; }
+sa_admin="$(ext_db_init -e Goldmark__Bootstrap__AdminUser=sa -e Goldmark__Bootstrap__AdminPassword="${sa_password}")"; sa_admin_code=$?
+if [[ ${sa_admin_code} -eq 2 && "${sa_admin}" == *"Goldmark:Bootstrap:AdminUser must not be 'sa'"* ]]; then
+  pass "external SQL Server: sa is refused as the administrator login (exit 2)"
+else
+  fail "external SQL Server: sa is refused as the administrator login (exit 2)" "exit ${sa_admin_code}"
+fi
+# #2 end to end: guest access to another database is refused by ID, then accepted by that ID.
+sql_as smoke_dba "${dba_password}" "USE master; CREATE DATABASE SmokeGuest; EXEC SmokeGuest.sys.sp_executesql N'GRANT CONNECT TO guest;';" >/dev/null
+guest_refused="$(ext_db_init)"; guest_refused_code=$?
+guest_accepted="$(ext_db_init -e Goldmark__Bootstrap__AcceptedFindings=guest-connect:SmokeGuest)"; guest_accepted_code=$?
+sql_as smoke_dba "${dba_password}" "USE master; DROP DATABASE SmokeGuest;" >/dev/null
+if [[ ${guest_refused_code} -eq 3 && "${guest_refused}" == *"[guest-connect:SmokeGuest]"* && "${guest_refused}" == *"Nothing was changed."* \
+      && ${guest_accepted_code} -eq 0 && "${guest_accepted}" == *"accepted finding [guest-connect:SmokeGuest]"* ]]; then
+  pass "a principal-audit finding is refused (exit 3) and can be accepted by its ID"
+else
+  fail "a principal-audit finding is refused (exit 3) and can be accepted by its ID" "exit ${guest_refused_code}/${guest_accepted_code}"
+fi
+"${ext_compose[@]}" logs --no-color > "${work}/ext.log" 2>&1
+check "external SQL Server: no secret appears in its container logs" bash -c "! grep -qF -e '${dba_password}' -e '${ext_app_password}' -e '${ext_migration_password}' -e '${sa_password}' '${work}/ext.log'"
+"${ext_compose[@]}" down -v --remove-orphans >/dev/null 2>&1
+rm -f "${work}/ext.env"
+sql_as sa "${sa_password}" "USE master; DROP DATABASE GoldmarkExt; DROP LOGIN ext_app; DROP LOGIN ext_migrator; DROP LOGIN smoke_dba;" >/dev/null
 
 # --- Readiness failure and recovery ----------------------------------------------
 "${compose[@]}" stop sqlserver >/dev/null 2>&1
