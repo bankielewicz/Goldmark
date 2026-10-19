@@ -20,9 +20,22 @@ If someone edits a canvas directly, pull that file back here first.
 Not stored here (they exist only on the canvases): the six per-screen state
 boards (`ST1`–`ST6`), the Shared states board and each canvas's `canvas.json`.
 
-Known differences from later decisions: the mockups follow the prompts as
-written in slice 1. DEC-021 (2026-10-19) moved Settings (#20) to P1; the
-Settings mockup still shows it as P0 with P1 sections.
+Status: review input, not approved designs. They are a starting point for
+the design-system handoff and the per-slice design handoffs in
+`docs/HANDOFF.md` (rules 3 and 4), which still happen. Where `DECISIONS.md`
+or `HANDOFF.md` differs from a mockup, those documents win.
+
+Checked against `DECISIONS.md` and `HANDOFF.md` on 2026-10-19:
+
+- DEC-021 moved Settings (#20) to P1. The Settings mockup still shows it as
+  P0 with P1 sections.
+- Fluent UI v9 is unverified under the served CSP (DEC-017; first step of
+  slice 3). The mockups imitate Fluent styling in plain markup; if Fluent
+  fails, the component choices change.
+- The "As of" control appears on every mockup, but slice 7 adds it (screens
+  4, 5, 6). Screens built in slices 3–6 ship without it until then.
+- P1 elements tagged in the mockups match the P1 slices (25, 28, 29) and
+  Settings. Screen 14 is built in slice 5b; its design is unaffected.
 
 `Main.dc.html` is screen 3, Dashboard. The file name is required by the
 canvas format.
