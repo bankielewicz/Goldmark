@@ -1,0 +1,28 @@
+# DevForgeAI provenance record for one skill. Validated against src/schemas/skill.schema.json.
+# Common keys follow src/templates/README.md §2.2. Claude never loads this file.
+id: SKL-005
+type: skill
+title: "Documents updater skill"
+status: draft          # draft | in-review | approved | superseded | deprecated
+version: 1             # bump on any change to SKILL.md or its references; mirror it in SKILL.md metadata
+created: 2026-09-28
+updated: 2026-09-28
+owner: "Bryan"
+authors: ["Bryan", "claude-code"]
+generated_by:
+  tool: "claude-code"
+  model: "claude-opus-5-5"
+  session: "1153e47a-e403-45d8-ad65-36549adadb4d"
+reviewed_by: []
+approved_by: ""
+approved_on: null
+upstream:              # the specification this skill implements
+  - {id: SPEC-006, relation: implements, version: 1, hash: null}
+supersedes: []
+superseded_by: null
+blocked_by: []
+# --- skill-specific ---
+skill_name: documents-updater # must equal the directory name and SKILL.md `name`
+packaging: plugin      # plugin | project | personal
+plugin: devforgeai     # plugin name when packaging is plugin, else null
+eval_tag: documents-updater # tag every eval case of this skill carries

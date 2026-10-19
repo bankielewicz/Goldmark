@@ -1,0 +1,321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.devforgeai.local/sdd/ambiguities.schema.json",
+  "title": "ambiguities log (ADR-004 D8): frontmatter plus the entries item block",
+  "type": "object",
+  "required": [
+    "frontmatter"
+  ],
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "title",
+        "status",
+        "version",
+        "created",
+        "updated",
+        "owner",
+        "authors",
+        "upstream",
+        "supersedes",
+        "superseded_by",
+        "blocked_by",
+        "work_item"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^AMB-\\d{3}$"
+        },
+        "type": {
+          "const": "ambiguities"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "open",
+            "reviewed"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created": {
+          "$ref": "common.schema.json#/$defs/date"
+        },
+        "updated": {
+          "$ref": "common.schema.json#/$defs/date"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "generated_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tool": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "session": {
+              "type": "string"
+            }
+          }
+        },
+        "reviewed_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approved_by": {
+          "type": "string"
+        },
+        "approved_on": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upstream": {
+          "$ref": "common.schema.json#/$defs/links"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^AMB-\\d{3}$"
+          }
+        },
+        "superseded_by": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^AMB-\\d{3}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blocked_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(BRN|PRD|ARCH|EPIC|SPR|STORY|SPEC|ADR|SKL|POL|TASK|TEST|CTX|AMB)-\\d{3}(#[A-Z]+-\\d{2,3})?$"
+          }
+        },
+        "work_item": {
+          "type": "string",
+          "description": "The story ID, or the branch name when there is no story"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "date",
+          "recorded_by",
+          "question",
+          "checked",
+          "action",
+          "reverse",
+          "impact",
+          "resolve_before",
+          "relates_to",
+          "state",
+          "decided_by",
+          "decided_on",
+          "resolution"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^ENT-\\d{2}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ]
+          },
+          "superseded_by": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^ENT-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upstream": {
+            "$ref": "common.schema.json#/$defs/links"
+          },
+          "date": {
+            "$ref": "common.schema.json#/$defs/date"
+          },
+          "recorded_by": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "checked": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "action": {
+            "type": "string"
+          },
+          "reverse": {
+            "type": "string"
+          },
+          "impact": {
+            "type": "string"
+          },
+          "resolve_before": {
+            "type": "string"
+          },
+          "relates_to": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "state": {
+            "enum": [
+              "open",
+              "accepted",
+              "rejected"
+            ]
+          },
+          "decided_by": {
+            "type": "string"
+          },
+          "decided_on": {
+            "oneOf": [
+              {
+                "$ref": "common.schema.json#/$defs/date"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resolution": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "accepted",
+                    "rejected"
+                  ]
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "decided_by": {
+                  "minLength": 1
+                },
+                "decided_on": {
+                  "$ref": "common.schema.json#/$defs/date"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "state": {
+                  "const": "open"
+                }
+              },
+              "required": [
+                "state"
+              ]
+            },
+            "then": {
+              "properties": {
+                "decided_by": {
+                  "maxLength": 0
+                },
+                "decided_on": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "frontmatter": {
+            "properties": {
+              "status": {
+                "const": "reviewed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "entries": {
+            "items": {
+              "properties": {
+                "state": {
+                  "enum": [
+                    "accepted",
+                    "rejected"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

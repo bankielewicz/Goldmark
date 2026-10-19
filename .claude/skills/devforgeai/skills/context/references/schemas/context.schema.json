@@ -1,0 +1,1071 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.devforgeai.local/sdd/context.schema.json",
+  "title": "context document (project context, ADR-004): frontmatter plus the technologies and roots item blocks",
+  "type": "object",
+  "required": [
+    "frontmatter"
+  ],
+  "properties": {
+    "frontmatter": {
+      "type": "object",
+      "required": [
+        "id",
+        "type",
+        "title",
+        "status",
+        "version",
+        "created",
+        "updated",
+        "owner",
+        "authors",
+        "upstream",
+        "supersedes",
+        "superseded_by",
+        "blocked_by",
+        "document"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^CTX-\\d{3}$"
+        },
+        "type": {
+          "const": "context"
+        },
+        "title": {
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "approved",
+            "superseded",
+            "deprecated"
+          ]
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created": {
+          "$ref": "common.schema.json#/$defs/date"
+        },
+        "updated": {
+          "$ref": "common.schema.json#/$defs/date"
+        },
+        "owner": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "generated_by": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tool": {
+              "type": "string"
+            },
+            "model": {
+              "type": "string"
+            },
+            "session": {
+              "type": "string"
+            }
+          }
+        },
+        "reviewed_by": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "approved_by": {
+          "type": "string"
+        },
+        "approved_on": {
+          "oneOf": [
+            {
+              "$ref": "common.schema.json#/$defs/date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upstream": {
+          "$ref": "common.schema.json#/$defs/links"
+        },
+        "supersedes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^CTX-\\d{3}$"
+          }
+        },
+        "superseded_by": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^CTX-\\d{3}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blocked_by": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^(BRN|PRD|ARCH|EPIC|SPR|STORY|SPEC|ADR|SKL|POL|TASK|TEST|CTX|AMB)-\\d{3}(#[A-Z]+-\\d{2,3})?$"
+          }
+        },
+        "document": {
+          "enum": [
+            "index",
+            "architecture",
+            "tech-stack",
+            "source-tree",
+            "testing",
+            "front-end",
+            "middle-tier",
+            "back-end",
+            "api",
+            "rdbms",
+            "datastore",
+            "ui-mockups"
+          ]
+        },
+        "freshness_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ADR-004 D6: observed facts older than this are reported as findings"
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "index"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-001"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "architecture"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-002"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "tech-stack"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-003"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "source-tree"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-004"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "testing"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-005"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "front-end"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-011"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "middle-tier"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-012"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "back-end"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-013"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "api"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-014"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "rdbms"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-015"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "datastore"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-016"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "ui-mockups"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "const": "CTX-017"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "document": {
+                "const": "index"
+              }
+            },
+            "required": [
+              "document"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "freshness_days"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "freshness_days"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "approved"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "approved_by",
+              "approved_on"
+            ],
+            "properties": {
+              "approved_by": {
+                "minLength": 1
+              },
+              "approved_on": {
+                "$ref": "common.schema.json#/$defs/date"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "technologies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "name",
+          "version_range",
+          "used_by",
+          "basis"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^TEC-\\d{2}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ]
+          },
+          "superseded_by": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^TEC-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upstream": {
+            "$ref": "common.schema.json#/$defs/links"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "version_range": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The range in the ecosystem's own syntax, or \"unpinned\" (any version). It authorizes a change (ADR-004 D8) only on an active decision or convention item; on an observed or proposed item it is information, not permission"
+          },
+          "used_by": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^ARCH-\\d{3}#CMP-\\d{2}$"
+            }
+          },
+          "basis": {
+            "enum": [
+              "decision",
+              "convention",
+              "observed",
+              "proposed"
+            ]
+          },
+          "observed_in": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observed_on": {
+            "$ref": "common.schema.json#/$defs/date"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "basis": {
+                  "const": "decision"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            },
+            "then": {
+              "required": [
+                "upstream"
+              ],
+              "properties": {
+                "upstream": {
+                  "minItems": 1,
+                  "contains": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "relation"
+                    ],
+                    "properties": {
+                      "relation": {
+                        "const": "constrains"
+                      }
+                    },
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "id": {
+                            "pattern": "^ADR-\\d{3}$"
+                          }
+                        },
+                        "not": {
+                          "required": [
+                            "item"
+                          ]
+                        }
+                      },
+                      {
+                        "required": [
+                          "item"
+                        ],
+                        "properties": {
+                          "id": {
+                            "pattern": "^POL-\\d{3}$"
+                          },
+                          "item": {
+                            "pattern": "^SET-\\d{2}$"
+                          }
+                        }
+                      },
+                      {
+                        "required": [
+                          "item"
+                        ],
+                        "properties": {
+                          "id": {
+                            "pattern": "^ARCH-\\d{3}$"
+                          },
+                          "item": {
+                            "pattern": "^(CMP|DEC)-\\d{2}$"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "basis": {
+                  "const": "observed"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            },
+            "then": {
+              "required": [
+                "observed_in",
+                "observed_on"
+              ]
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "basis": {
+                      "const": "proposed"
+                    }
+                  },
+                  "required": [
+                    "basis"
+                  ]
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "active"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "required": [
+                "notes"
+              ],
+              "properties": {
+                "notes": {
+                  "type": "string",
+                  "pattern": "\\[NEEDS CLARIFICATION: [^\\]]+\\]"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "deprecated"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "notes"
+              ],
+              "properties": {
+                "notes": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "path",
+          "holds",
+          "component",
+          "basis"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^SRC-\\d{2}$"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "deprecated"
+            ]
+          },
+          "superseded_by": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^SRC-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "upstream": {
+            "$ref": "common.schema.json#/$defs/links"
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(?!/)(?![A-Za-z]:)(?!.*\\\\)(?!(?:.*/)?\\.\\.(?:/|$))[^\\n]+/$",
+            "description": "A repository-relative folder, forward slashes, ending in /; never absolute, never a .. segment"
+          },
+          "holds": {
+            "enum": [
+              "code",
+              "tests",
+              "config",
+              "docs",
+              "generated",
+              "fixtures"
+            ]
+          },
+          "component": {
+            "oneOf": [
+              {
+                "type": "string",
+                "pattern": "^ARCH-\\d{3}#CMP-\\d{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "basis": {
+            "enum": [
+              "decision",
+              "convention",
+              "observed",
+              "proposed"
+            ]
+          },
+          "observed_in": {
+            "type": "string",
+            "minLength": 1
+          },
+          "observed_on": {
+            "$ref": "common.schema.json#/$defs/date"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "basis": {
+                  "const": "decision"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            },
+            "then": {
+              "required": [
+                "upstream"
+              ],
+              "properties": {
+                "upstream": {
+                  "minItems": 1,
+                  "contains": {
+                    "type": "object",
+                    "required": [
+                      "id",
+                      "relation"
+                    ],
+                    "properties": {
+                      "relation": {
+                        "const": "constrains"
+                      }
+                    },
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "id": {
+                            "pattern": "^ADR-\\d{3}$"
+                          }
+                        },
+                        "not": {
+                          "required": [
+                            "item"
+                          ]
+                        }
+                      },
+                      {
+                        "required": [
+                          "item"
+                        ],
+                        "properties": {
+                          "id": {
+                            "pattern": "^POL-\\d{3}$"
+                          },
+                          "item": {
+                            "pattern": "^SET-\\d{2}$"
+                          }
+                        }
+                      },
+                      {
+                        "required": [
+                          "item"
+                        ],
+                        "properties": {
+                          "id": {
+                            "pattern": "^ARCH-\\d{3}$"
+                          },
+                          "item": {
+                            "pattern": "^(CMP|DEC)-\\d{2}$"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "basis": {
+                  "const": "observed"
+                }
+              },
+              "required": [
+                "basis"
+              ]
+            },
+            "then": {
+              "required": [
+                "observed_in",
+                "observed_on"
+              ]
+            }
+          },
+          {
+            "if": {
+              "allOf": [
+                {
+                  "properties": {
+                    "basis": {
+                      "const": "proposed"
+                    }
+                  },
+                  "required": [
+                    "basis"
+                  ]
+                },
+                {
+                  "properties": {
+                    "status": {
+                      "const": "active"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                }
+              ]
+            },
+            "then": {
+              "required": [
+                "notes"
+              ],
+              "properties": {
+                "notes": {
+                  "type": "string",
+                  "pattern": "\\[NEEDS CLARIFICATION: [^\\]]+\\]"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "deprecated"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            },
+            "then": {
+              "required": [
+                "notes"
+              ],
+              "properties": {
+                "notes": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "frontmatter": {
+            "properties": {
+              "document": {
+                "const": "tech-stack"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "technologies"
+        ],
+        "properties": {
+          "technologies": {
+            "contains": {
+              "properties": {
+                "status": {
+                  "const": "active"
+                }
+              },
+              "required": [
+                "status"
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "technologies"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "frontmatter": {
+            "properties": {
+              "document": {
+                "const": "source-tree"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "roots"
+        ],
+        "properties": {
+          "roots": {
+            "contains": {
+              "allOf": [
+                {
+                  "properties": {
+                    "status": {
+                      "const": "active"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ]
+                },
+                {
+                  "properties": {
+                    "holds": {
+                      "const": "code"
+                    }
+                  },
+                  "required": [
+                    "holds"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "roots"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "frontmatter": {
+            "properties": {
+              "status": {
+                "const": "approved"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "technologies": {
+            "items": {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "status": {
+                        "const": "active"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "basis": {
+                        "const": "proposed"
+                      }
+                    },
+                    "required": [
+                      "basis"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "roots": {
+            "items": {
+              "not": {
+                "allOf": [
+                  {
+                    "properties": {
+                      "status": {
+                        "const": "active"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  },
+                  {
+                    "properties": {
+                      "basis": {
+                        "const": "proposed"
+                      }
+                    },
+                    "required": [
+                      "basis"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,55 @@
+{
+  "x-item-id": "DM-04",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Odometer ledger line (devforgeai-odometer/1): one JSON object per line of devforgeai/progress/odometer/<session-id>.jsonl, one file for each session",
+  "type": "object",
+  "required": [
+    "session",
+    "turn",
+    "source",
+    "input",
+    "output",
+    "cacheRead",
+    "cacheWrite",
+    "time"
+  ],
+  "properties": {
+    "session": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the host's session ID; the name of the file the line is in, less .jsonl (history.py counts a line by its own session, whatever file holds it)"
+    },
+    "turn": {
+      "type": "string",
+      "minLength": 1,
+      "description": "the host's turn ID within the session"
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "main for the main loop, or the subagent's ID"
+    },
+    "input": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "input tokens, cache reads and writes not included"
+    },
+    "output": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cacheRead": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cacheWrite": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "description": "when the adapter wrote the line; history.py keeps it for people and reads no clock from it (BEH-28)"
+    }
+  }
+}

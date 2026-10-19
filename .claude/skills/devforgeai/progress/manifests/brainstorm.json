@@ -1,0 +1,42 @@
+{
+  "format": "devforgeai-manifest/1",
+  "skill": "brainstorm",
+  "checklistHash": "sha256:e3ba73ab7f99076b9b2bd02d134049737380e82e16e0f76ceb314693f3aa3129",
+  "steps": {
+    "1": {
+      "title": "Intake: topic, existing BRNs, clarifying questions",
+      "kind": "read",
+      "need": "required",
+      "evidence": [{"type": "read", "pattern": "docs/specs/brainstorm/"}]
+    },
+    "2": {"title": "Select a framework", "kind": "think", "need": "text-only"},
+    "3": {"title": "Diverge: problems, ideas, assumptions", "kind": "think", "need": "text-only"},
+    "4": {"title": "Evaluate with the framework", "kind": "think", "need": "text-only"},
+    "5": {
+      "title": "Propose dispositions and ask the user to confirm",
+      "kind": "ask",
+      "need": "required",
+      "userOwned": true,
+      "evidence": [{"type": "answer"}]
+    },
+    "6": {
+      "title": "Write the BRN",
+      "kind": "forge",
+      "need": "required",
+      "gate": "write",
+      "evidence": [{"type": "write", "pattern": "docs/specs/brainstorm/BRN-*.md"}]
+    },
+    "7": {
+      "title": "Validate the BRN",
+      "kind": "inspect",
+      "need": "required",
+      "evidence": [{"type": "script", "pattern": "validate_brn.py", "exit": 0, "target": "written"}]
+    },
+    "8": {"title": "Report and hand off", "kind": "report", "need": "required", "gate": "report"}
+  },
+  "contentRules": [
+    {"step": 5, "path": "docs/specs/brainstorm/BRN-*.md", "field": "disposition", "scope": "anywhere", "allowed": ["open"]},
+    {"step": 5, "path": "docs/specs/brainstorm/BRN-*.md", "field": "status", "scope": "frontmatter", "allowed": ["draft"]}
+  ],
+  "workFiles": ["devforgeai/drafts/brainstorm/*.md"]
+}

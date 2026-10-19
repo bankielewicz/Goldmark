@@ -1,0 +1,84 @@
+{
+  "x-item-id": "DM-05",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Chain state (devforgeai-chain/1), printed by chain_state.py",
+  "type": "object",
+  "required": [
+    "format",
+    "documents",
+    "skipped"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "devforgeai-chain/1"
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "status",
+          "version",
+          "updated",
+          "path",
+          "upstream"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the frontmatter's type, or null when it has none"
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the frontmatter's status as written, or null when it has none; a reader decides what a missing status means"
+          },
+          "version": {
+            "type": [
+              "integer",
+              "string",
+              "null"
+            ],
+            "description": "an integer when the value is all digits, else the text as written, or null"
+          },
+          "updated": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "the text as written, normally yyyy-mm-dd"
+          },
+          "path": {
+            "type": "string",
+            "description": "relative to --root, with / separators"
+          },
+          "upstream": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "uniqueItems": true,
+            "description": "the IDs of the frontmatter's upstream entries, in file order"
+          }
+        }
+      }
+    },
+    "skipped": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Markdown files under docs/specs/ that were left out: no frontmatter id, or unreadable (ERR-13)"
+    }
+  }
+}

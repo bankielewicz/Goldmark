@@ -1,0 +1,77 @@
+{
+  "format": "devforgeai-manifest/1",
+  "skill": "architecture",
+  "checklistHash": "sha256:886414fe995ef8948b7c9f2a3a2b5036d669d0e77c3d39fe872c1fac789759c0",
+  "steps": {
+    "1": {
+      "title": "Resolve policy (R1, R2)",
+      "kind": "read",
+      "need": "required",
+      "evidence": [{"type": "script", "pattern": "validate_policy.py", "exit": 0}]
+    },
+    "2": {
+      "title": "Select the PRD",
+      "kind": "read",
+      "need": "required",
+      "evidence": [{"type": "read", "pattern": "docs/specs/prd/"}]
+    },
+    "3": {
+      "title": "Read the PRD; apply R3 and R4",
+      "kind": "read",
+      "need": "required",
+      "evidence": [{"type": "read", "pattern": "docs/specs/prd/PRD-*.md"}]
+    },
+    "4": {
+      "title": "Select or create the ARCH",
+      "kind": "read",
+      "need": "required",
+      "evidence": [{"type": "read", "pattern": "docs/specs/arch/"}]
+    },
+    "5": {
+      "title": "Inspect within the scope",
+      "kind": "read",
+      "need": "conditional",
+      "when": "the user named paths to inspect",
+      "evidence": [{"type": "read", "pattern": "*", "exclude": ["docs/specs/", ".claude/", "devforgeai/"]}]
+    },
+    "6": {"title": "Identify the architectural questions and components", "kind": "think", "need": "text-only"},
+    "7": {
+      "title": "Resolve each question explicitly",
+      "kind": "ask",
+      "need": "conditional",
+      "when": "a question isn't settled by mandated policy or an accepted ADR",
+      "userOwned": true,
+      "evidence": [{"type": "answer"}]
+    },
+    "8": {
+      "title": "Propose and confirm the outcome",
+      "kind": "ask",
+      "need": "required",
+      "userOwned": true,
+      "waivable": true,
+      "stoppable": true,
+      "evidence": [{"type": "answer"}]
+    },
+    "9": {
+      "title": "Write the ARCH and ADRs",
+      "kind": "forge",
+      "need": "required",
+      "gate": "write",
+      "evidence": [
+        {"type": "write", "pattern": "docs/specs/arch/ARCH-*.md"},
+        {"type": "write", "pattern": "docs/specs/adr/ADR-*.md"}
+      ]
+    },
+    "10": {
+      "title": "Validate every file written",
+      "kind": "inspect",
+      "need": "required",
+      "evidence": [{"type": "read", "pattern": "docs/specs/", "target": "written"}]
+    },
+    "11": {"title": "Compute readiness, report and hand off", "kind": "report", "need": "required", "gate": "report"}
+  },
+  "contentRules": [
+    {"step": 7, "path": "docs/specs/adr/ADR-*.md", "field": "status", "scope": "frontmatter", "allowed": ["proposed"]},
+    {"step": 8, "path": "docs/specs/arch/ARCH-*.md", "field": "outcome", "scope": "frontmatter", "allowed": ["null"]}
+  ]
+}

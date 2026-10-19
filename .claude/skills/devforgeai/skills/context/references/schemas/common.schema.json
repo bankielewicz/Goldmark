@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.devforgeai.local/sdd/common.schema.json",
+  "title": "Shared definitions for spec-driven development documents",
+  "$defs": {
+    "docId": {
+      "type": "string",
+      "pattern": "^(BRN|PRD|ARCH|EPIC|SPR|STORY|SPEC|ADR|SKL|POL|TASK|TEST|CTX|AMB)-\\d{3}$"
+    },
+    "itemId": {
+      "type": "string",
+      "pattern": "^((PRB|IDEA|ASM|SM|DW|AC|BEH|ERR|QR|VER|DM|IF|SET|CMP|DEC|EVD|TEC|SRC|ENT)-\\d{2}|(FR|NFR)-\\d{3})$"
+    },
+    "storyId": {
+      "type": "string",
+      "pattern": "^STORY-\\d{3}$"
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "format": "date"
+    },
+    "hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[0-9a-f]{8}$"
+    },
+    "relation": {
+      "enum": [
+        "derives",
+        "refines",
+        "satisfies",
+        "specifies",
+        "constrains",
+        "implements",
+        "verifies",
+        "supersedes",
+        "informed_by"
+      ]
+    },
+    "link": {
+      "type": "object",
+      "required": [
+        "id",
+        "relation",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "common.schema.json#/$defs/docId"
+        },
+        "item": {
+          "$ref": "common.schema.json#/$defs/itemId"
+        },
+        "relation": {
+          "$ref": "common.schema.json#/$defs/relation"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hash": {
+          "$ref": "common.schema.json#/$defs/hash"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/$defs/link"
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+{
+  "x-item-id": "DM-06",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "History (devforgeai-history/1), printed by history.py",
+  "type": "object",
+  "required": [
+    "format",
+    "skills",
+    "odometer",
+    "runs"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "devforgeai-history/1"
+    },
+    "skills": {
+      "type": "object",
+      "description": "one entry for each skill a readable run's state names, keyed by its name",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runs",
+          "complete",
+          "medianActiveSeconds"
+        ],
+        "properties": {
+          "runs": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "readable runs of the skill"
+          },
+          "complete": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "the runs that count toward the median (BEH-27)"
+          },
+          "medianActiveSeconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "the median of the complete runs' activeSeconds, or null with fewer than 2 complete runs"
+          }
+        }
+      }
+    },
+    "odometer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "output",
+        "cacheRead",
+        "cacheWrite",
+        "tokens",
+        "turns",
+        "duplicates",
+        "malformed"
+      ],
+      "properties": {
+        "input": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "output": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheRead": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cacheWrite": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tokens": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "the four counts added: all tokens"
+        },
+        "turns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "ledger lines counted, each (session, turn, source) once"
+        },
+        "duplicates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "malformed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "runs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "read",
+        "skipped"
+      ],
+      "properties": {
+        "read": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "state.json files read as a state with timing"
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "state.json files left out (ERR-15)"
+        }
+      }
+    }
+  }
+}

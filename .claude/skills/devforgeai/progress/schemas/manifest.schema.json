@@ -1,0 +1,273 @@
+{
+  "x-item-id": "DM-01",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Step manifest (devforgeai-manifest/1), progress/manifests/<skill>.json",
+  "type": "object",
+  "required": [
+    "format",
+    "skill",
+    "checklistHash",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "devforgeai-manifest/1"
+    },
+    "skill": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "the skill's name without the plugin prefix: brainstorm, not devforgeai:brainstorm"
+    },
+    "checklistHash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "steps": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[1-9][0-9]?$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "contentRules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/contentRule"
+      }
+    },
+    "workFiles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^devforgeai/drafts/[^\\s]+$"
+      },
+      "description": "version 15: the project-relative patterns of the working copies the skill keeps outside its documents, written as a rule's pattern is; each begins devforgeai/drafts/, holds no .. segment and overlaps no write or read rule's pattern and no content rule's path (BEH-21); only the plugin's own manifest may carry them (BEH-17); the tracker deletes what they match once the run's cleanup is due, and by age (SPEC-013 BEH-32, BEH-19)"
+    },
+    "source": {
+      "type": "string",
+      "description": "for a vendored organization manifest: its origin repository and ref (ADR-003 A3)"
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "required": [
+        "title",
+        "kind",
+        "need"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "read",
+            "think",
+            "ask",
+            "forge",
+            "inspect",
+            "report"
+          ]
+        },
+        "need": {
+          "enum": [
+            "required",
+            "conditional",
+            "text-only"
+          ]
+        },
+        "when": {
+          "type": "string",
+          "description": "for a conditional step: when it applies, shown as the note when it doesn't"
+        },
+        "userOwned": {
+          "type": "boolean",
+          "default": false
+        },
+        "waivable": {
+          "type": "boolean",
+          "default": false,
+          "description": "version 11: a user-owned step that a recorded Proceed waiver answers (BEH-19)"
+        },
+        "stoppable": {
+          "type": "boolean",
+          "default": false,
+          "description": "version 12: a user-owned step whose answer 'Write nothing' ends the run as stopped (SPEC-013 BEH-27)"
+        },
+        "gate": {
+          "enum": [
+            "write",
+            "report"
+          ]
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "need": {
+                "const": "conditional"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "when"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "waivable": {
+                "const": true
+              }
+            },
+            "required": [
+              "waivable"
+            ]
+          },
+          "then": {
+            "properties": {
+              "userOwned": {
+                "const": true
+              }
+            },
+            "required": [
+              "userOwned"
+            ]
+          }
+        }
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "script",
+            "answer",
+            "write",
+            "read"
+          ]
+        },
+        "pattern": {
+          "type": "string",
+          "description": "script: a file-name pattern; write and read: a path pattern relative to the project root, and a pattern ending in / means anything inside that folder"
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "read rules only: path patterns, written as pattern is; a path or token that matches any of them is no evidence for the rule"
+        },
+        "exit": {
+          "type": "integer",
+          "default": 0
+        },
+        "target": {
+          "const": "written",
+          "description": "the path or command must name a file written at the run's write gate"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "script",
+                  "write",
+                  "read"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "pattern"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "script",
+                  "answer",
+                  "write"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "exclude"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "contentRule": {
+      "type": "object",
+      "required": [
+        "step",
+        "path",
+        "field",
+        "scope",
+        "allowed"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "step": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "the user-owned step whose answer the field's other values need"
+        },
+        "path": {
+          "type": "string"
+        },
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z_]+$"
+        },
+        "scope": {
+          "enum": [
+            "frontmatter",
+            "anywhere"
+          ]
+        },
+        "allowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "the values allowed without the user's answer"
+        }
+      }
+    }
+  }
+}

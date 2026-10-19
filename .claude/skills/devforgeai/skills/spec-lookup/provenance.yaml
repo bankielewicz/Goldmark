@@ -1,0 +1,28 @@
+# DevForgeAI provenance record for one skill. Validated against src/schemas/skill.schema.json.
+# Common keys follow src/templates/README.md §2.2. Claude never loads this file.
+id: SKL-011
+type: skill
+title: "Spec lookup skill"
+status: approved       # draft | in-review | approved | superseded | deprecated
+version: 1             # bump on any change to SKILL.md or its references; mirror it in SKILL.md metadata
+created: 2026-10-04
+updated: 2026-10-04
+owner: "Bryan"
+authors: ["Bryan", "claude-code"]
+generated_by:
+  tool: "claude-code"
+  model: "claude-opus-5-5"
+  session: "a4f2ade8-0127-4b96-bc22-b3498b2ab3a9"
+reviewed_by: []
+approved_by: "Bryan"
+approved_on: 2026-10-04
+upstream:              # the specification this skill implements
+  - {id: SPEC-014, relation: implements, version: 3, hash: null}
+supersedes: []
+superseded_by: null
+blocked_by: []
+# --- skill-specific ---
+skill_name: spec-lookup  # must equal the directory name and SKILL.md `name`
+packaging: plugin        # plugin | project | personal
+plugin: devforgeai       # plugin name when packaging is plugin, else null
+eval_tag: spec-lookup    # tag every eval case of this skill carries (the trigger cases carry trigger instead)

@@ -1,0 +1,367 @@
+{
+  "x-item-id": "DM-02",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Event (devforgeai-events/1): one JSON object per line of events.jsonl",
+  "type": "object",
+  "required": [
+    "run",
+    "seq",
+    "time",
+    "kind"
+  ],
+  "properties": {
+    "run": {
+      "type": "string",
+      "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z][a-z0-9-]*-[0-9a-f]{8}$"
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "kind": {
+      "enum": [
+        "skill-loaded",
+        "tool",
+        "answer",
+        "prompt",
+        "reply",
+        "turn",
+        "run-end",
+        "step",
+        "usage"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "skill-loaded"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "format",
+          "skill",
+          "checklist"
+        ],
+        "properties": {
+          "format": {
+            "const": "devforgeai-events/1"
+          },
+          "skill": {
+            "type": "string"
+          },
+          "checklist": {
+            "type": "string",
+            "description": "the skill's prompt as loaded, or at least its checklist block"
+          },
+          "host": {
+            "type": "string",
+            "description": "for example claude-code 2.1.287"
+          },
+          "taskList": {
+            "type": "boolean",
+            "description": "the host offers a task list the skill can keep its steps in (version 5)"
+          },
+          "resumes": {
+            "type": "string",
+            "pattern": "^[0-9]{8}T[0-9]{6}Z-[a-z][a-z0-9-]*-[0-9a-f]{8}$",
+            "description": "the earlier run this run continues (version 14, BEH-20)"
+          },
+          "carried": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "uniqueItems": true,
+            "description": "the steps carried from the earlier run: every step before the one this run continues at (version 14, BEH-20)"
+          },
+          "answered": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "uniqueItems": true,
+            "description": "the carried user-owned steps whose answer counted in the earlier run, once its document was written (version 14, BEH-20)"
+          },
+          "draft": {
+            "type": "string",
+            "description": "version 16: the earlier run's draft that the line on continuing named (SPEC-013 BEH-39), project-relative; BEH-21 lists it first among the run's work files"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "tool"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "tool"
+        ],
+        "properties": {
+          "tool": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string",
+            "description": "relative to the project root, with / separators; for Glob and Grep, the pattern or search path"
+          },
+          "command": {
+            "type": "string"
+          },
+          "exit": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "error": {
+            "type": "boolean"
+          },
+          "content": {
+            "type": "string",
+            "description": "a Write's content, or the file an Edit will leave; for an event with wrote, the file as read after the Bash call; optional"
+          },
+          "wrote": {
+            "const": true,
+            "description": "version 16: an event the adapter adds after a Bash call, for a file matching a write rule's pattern or a workFiles pattern that the call created or changed; its tool is Bash, its path the file, its command and exit the call's, and its error always false, since it records a file that is on disk whatever the call's exit (BEH-06, BEH-22)"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "answer"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "answered"
+        ],
+        "properties": {
+          "answered": {
+            "type": "boolean",
+            "description": "false when the question was dismissed"
+          },
+          "step": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the step the question named in its tag, devforgeai_step:N (version 9)"
+          },
+          "outside": {
+            "type": "boolean",
+            "description": "true when the question's source names something other than the convention's tag: it isn't the checklist's (version 9)"
+          },
+          "waiver": {
+            "enum": [
+              "proceed",
+              "ask",
+              "other"
+            ],
+            "description": "set on every answer to the waiver question, a single question tagged devforgeai_waiver, answered or not: which of its two fixed labels was picked, proceed (Proceed without questions) or ask (Ask me as usual), or other for anything typed and for a dismissal (version 11)"
+          },
+          "questions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "version 16: the form as Claude asked it, never the user's answer (BEH-22)",
+            "items": {
+              "type": "object",
+              "required": [
+                "question"
+              ],
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "header": {
+                  "type": "string"
+                },
+                "multiSelect": {
+                  "type": "boolean"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "label"
+                    ],
+                    "properties": {
+                      "label": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "preview": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "reply"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "step"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "step",
+          "state"
+        ],
+        "properties": {
+          "step": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "enum": [
+              "started",
+              "done"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "turn"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "phase"
+        ],
+        "properties": {
+          "phase": {
+            "enum": [
+              "start",
+              "end"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "run-end"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "enum": [
+              "another-skill",
+              "session-end",
+              "clear",
+              "idle",
+              "stopped",
+              "returned"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "kind": {
+            "const": "usage"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "turn",
+          "model",
+          "input",
+          "output",
+          "cacheRead",
+          "cacheWrite"
+        ],
+        "properties": {
+          "turn": {
+            "type": "string",
+            "minLength": 1,
+            "description": "version 17: the host's ID of the main-loop turn these counts are for; the evaluator counts each turn ID once (BEH-25)"
+          },
+          "model": {
+            "type": "string",
+            "minLength": 1
+          },
+          "input": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "the turn's input tokens, cache reads and writes not included"
+          },
+          "output": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cacheRead": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "cacheWrite": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+# DevForgeAI provenance record for one skill. Validated against src/schemas/skill.schema.json.
+# Common keys follow src/templates/README.md §2.2. Claude never loads this file.
+id: SKL-013
+type: skill
+title: "UI skill"
+status: draft          # draft | in-review | approved | superseded | deprecated
+version: 2             # bump on any change to SKILL.md or its references; mirror it in SKILL.md metadata
+created: 2026-10-09
+updated: 2026-10-10
+owner: "Bryan"
+authors: ["Bryan", "claude-code"]
+generated_by:
+  tool: "claude-code"
+  model: "claude-sonnet-5-5"
+  session: "7637882f-b2ec-465e-988a-9602340d1023"
+reviewed_by: []
+approved_by: ""
+approved_on: null
+upstream:              # the specification this skill implements
+  - {id: SPEC-017, relation: implements, version: 2, hash: null}
+supersedes: []
+superseded_by: null
+blocked_by: []
+# --- skill-specific ---
+skill_name: ui         # must equal the directory name and SKILL.md `name`
+packaging: plugin      # plugin | project | personal
+plugin: devforgeai     # plugin name when packaging is plugin, else null
+eval_tag: ui           # tag every eval case of this skill carries (the trigger cases carry trigger instead)
