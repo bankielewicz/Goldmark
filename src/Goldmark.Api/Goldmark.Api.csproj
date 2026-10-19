@@ -24,6 +24,8 @@
     <!-- Forward-only migrations (db/migrations), applied by the migrate command. The logical
          name is what DbUp records in its journal; never rename an applied script. -->
     <EmbeddedResource Include="..\..\db\migrations\*.sql" LogicalName="Goldmark.Migrations.%(Filename)%(Extension)" />
+    <!-- Measured grants to public/guest in the SQL Server 2025 system databases (principal audit, DEC-031). -->
+    <EmbeddedResource Include="Commands\Audit\sql-server-2025-public-grants.txt" LogicalName="Goldmark.Audit.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

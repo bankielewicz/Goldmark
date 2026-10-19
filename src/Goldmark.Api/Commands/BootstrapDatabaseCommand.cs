@@ -5,8 +5,9 @@ using Microsoft.Data.SqlClient;
 namespace Goldmark.Api.Commands;
 
 /// <summary>
-/// <c>bootstrap-db</c>: one-shot, idempotent creation of the Goldmark database and its two
-/// logins. It runs with administrative credentials that only the bootstrap container receives.
+/// <c>bootstrap-db</c>: one-shot, idempotent provisioning of the Goldmark database and its two
+/// logins, run with administrative credentials (CONTROL SERVER) that only the bootstrap
+/// container receives. It has no Docker dependency: an installer can run the same command.
 /// <list type="bullet">
 /// <item>The <b>runtime login</b> (<c>Goldmark:Database:User</c>) gets a database user and
 /// nothing else here; <c>migrate</c> makes it a member of <c>goldmark_runtime</c>, the role the
@@ -18,9 +19,15 @@ namespace Goldmark.Api.Commands;
 /// Goldmark only manages principals it created itself, recognised by a marker on the database
 /// user whose value names the principal's purpose. A login or database user that already exists
 /// without that marker is refused (exit 3) with nothing changed, unless the operator opts in to
-/// adopting it with <see cref="BootstrapOptions.AdoptExistingLogin"/>. Both logins, both users,
-/// the markers and the <c>db_owner</c> membership are created in one transaction. Afterwards each
-/// login's effective permissions are checked as that login.
+/// adopting it with <see cref="BootstrapOptions.AdoptExistingLogin"/>. In
+/// <see cref="BootstrapOptions.ExistingMode"/> nothing is created at all: a DBA has created the
+/// database, both logins and their users, and only the marker is added (DEC-032).
+/// </para>
+/// <para>
+/// Every run audits both principals and the instance (<see cref="PrincipalAudit"/>, DEC-031):
+/// from the administrator's side before anything is changed and again afterwards, then as each
+/// login. Both logins, both users, the markers and the <c>db_owner</c> membership are created in
+/// one transaction.
 /// </para>
 /// </summary>
 internal static class BootstrapDatabaseCommand
@@ -44,8 +51,8 @@ internal static class BootstrapDatabaseCommand
     private const string DatabaseExistsSql = "SELECT CASE WHEN DB_ID(@db) IS NULL THEN 0 ELSE 1 END;";
 
     // Read-only. Run in the Goldmark database: user mapped to the login (by SID), the value of
-    // Goldmark's marker on that user (NULL if none), and whether a user of that name belongs to
-    // someone else.
+    // Goldmark's marker on that user (NULL if none), whether a user of that name belongs to
+    // someone else, the mapped user's name (#15) and whether it is a member of db_owner.
     private const string UserStateSql = """
         SET NOCOUNT ON;
         DECLARE @sid varbinary(85) = SUSER_SID(@login);
@@ -55,13 +62,23 @@ internal static class BootstrapDatabaseCommand
             (SELECT CAST(value AS nvarchar(64)) FROM sys.extended_properties
                 WHERE class = 4 AND major_id = @uid AND name = N'goldmark:managed'),
             CASE WHEN EXISTS (SELECT 1 FROM sys.database_principals
-                WHERE name = @login AND (@sid IS NULL OR sid <> @sid)) THEN 1 ELSE 0 END;
+                WHERE name = @login AND (@sid IS NULL OR sid <> @sid)) THEN 1 ELSE 0 END,
+            USER_NAME(@uid),
+            CASE WHEN @uid IS NOT NULL AND IS_ROLEMEMBER(N'db_owner', USER_NAME(@uid)) = 1 THEN 1 ELSE 0 END;
         """;
+
+    // Read-only. Run in master: whether the administrator can see and change everything the
+    // audit and provisioning need (PWDCOMPARE reads password hashes, which needs CONTROL SERVER).
+    private const string AdminRightsSql = "SELECT ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, 'CONTROL SERVER'), 0);";
 
     // Identifiers and the password are parameters, quoted server-side with QUOTENAME,
     // because DDL statements cannot take parameters directly.
+    // AUTO_CLOSE (on by default for new databases on Express) would close the database whenever
+    // its last connection ends, so each readiness probe and each audit pass would reopen it.
     private const string CreateDatabaseSql = """
         DECLARE @sql nvarchar(max) = N'CREATE DATABASE ' + QUOTENAME(@db) + N';';
+        EXEC sys.sp_executesql @sql;
+        SET @sql = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET AUTO_CLOSE OFF;';
         EXEC sys.sp_executesql @sql;
         """;
 
@@ -79,11 +96,17 @@ internal static class BootstrapDatabaseCommand
 
     // Run in the Goldmark database, inside the caller's transaction, once per principal.
     // @adopt_user remaps an existing same-name user (adoption only). @db_owner adds the user to
-    // db_owner (migration login only).
+    // db_owner (migration login only). @create = 0 (Existing mode) only adds the marker: anything
+    // else would be a bug in the checks before it, so it fails instead of changing a principal.
     private const string ProvisionSql = """
         SET NOCOUNT ON;
         SET XACT_ABORT ON;
         DECLARE @sql nvarchar(max);
+        IF @create = 0 AND (SUSER_ID(@login) IS NULL
+            OR ISNULL((SELECT PWDCOMPARE(@password, password_hash) FROM sys.sql_logins WHERE name = @login), 0) = 0
+            OR NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE sid = SUSER_SID(@login))
+            OR (@db_owner = 1 AND IS_ROLEMEMBER(N'db_owner', (SELECT name FROM sys.database_principals WHERE sid = SUSER_SID(@login))) = 0))
+            THROW 50001, N'bootstrap-db (Mode Existing) would have to create or change a login or user; nothing was changed.', 1;
         IF SUSER_ID(@login) IS NULL
         BEGIN
             SET @sql = N'CREATE LOGIN ' + QUOTENAME(@login) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
@@ -176,11 +199,12 @@ internal static class BootstrapDatabaseCommand
 
     /// <summary>A login Goldmark manages, with the settings and marker that identify it.</summary>
     private sealed record Principal(
-        string Purpose, string Login, string Password, string MarkerValue, bool DbOwner, string UserVariable, string PasswordVariable);
+        string Purpose, string Login, string Password, string MarkerValue, bool DbOwner, string ExpectedRole,
+        string UserVariable, string PasswordVariable);
 
     private readonly record struct LoginState(string Type, bool PasswordMatches);
 
-    private readonly record struct UserState(bool Mapped, string? Marker, bool NameTakenByOther);
+    private readonly record struct UserState(bool Mapped, string? Marker, bool NameTakenByOther, string? Name, bool DbOwner);
 
     public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
     {
@@ -207,12 +231,14 @@ internal static class BootstrapDatabaseCommand
             return 2;
         }
 
+        var existing = bootstrap.Mode == BootstrapOptions.ExistingMode;
         Principal[] principals =
         [
-            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD"),
-            new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true,
+            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, RuntimeRole, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD"),
+            new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true, "db_owner",
                 "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD"),
         ];
+        var policy = FindingPolicy.Parse(bootstrap.AcceptedFindings);
 
         var admin = SqlConnectionFactory.Build(db, bootstrap.AdminUser, bootstrap.AdminPassword, database: "master");
         admin.Pooling = false;
@@ -222,12 +248,26 @@ internal static class BootstrapDatabaseCommand
                 admin.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds), output, Name);
 
             // 1. Read-only: decide everything, for both logins, before changing anything.
+            if (await ScalarAsync(connection, AdminRightsSql, db) != 1)
+            {
+                return await RefuseAsync(error,
+                    $"the administrator login '{bootstrap.AdminUser}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
+                    "Goldmark's logins. Nothing was changed.");
+            }
+
             var databaseExists = await ScalarAsync(connection, DatabaseExistsSql, db) == 1;
+            if (existing && !databaseExists)
+            {
+                return await RefuseAsync(error,
+                    $"Mode {BootstrapOptions.ExistingMode}: the database '{db.Name}' does not exist, and this mode creates nothing. " +
+                    $"Create it first (CREATE DATABASE [{db.Name}];), or use Mode {BootstrapOptions.CreateMode}. Nothing was changed.");
+            }
+
             var states = new List<(Principal Principal, LoginState? Login, UserState User)>();
             foreach (var principal in principals)
             {
                 var login = await LoginStateAsync(connection, db, principal);
-                var user = new UserState(false, null, false);
+                var user = new UserState(false, null, false, null, false);
                 if (databaseExists)
                 {
                     await connection.ChangeDatabaseAsync(db.Name);
@@ -235,12 +275,16 @@ internal static class BootstrapDatabaseCommand
                     await connection.ChangeDatabaseAsync("master");
                 }
 
-                if (Refusal(principal, login, user, bootstrap) is { } reason)
+                if (Refusal(principal, login, user, bootstrap, db.Name) is { } reason)
                 {
                     return await RefuseAsync(error, reason);
                 }
 
-                if (bootstrap.AdoptExistingLogin && !IsManaged(principal, login, user) && (login is not null || user.NameTakenByOther))
+                if (existing)
+                {
+                    Report(output, principal, $"using the existing login '{principal.Login}' (Mode {BootstrapOptions.ExistingMode}: nothing is created)");
+                }
+                else if (bootstrap.AdoptExistingLogin && !IsManaged(principal, login, user) && (login is not null || user.NameTakenByOther))
                 {
                     Report(output, principal, $"adopting the existing {(login is not null ? "login" : "database user")} '{principal.Login}' (GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true)");
                 }
@@ -248,20 +292,30 @@ internal static class BootstrapDatabaseCommand
                 states.Add((principal, login, user));
             }
 
-            // 2. Provision. Passwords are checked against SQL Server's policy before the database
-            //    is created; logins, users, markers and db_owner membership then change together.
-            foreach (var (principal, login, _) in states)
+            // The principal audit, from the administrator's side, before any change (DEC-031).
+            if (policy.Refused(await AdminAuditAsync(connection, db, principals, otherDatabases: true), output, Name) is { Count: > 0 } before)
             {
-                if (login is not { PasswordMatches: true })
-                {
-                    await ExecuteAsync(connection, PasswordPolicyProbeSql, db, principal, bootstrap);
-                }
+                return await RefuseAsync(error, $"{FindingPolicy.Describe(before)}{Environment.NewLine}Nothing was changed.");
             }
 
-            if (!databaseExists)
+            // 2. Provision. Passwords are checked against SQL Server's policy before the database
+            //    is created; logins, users, markers and db_owner membership then change together.
+            //    In Existing mode the only change is the marker.
+            if (!existing)
             {
-                await ExecuteAsync(connection, CreateDatabaseSql, db, principals[0], bootstrap);
-                await output.WriteLineAsync($"{Name}: created database");
+                foreach (var (principal, login, _) in states)
+                {
+                    if (login is not { PasswordMatches: true })
+                    {
+                        await ExecuteAsync(connection, PasswordPolicyProbeSql, db, principal, bootstrap);
+                    }
+                }
+
+                if (!databaseExists)
+                {
+                    await ExecuteAsync(connection, CreateDatabaseSql, db, principals[0], bootstrap);
+                    await output.WriteLineAsync($"{Name}: created database");
+                }
             }
 
             await connection.ChangeDatabaseAsync(db.Name);
@@ -278,22 +332,38 @@ internal static class BootstrapDatabaseCommand
                 await transaction.CommitAsync();
             }
 
-            // 3. Verify each login's effective permissions, as that login.
-            if (await VerifyAsync(db, principals[0], VerifySql) is { Count: > 0 } runtimeExcess)
+            await connection.ChangeDatabaseAsync("master");
+
+            // 3. Audit again: principals created by this run had nothing to check before.
+            if (policy.Refused(await AdminAuditAsync(connection, db, principals, otherDatabases: false), output, Name) is { Count: > 0 } after)
+            {
+                return await RefuseAsync(error, $"{FindingPolicy.Describe(after)}{Environment.NewLine}The changes listed above were made; fix these and run db-init again.");
+            }
+
+            // 4. Verify each login's effective permissions, as that login.
+            var (runtimeExcess, runtimeFindings) = await VerifyAsync(db, principals[0], VerifySql, runtime: true);
+            if (runtimeExcess.Count > 0)
             {
                 return await RefuseAsync(error,
                     $"the runtime login '{db.User}' has rights beyond CONNECT and {RuntimeRole}: {string.Join("; ", runtimeExcess)}. Remove them.");
             }
 
-            await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT and {RuntimeRole}.");
-
-            if (await VerifyAsync(db, principals[1], VerifyMigrationSql) is { Count: > 0 } migrationFindings)
+            var (migrationExcess, migrationFindings) = await VerifyAsync(db, principals[1], VerifyMigrationSql, runtime: false);
+            if (migrationExcess.Count > 0)
             {
                 return await RefuseAsync(error,
-                    $"the migration login '{migration.User}' must be db_owner of '{db.Name}' and hold nothing else: {string.Join("; ", migrationFindings)}.");
+                    $"the migration login '{migration.User}' must be db_owner of '{db.Name}' and hold nothing else: {string.Join("; ", migrationExcess)}.");
             }
 
+            if (policy.Refused([.. runtimeFindings, .. migrationFindings], output, Name) is { Count: > 0 } effective)
+            {
+                return await RefuseAsync(error, FindingPolicy.Describe(effective));
+            }
+
+            await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT and {RuntimeRole}.");
             await output.WriteLineAsync($"{Name}: verified migration login '{migration.User}' is db_owner of '{db.Name}' with no server roles or permissions beyond CONNECT.");
+            policy.ReportUnmatched(output, Name);
+            await output.WriteLineAsync($"{Name}: principal audit passed for both logins and the instance.");
             return 0;
         }
         catch (SqlException ex)
@@ -308,15 +378,44 @@ internal static class BootstrapDatabaseCommand
         }
     }
 
+    private static async Task<List<AuditFinding>> AdminAuditAsync(SqlConnection connection, DatabaseOptions db, Principal[] principals, bool otherDatabases)
+    {
+        var findings = await PrincipalAudit.EnvironmentAsync(connection, db.Name);
+        if (otherDatabases)
+        {
+            findings.AddRange(await PrincipalAudit.DatabasesAsync(connection, db.Name, principals[0].Login, principals[1].Login));
+        }
+
+        foreach (var principal in principals)
+        {
+            findings.AddRange(await PrincipalAudit.PrincipalAsync(connection, db.Name, principal.Login, principal.ExpectedRole));
+        }
+
+        return findings;
+    }
+
     private static bool IsManaged(Principal principal, LoginState? login, UserState user) =>
         login is not null && user.Mapped && user.Marker == principal.MarkerValue;
 
     /// <summary>Why this principal must not be touched, or null if it may be provisioned.</summary>
-    private static string? Refusal(Principal principal, LoginState? login, UserState user, BootstrapOptions bootstrap)
+    private static string? Refusal(Principal principal, LoginState? login, UserState user, BootstrapOptions bootstrap, string database)
     {
         if (login is { Type: not "S" } nonSql)
         {
             return $"'{principal.Login}' exists but is not a SQL Server login (type {nonSql.Type}).";
+        }
+
+        if (user.Mapped && user.Name == "dbo")
+        {
+            return $"the {principal.Purpose} login '{principal.Login}' owns the database '{database}' (it is its dbo). Nothing was changed. " +
+                $"Fix: ALTER AUTHORIZATION ON DATABASE::[{database}] TO <another login>;";
+        }
+
+        if (user.Mapped && !string.Equals(user.Name, principal.Login, StringComparison.Ordinal))
+        {
+            // migrate finds the user by name, so a differently named user would fail there (#15).
+            return $"the database user mapped to the {principal.Purpose} login '{principal.Login}' in '{database}' is named '{user.Name}'; " +
+                $"Goldmark requires it to have the login's name. Nothing was changed. Fix: USE [{database}]; ALTER USER [{user.Name}] WITH NAME = [{principal.Login}];";
         }
 
         if (user.Mapped && user.Marker is not null && user.Marker != principal.MarkerValue)
@@ -325,12 +424,54 @@ internal static class BootstrapDatabaseCommand
             return $"'{principal.Login}' is managed by Goldmark as the {user.Marker} and cannot be used as the {principal.Purpose} login. Nothing was changed.";
         }
 
+        if (bootstrap.Mode == BootstrapOptions.ExistingMode)
+        {
+            return ExistingModeRefusal(principal, login, user, database);
+        }
+
         if (!IsManaged(principal, login, user) && !bootstrap.AdoptExistingLogin && (login is not null || user.NameTakenByOther))
         {
             var what = login is not null ? $"login '{principal.Login}'" : $"database user '{principal.Login}'";
             return $"the {what} already exists and was not created by Goldmark. Nothing was changed. " +
                 $"Configure a different {principal.UserVariable}, or set GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true to take it over " +
                 $"(its password is then set to {principal.PasswordVariable}).";
+        }
+
+        return null;
+    }
+
+    /// <summary>Existing mode creates and changes nothing: everything must already be in place.</summary>
+    private static string? ExistingModeRefusal(Principal principal, LoginState? login, UserState user, string database)
+    {
+        var mode = $"Mode {BootstrapOptions.ExistingMode}";
+        if (login is null)
+        {
+            return $"{mode}: the {principal.Purpose} login '{principal.Login}' does not exist, and this mode creates nothing. Nothing was changed. " +
+                $"Fix: CREATE LOGIN [{principal.Login}] WITH PASSWORD = '...', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF; " +
+                $"with the password in {principal.PasswordVariable}. See docs/ops/external-sql-server.md.";
+        }
+
+        if (!login.Value.PasswordMatches)
+        {
+            return $"{mode}: the password of the {principal.Purpose} login '{principal.Login}' differs from {principal.PasswordVariable}, " +
+                "and this mode never changes passwords. Nothing was changed.";
+        }
+
+        if (user.NameTakenByOther)
+        {
+            return $"{mode}: the database user '{principal.Login}' in '{database}' belongs to a different login. Nothing was changed.";
+        }
+
+        if (!user.Mapped)
+        {
+            return $"{mode}: the {principal.Purpose} login '{principal.Login}' has no user in '{database}'. Nothing was changed. " +
+                $"Fix: USE [{database}]; CREATE USER [{principal.Login}] FOR LOGIN [{principal.Login}];";
+        }
+
+        if (principal.DbOwner && !user.DbOwner)
+        {
+            return $"{mode}: the migration login's user '{principal.Login}' is not a member of db_owner in '{database}'. Nothing was changed. " +
+                $"Fix: USE [{database}]; ALTER ROLE db_owner ADD MEMBER [{principal.Login}];";
         }
 
         return null;
@@ -356,6 +497,7 @@ internal static class BootstrapDatabaseCommand
         command.Parameters.Add(new SqlParameter("@marker", System.Data.SqlDbType.NVarChar, 64) { Value = principal.MarkerValue });
         command.Parameters.Add(new SqlParameter("@db_owner", System.Data.SqlDbType.Bit) { Value = principal.DbOwner });
         command.Parameters.Add(new SqlParameter("@adopt_user", System.Data.SqlDbType.Bit) { Value = bootstrap?.AdoptExistingLogin ?? false });
+        command.Parameters.Add(new SqlParameter("@create", System.Data.SqlDbType.Bit) { Value = bootstrap?.Mode != BootstrapOptions.ExistingMode });
         return command;
     }
 
@@ -385,7 +527,8 @@ internal static class BootstrapDatabaseCommand
         await using var command = Command(connection, UserStateSql, db, principal);
         await using var reader = await command.ExecuteReaderAsync();
         await reader.ReadAsync();
-        return new UserState(reader.GetInt32(0) == 1, reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetInt32(2) == 1);
+        return new UserState(reader.GetInt32(0) == 1, reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetInt32(2) == 1,
+            reader.IsDBNull(3) ? null : reader.GetString(3), reader.GetInt32(4) == 1);
     }
 
     private static async Task<List<string>> StepsAsync(
@@ -406,13 +549,14 @@ internal static class BootstrapDatabaseCommand
         return steps;
     }
 
-    private static async Task<List<string>> VerifyAsync(DatabaseOptions db, Principal principal, string sql)
+    /// <summary>Runs, as the login itself, its role/permission check and the principal audit's effective-rights layer.</summary>
+    private static async Task<(List<string> Excess, List<AuditFinding> Findings)> VerifyAsync(DatabaseOptions db, Principal principal, string sql, bool runtime)
     {
         var builder = SqlConnectionFactory.Build(db, principal.Login, principal.Password);
         builder.Pooling = false;
         await using var connection = new SqlConnection(builder.ConnectionString);
         await connection.OpenAsync();
-        return await CommandSql.FindingsAsync(connection, sql);
+        return (await CommandSql.FindingsAsync(connection, sql), await PrincipalAudit.SelfAsync(connection, db.Name, runtime));
     }
 
     internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
@@ -463,6 +607,13 @@ internal static class BootstrapDatabaseCommand
         }
         else
         {
+            if (string.Equals(bootstrap.AdminUser, "sa", StringComparison.OrdinalIgnoreCase) && !bootstrap.AllowSaAdmin)
+            {
+                // A well-known name with every right is what attackers try first (DEC-032).
+                errors.Add($"{admin}:AdminUser must not be 'sa': use a dedicated administrator login with CONTROL SERVER. " +
+                    $"Only the bundled SQL Server deployment allows 'sa' ({admin}:AllowSaAdmin), until Goldmark generates its own administrator login.");
+            }
+
             // The app container would hold a credential that also authenticates as the administrator.
             if (string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
             {
@@ -482,6 +633,13 @@ internal static class BootstrapDatabaseCommand
         }
 
         errors.AddRange(CommonConnectionErrors(db));
+
+        if (bootstrap.Mode is not (BootstrapOptions.CreateMode or BootstrapOptions.ExistingMode))
+        {
+            errors.Add($"{admin}:Mode must be '{BootstrapOptions.CreateMode}' or '{BootstrapOptions.ExistingMode}'.");
+        }
+
+        errors.AddRange(FindingPolicy.Errors(bootstrap.AcceptedFindings));
 
         if (bootstrap.WaitSeconds is < 0 or > 900)
         {

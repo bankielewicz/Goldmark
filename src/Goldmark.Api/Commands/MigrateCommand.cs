@@ -55,8 +55,8 @@ internal static class MigrateCommand
     // schema- and object-level grants of goldmark_runtime (0002), in both directions: nothing
     // beyond DML on schema cmdb, no UPDATE/DELETE on the audit log, nothing on schema dbo beyond
     // reading the journal; and every one of those grants present, so a revoked grant fails here
-    // rather than in the application. Lower-scope grants on other objects are audited in slice
-    // 2b (#4). No rows = exactly as expected.
+    // rather than in the application. Rights on other objects and securables are checked by the
+    // principal audit (PrincipalAudit.SelfAsync, #4). No rows = exactly as expected.
     // Keep in step with the migrations that grant to goldmark_runtime: a new grant (for example
     // EXECUTE on a schema) must be allowed here in the same change, or migrate refuses.
     internal const string VerifyRuntimeSql = """
@@ -165,6 +165,14 @@ internal static class MigrateCommand
                     $"and nothing else: {string.Join("; ", principal)}. Nothing was changed.");
             }
 
+            // The principal audit's effective-rights layer, as the migration login (DEC-031). The
+            // pass over other databases is bootstrap-db's (it opens every database).
+            var policy = FindingPolicy.Parse(bootstrap.AcceptedFindings);
+            if (policy.Refused(await PrincipalAudit.SelfAsync(connection, db.Name, runtime: false, databases: false), output, Name) is { Count: > 0 } migrationFindings)
+            {
+                return await RefuseAsync(error, $"{FindingPolicy.Describe(migrationFindings)}{Environment.NewLine}Nothing was changed.");
+            }
+
             if (await ScalarAsync(connection, LockSql) < 0)
             {
                 return await RefuseAsync(error, "another migrate run holds the migration lock (waited 120 s).");
@@ -228,7 +236,13 @@ internal static class MigrateCommand
                         $"the runtime login '{db.User}' must hold exactly the rights of {BootstrapDatabaseCommand.RuntimeRole}: " +
                         $"{string.Join("; ", findings)}. Restore the role's grants and remove any others.");
                 }
+
+                if (policy.Refused(await PrincipalAudit.SelfAsync(runtimeConnection, db.Name, runtime: true, databases: false), output, Name) is { Count: > 0 } runtimeFindings)
+                {
+                    return await RefuseAsync(error, FindingPolicy.Describe(runtimeFindings));
+                }
             }
+
 
             await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' holds only {BootstrapDatabaseCommand.RuntimeRole}.");
             await output.WriteLineAsync($"{Name}: database schema version {SchemaMigrations.DatabaseVersion(await AppliedScriptsAsync(connection))} " +
@@ -306,6 +320,7 @@ internal static class MigrateCommand
         }
 
         errors.AddRange(BootstrapDatabaseCommand.CommonConnectionErrors(db));
+        errors.AddRange(FindingPolicy.Errors(bootstrap.AcceptedFindings));
         if (bootstrap.WaitSeconds is < 0 or > 900)
         {
             errors.Add($"{BootstrapOptions.SectionName}:WaitSeconds must be between 0 and 900.");

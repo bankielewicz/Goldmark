@@ -207,7 +207,7 @@ public sealed class BootstrapValidationTests
         Password = "Abcdef123456!",
     };
 
-    private static BootstrapOptions ValidBootstrap() => new() { AdminUser = "sa", AdminPassword = "Admin-Pa55word!" };
+    private static BootstrapOptions ValidBootstrap() => new() { AdminUser = "goldmark_dba", AdminPassword = "Admin-Pa55word!" };
 
     private static MigrationOptions ValidMigration() => new() { User = "goldmark_migrator", Password = "Migrate-Pa55word!" };
 
@@ -399,6 +399,206 @@ public sealed class BootstrapValidationTests
         var bootstrap = ValidBootstrap();
         bootstrap.AdminPassword = "";
         Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("AdminPassword", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void The_admin_login_has_no_default() // DEC-032
+    {
+        Assert.Equal("", new BootstrapOptions().AdminUser);
+        var bootstrap = ValidBootstrap();
+        bootstrap.AdminUser = "";
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("Goldmark:Bootstrap:AdminUser and AdminPassword are required", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData("sa")]
+    [InlineData("SA")]
+    public void Sa_is_refused_as_the_admin_login_unless_the_bundled_deployment_allows_it(string admin) // DEC-032
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AdminUser = admin;
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("Goldmark:Bootstrap:AdminUser must not be 'sa'", StringComparison.Ordinal));
+
+        bootstrap.AllowSaAdmin = true;
+        Assert.Empty(Validate(ValidDatabase(), bootstrap));
+    }
+
+    [Theory]
+    [InlineData("Create", true)]
+    [InlineData("Existing", true)]
+    [InlineData("existing", false)]
+    [InlineData("", false)]
+    [InlineData("Adopt", false)]
+    public void Mode_is_Create_or_Existing(string mode, bool valid) // DEC-032
+    {
+        Assert.Equal(BootstrapOptions.CreateMode, new BootstrapOptions().Mode);
+        var bootstrap = ValidBootstrap();
+        bootstrap.Mode = mode;
+        var errors = Validate(ValidDatabase(), bootstrap);
+        Assert.Equal(valid, !errors.Exists(e => e.Contains("Goldmark:Bootstrap:Mode must be 'Create' or 'Existing'", StringComparison.Ordinal)));
+    }
+
+    [Theory]
+    [InlineData("guest-connect:Sales", null)]
+    [InlineData("guest-connect:Sales, linked-login-all-logins:LS1\nsystem-grant:msdb:public:EXECUTE:dbo.sp_x", null)]
+    [InlineData("cross-db-chaining", null)]
+    [InlineData("server-role:goldmark_app:sysadmin", "cannot be accepted")]
+    [InlineData("login-policy-off:goldmark_app", "cannot be accepted")]
+    [InlineData("goldmark-grant:Goldmark:public:SELECT:dbo.X", "cannot be accepted")]
+    [InlineData("Guest-Connect:Sales", "is not a finding ID")]
+    [InlineData("guest-connect::Sales", "is not a finding ID")]
+    [InlineData("guest-connect:Sales;x", "is not a finding ID")]
+    public void Accepted_findings_must_be_well_formed_and_about_the_shared_instance(string accepted, string? error) // DEC-031
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AcceptedFindings = accepted.Replace("\\n", "\n", StringComparison.Ordinal);
+        var errors = Validate(ValidDatabase(), bootstrap).Where(e => e.StartsWith("Goldmark:Bootstrap:AcceptedFindings", StringComparison.Ordinal)).ToList();
+        if (error is null)
+        {
+            Assert.Empty(errors);
+        }
+        else
+        {
+            Assert.Contains(errors, e => e.Contains(error, StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public void A_malformed_accepted_finding_is_not_echoed() // it may be a secret pasted into the wrong setting
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AcceptedFindings = "guest-connect:Sales Pa55;word!";
+        var errors = Validate(ValidDatabase(), bootstrap);
+        Assert.Contains(errors, e => e.Contains("entry 2 of 2 is not a finding ID", StringComparison.Ordinal));
+        Assert.DoesNotContain(errors, e => e.Contains("Pa55", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Migrate_validates_accepted_findings_too()
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AcceptedFindings = "database-role:goldmark_app:db_owner";
+        Assert.Contains(MigrateCommand.Validate(ValidDatabase(), ValidMigration(), bootstrap), e => e.Contains("cannot be accepted", StringComparison.Ordinal));
+    }
+}
+
+/// <summary>Finding IDs (DEC-031): stable, without separators or white space, and only instance findings are acceptable.</summary>
+public sealed class AuditFindingTests
+{
+    [Theory]
+    [InlineData("guest-connect", new[] { "Sales" }, "guest-connect:Sales")]
+    [InlineData("public-server-grant", new[] { "VIEW SERVER STATE", "SERVER" }, "public-server-grant:VIEW+SERVER+STATE:SERVER")]
+    [InlineData("guest-connect", new[] { "a b" }, "guest-connect:a+b")]
+    [InlineData("linked-login-all-logins", new[] { "host,1433" }, "linked-login-all-logins:host%2C1433")]
+    [InlineData("system-grant", new[] { "msdb", "public", "EXECUTE", "dbo.sp:x" }, "system-grant:msdb:public:EXECUTE:dbo.sp%3Ax")]
+    [InlineData("database-grant", new[] { "app", "SELECT", "OBJECT", "dbo.T (a+b%)" }, "database-grant:app:SELECT:OBJECT:dbo.T+%28a%2Bb%25%29")]
+    [InlineData("server-grant", new[] { "app", "CONTROL SERVER", "SERVER", "" }, "server-grant:app:CONTROL+SERVER:SERVER")]
+    [InlineData("guest-connect", new[] { "Ventes-été" }, "guest-connect:Ventes-%C3%A9t%C3%A9")]
+    [InlineData("cross-db-chaining", new string[0], "cross-db-chaining")]
+    public void Ids_are_encoded_without_separators(string kind, string[] parts, string id)
+    {
+        var finding = new AuditFinding(kind, parts);
+        Assert.Equal(id, finding.Id);
+        Assert.Empty(FindingPolicy.Errors(finding.Acceptable ? id : ""));
+    }
+
+    [Theory]
+    [InlineData("guest-connect", true)]
+    [InlineData("linked-login-all-logins", true)]
+    [InlineData("remote-login-all-logins", true)]
+    [InlineData("public-server-grant", false)]
+    [InlineData("system-grant", true)]
+    [InlineData("cross-db-chaining", true)]
+    [InlineData("database-unreadable", true)]
+    [InlineData("goldmark-grant", false)]
+    [InlineData("goldmark-database-option", false)]
+    [InlineData("login-disabled", false)]
+    [InlineData("server-role", false)]
+    [InlineData("database-access", false)]
+    [InlineData("mapped-into", false)]
+    [InlineData("owns", false)]
+    public void Only_findings_about_the_shared_instance_are_acceptable(string kind, bool acceptable) =>
+        Assert.Equal(acceptable, PrincipalAudit.IsAcceptableKind(kind));
+
+    [Fact]
+    public void Every_kind_has_its_own_description()
+    {
+        string[] kinds =
+        [
+            "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
+            "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "login-disabled", "login-policy-off",
+            "login-expiration-on", "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential",
+            "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
+            "database-grant", "database-connect-denied", "server-securable", "database-securable",
+        ];
+        foreach (var kind in kinds)
+        {
+            var description = new AuditFinding(kind, ["a", "b", "c", "d"]).Description;
+            Assert.False(description.StartsWith($"{kind}:", StringComparison.Ordinal), kind);
+        }
+    }
+
+    [Fact]
+    public void The_measured_baseline_is_embedded()
+    {
+        var baseline = PrincipalAudit.Baseline.Value;
+        Assert.Contains(PrincipalAudit.BaselineKey("guest", "CONNECT", ""), baseline["tempdb"]);
+        Assert.Contains(PrincipalAudit.BaselineKey("public", "SELECT", "sys.objects"), baseline["*"]);
+        Assert.All(PrincipalAudit.SystemDatabases.Where(d => d != "model"), d => Assert.True(baseline.ContainsKey(d), d));
+    }
+}
+
+/// <summary>Accepting findings by ID (DEC-031).</summary>
+public sealed class FindingPolicyTests
+{
+    private static readonly AuditFinding Guest = new("guest-connect", ["Sales"]);
+    private static readonly AuditFinding Role = new("server-role", ["goldmark_app", "sysadmin"]);
+
+    [Fact]
+    public void Accepted_instance_findings_are_reported_but_do_not_refuse()
+    {
+        var policy = FindingPolicy.Parse("GUEST-CONNECT:sales");
+        using var output = new StringWriter();
+
+        var refused = policy.Refused([Guest, Guest], output, "bootstrap-db");
+
+        Assert.Empty(refused);
+        Assert.Equal(1, output.ToString().Split("accepted finding [guest-connect:Sales]").Length - 1);
+    }
+
+    [Fact]
+    public void Findings_about_Goldmarks_principals_refuse_even_if_listed()
+    {
+        var policy = FindingPolicy.Parse("server-role:goldmark_app:sysadmin");
+        using var output = new StringWriter();
+
+        Assert.Same(Role, Assert.Single(policy.Refused([Role], output, "bootstrap-db")));
+    }
+
+    [Fact]
+    public void An_accepted_ID_that_no_longer_occurs_is_a_warning()
+    {
+        var policy = FindingPolicy.Parse("guest-connect:Sales guest-connect:Old");
+        using var output = new StringWriter();
+        policy.Refused([Guest], output, "bootstrap-db");
+
+        policy.ReportUnmatched(output, "bootstrap-db");
+
+        Assert.Contains("warning: accepted finding [guest-connect:Old] did not occur", output.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("[guest-connect:Sales] did not occur", output.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_refusal_names_every_finding_with_its_fix_and_how_to_accept_instance_findings()
+    {
+        var text = FindingPolicy.Describe([Guest, Role]);
+
+        Assert.Contains("found 2 problem(s)", text, StringComparison.Ordinal);
+        Assert.Contains("[guest-connect:Sales] guest can connect to database 'Sales'", text, StringComparison.Ordinal);
+        Assert.Contains("REVOKE CONNECT FROM guest", text, StringComparison.Ordinal);
+        Assert.Contains("add guest-connect:Sales to GOLDMARK_DB_ACCEPTED_FINDINGS", text, StringComparison.Ordinal);
+        Assert.Contains("[server-role:goldmark_app:sysadmin]", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("add server-role", text, StringComparison.Ordinal);
     }
 }
 

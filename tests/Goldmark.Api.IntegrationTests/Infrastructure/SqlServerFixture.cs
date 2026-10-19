@@ -29,6 +29,10 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
 {
     public const string CertificateHostName = "sqlserver";
 
+    // Collections run in parallel, but two SQL Server containers starting at the same moment
+    // can crash during first-time setup (measured in the agent's sandbox: errno 11 in lsass).
+    private static readonly SemaphoreSlim StartOneAtATime = new(1, 1);
+
     private readonly string _work = Directory.CreateTempSubdirectory("goldmark-it-").FullName;
     private readonly ConcurrentDictionary<string, Lazy<Task<Provisioned>>> _shared = new();
     private int _sequence;
@@ -62,7 +66,15 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
             .WithEntrypoint("/bin/bash", "/goldmark/scripts/sql-entrypoint.sh")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("/bin/bash", "/goldmark/scripts/healthcheck.sh"))
             .Build();
-        await _container.StartAsync(TestContext.Current.CancellationToken);
+        await StartOneAtATime.WaitAsync(TestContext.Current.CancellationToken);
+        try
+        {
+            await _container.StartAsync(TestContext.Current.CancellationToken);
+        }
+        finally
+        {
+            StartOneAtATime.Release();
+        }
 
         Host = _container.Hostname;
         Port = _container.GetMappedPublicPort(MsSqlBuilder.MsSqlPort);
@@ -110,6 +122,8 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
             ["Goldmark:Migration:Password"] = installation.MigrationPassword,
             ["Goldmark:Bootstrap:AdminUser"] = "sa",
             ["Goldmark:Bootstrap:AdminPassword"] = SaPassword,
+            // As the bundled deployment does, until slice 2c (DEC-032).
+            ["Goldmark:Bootstrap:AllowSaAdmin"] = "true",
             ["Goldmark:Bootstrap:WaitSeconds"] = "30",
         };
         foreach (var (key, value) in overrides ?? new Dictionary<string, string?>())
