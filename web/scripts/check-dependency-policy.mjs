@@ -147,130 +147,203 @@ export function nameFromLockKey(key) {
   return at > 0 ? key.slice(0, at) : key;
 }
 
-/** Top-level keys pnpm 11 writes for this project, in canonical (unquoted) form. */
-const LOCKFILE_SECTIONS = new Set(['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
-
-/**
- * The lockfile is read line by line, so it must be in pnpm's canonical layout. YAML
- * allows equivalent spellings (quoted or re-indented section keys, anchors and
- * aliases, tags, flow collections, extra documents) that pnpm would read but this
- * reader would skip. Any of those fails the check instead of being ignored.
+/*
+ * Lockfile parsing. pnpm-lock.yaml is parsed structurally, but only as the YAML subset
+ * pnpm 11 writes (block mappings, block sequences and a few flow forms), and every node
+ * is then validated against the lockfile schema. Anything outside it fails the check:
+ * unknown sections or keys, duplicate keys, double quotes or escapes, odd or jumping
+ * indentation, anchors, aliases, tags, multi-document streams, URLs or protocols in
+ * values. A spelling that YAML would treat as equivalent can therefore not hide a
+ * package from this check, because it is rejected rather than read differently.
  */
-export function lockfileStructureErrors(text) {
-  const errors = [];
-  const lines = text.split('\n');
-  let section = null;
-  lines.forEach((raw, index) => {
-    const at = `pnpm-lock.yaml line ${index + 1}`;
-    if (raw.includes('\r') || raw.includes('\t')) {
-      errors.push(`${at}: tabs and carriage returns are not allowed`);
-      return;
-    }
-    if (raw.trim() === '') return;
-    if (/^(---|\.\.\.)(\s|$)/.test(raw)) {
-      errors.push(`${at}: multiple YAML documents are not allowed`);
-      return;
-    }
-    if (/(^|[\s:[{,])[&*!][\w!-]/.test(raw.replace(/'[^']*'|"[^"]*"/g, "''")) || /^\s*\?(\s|$)/.test(raw)) {
-      errors.push(`${at}: YAML anchors, aliases, tags and complex keys are not allowed`);
-      return;
-    }
-    const indent = raw.length - raw.trimStart().length;
-    if (indent % 2 !== 0) {
-      errors.push(`${at}: odd indentation`);
-      return;
-    }
-    if (indent === 0) {
-      const top = raw.match(/^([A-Za-z]+):(?: (.*))?$/);
-      if (!top || !LOCKFILE_SECTIONS.has(top[1])) {
-        errors.push(`${at}: unexpected top-level entry "${raw.slice(0, 60)}"`);
-        section = null;
-        return;
-      }
-      section = top[1];
-      const value = top[2] ?? '';
-      if (section === 'lockfileVersion' ? !/^'9\.0'$/.test(value) : value !== '' && value !== '{}') {
-        errors.push(`${at}: unexpected value for "${section}"`);
-      }
-      return;
-    }
-    // Only package-like keys (they contain "@") may be quoted; a quoted plain key such as
-    // 'resolution' is a YAML-equivalent spelling this reader would otherwise skip.
-    // pnpm quotes keys with single quotes and no escapes; double quotes allow escapes
-    // ("\x6eext") that would hide the real name from this reader.
-    if (/^\s*"/.test(raw) || /^\s*'[^']*''/.test(raw)) {
-      errors.push(`${at}: double-quoted or escaped keys are not canonical`);
-    }
-    const quotedKey = raw.match(/^\s*(['"])([^'"]*)\1:(\s|$)/);
-    if (quotedKey && !quotedKey[2].includes('@')) {
-      errors.push(`${at}: quoted key "${quotedKey[2]}" is not canonical`);
-    }
-    if (section === 'packages' || section === 'snapshots') {
-      if (indent === 2 && !/^ {2}(['"]?)[^\s'"].*\1:( \{\})?$/.test(raw)) {
-        errors.push(`${at}: malformed ${section} entry`);
-      }
-    }
-  });
 
-  // Every package entry carries exactly one resolution, in pnpm's canonical form.
-  let entry = null;
-  let resolutions = 0;
-  const closeEntry = () => {
-    if (entry && resolutions !== 1) {
-      errors.push(`pnpm-lock.yaml: package ${entry} must have exactly one canonical resolution (found ${resolutions})`);
+const BARE_KEY = /^[A-Za-z0-9.][A-Za-z0-9._@/+()~-]*$/;
+const QUOTED_KEY = /^'([^']+)'$/;
+// Plain scalar: no YAML indicator first, and no ':', '#', quotes, brackets, braces, commas,
+// anchors, aliases or tags anywhere (so no URLs or protocol specifiers either).
+const BARE_SCALAR = /^[^\s\-?:,[\]{}#&*!|>'"%@`][^:#{}[\],&*!'"`]*$/;
+const QUOTED_SCALAR = /^'([^':]*)'$/;
+const CANONICAL_RESOLUTION = /^\{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/;
+const FLOW_MAP = /^\{[A-Za-z]+: (?:'[^':]*'|[^':#{}[\],]+)(?:, [A-Za-z]+: (?:'[^':]*'|[^':#{}[\],]+))*\}$/;
+const FLOW_LIST = /^\[(?:'[^':]*'|[A-Za-z0-9_-]+)(?:, (?:'[^':]*'|[A-Za-z0-9_-]+))*\]$/;
+const BOOLEAN = /^(true|false)$/;
+
+/** Builds a tree of { key, value, children, items, line } nodes; returns structural errors. */
+function buildTree(text) {
+  const errors = [];
+  const root = { key: '', value: null, children: new Map(), items: [], line: 0, depth: -1 };
+  const stack = [root];
+  text.split('\n').forEach((raw, index) => {
+    const line = index + 1;
+    const at = `pnpm-lock.yaml line ${line}`;
+    if (raw.includes('\r') || raw.includes('\t'))
+      return void errors.push(`${at}: tabs and carriage returns are not allowed`);
+    if (raw.trim() === '') return;
+    const indent = raw.length - raw.trimStart().length;
+    if (indent % 2 !== 0) return void errors.push(`${at}: odd indentation`);
+    const depth = indent / 2;
+    while (stack.length > 1 && stack[stack.length - 1].depth >= depth) stack.pop();
+    const parent = stack[stack.length - 1];
+    if (depth !== parent.depth + 1) return void errors.push(`${at}: indentation jumps a level`);
+    if (parent.value !== null) return void errors.push(`${at}: "${parent.key}" has both a value and children`);
+    const body = raw.trim();
+    if (body.startsWith('- ')) {
+      if (parent.children.size > 0) return void errors.push(`${at}: mixed sequence and mapping under "${parent.key}"`);
+      parent.items.push({ value: body.slice(2), line });
+      return;
     }
-  };
-  section = null;
-  for (const raw of lines) {
-    if (/^\S/.test(raw)) {
-      closeEntry();
-      entry = null;
-      section = raw.replace(/:.*$/, '');
-      continue;
-    }
-    if (section !== 'packages') continue;
-    const key = raw.match(/^ {2}(['"]?)([^\s'"].*?)\1:\s*$/);
-    if (key) {
-      closeEntry();
-      entry = key[2];
-      resolutions = 0;
-    } else if (/^ {4}resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$/.test(raw)) {
-      resolutions += 1;
-    } else if (/resolution/.test(raw)) {
-      errors.push(`pnpm-lock.yaml: non-canonical resolution in ${entry}: ${raw.trim().slice(0, 80)}`);
-    }
-  }
-  closeEntry();
-  return errors;
+    const match = body.match(/^('[^']*'|[^\s'"]+?):(?: (.*))?$/);
+    if (!match) return void errors.push(`${at}: not a canonical "key: value" line`);
+    const quoted = match[1].match(QUOTED_KEY);
+    if (!quoted && !BARE_KEY.test(match[1])) return void errors.push(`${at}: key ${match[1]} is not canonical`);
+    const key = quoted ? quoted[1] : match[1];
+    if (quoted && !key.includes('@')) return void errors.push(`${at}: quoted key "${key}" is not canonical`);
+    if (parent.items.length > 0) return void errors.push(`${at}: mixed sequence and mapping under "${parent.key}"`);
+    if (parent.children.has(key)) return void errors.push(`${at}: duplicate key "${key}"`);
+    const node = { key, value: match[2] ?? null, children: new Map(), items: [], line, depth };
+    parent.children.set(key, node);
+    stack.push(node);
+  });
+  return { root, errors };
 }
 
-/** Package names and resolution lines from the packages/snapshots sections. */
-export function readLockfile(text) {
+/** Parses and validates pnpm-lock.yaml. Returns { errors, names } (all package names seen). */
+export function parseLockfile(text) {
+  const { root, errors } = buildTree(text);
   const names = new Set();
-  const badResolutions = [];
-  let section = null;
-  let currentKey = null;
-  for (const raw of text.split(/\r?\n/)) {
-    if (/^\S/.test(raw)) {
-      section = raw.replace(/:.*$/, '');
-      currentKey = null;
-      continue;
+  const at = (node) => `pnpm-lock.yaml line ${node.line}`;
+  const fail = (node, message) => errors.push(`${at(node)}: ${message}`);
+  const isScalar = (v) => v !== null && (BARE_SCALAR.test(v) || QUOTED_SCALAR.test(v));
+  const expectBlock = (node) => {
+    if (node.value !== null && !(node.value === '{}' && node.children.size === 0))
+      fail(node, `"${node.key}" must be a block`);
+  };
+  const onlyKeys = (node, allowed) => {
+    for (const child of node.children.values()) {
+      if (!allowed.includes(child.key)) fail(child, `unexpected key "${child.key}" under "${node.key}"`);
     }
-    if (section !== 'packages' && section !== 'snapshots') continue;
-    const keyMatch = raw.match(/^ {2}(['"]?)(.+?)\1:\s*(\{\})?\s*$/);
-    if (keyMatch) {
-      currentKey = keyMatch[2];
-      names.add(nameFromLockKey(currentKey));
-      continue;
+    if (node.items.length > 0) fail(node, `"${node.key}" must not be a sequence`);
+  };
+  const addName = (name, node) => {
+    if (!name || name.includes(':')) fail(node, `invalid package name "${name}"`);
+    else names.add(name);
+  };
+  // name: version-or-range maps (dependencies, optionalDependencies, peerDependencies)
+  const versionMap = (node) => {
+    expectBlock(node);
+    for (const dep of node.children.values()) {
+      addName(dep.key, dep);
+      if (!isScalar(dep.value) || dep.children.size > 0) fail(dep, `"${dep.key}" must map to a version or range`);
+      const alias = dep.value?.match(/^(@?[^@\s]+)@\d/);
+      if (alias) addName(alias[1], dep);
     }
-    const res = raw.match(/^ {4}resolution:\s*(.*)$/);
-    if (res && section === 'packages') {
-      const value = res[1];
-      const registryOnly = /integrity:\s*sha512-/.test(value) && !/(tarball|repo|directory|type):/.test(value);
-      if (!registryOnly) badResolutions.push(`${currentKey}: ${value}`);
+  };
+
+  onlyKeys(root, ['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
+  const section = (key) => root.children.get(key);
+  if (section('lockfileVersion')?.value !== "'9.0'") errors.push("pnpm-lock.yaml: lockfileVersion must be '9.0'");
+
+  const settings = section('settings');
+  if (settings) {
+    expectBlock(settings);
+    onlyKeys(settings, ['autoInstallPeers', 'excludeLinksFromLockfile']);
+    for (const s of settings.children.values())
+      if (!BOOLEAN.test(s.value ?? '')) fail(s, `"${s.key}" must be true or false`);
+  }
+
+  const importers = section('importers');
+  if (importers) {
+    expectBlock(importers);
+    for (const importer of importers.children.values()) {
+      if (importer.key !== '.') fail(importer, `unexpected importer "${importer.key}"`);
+      expectBlock(importer);
+      onlyKeys(importer, ['dependencies', 'devDependencies', 'optionalDependencies']);
+      for (const group of importer.children.values()) {
+        expectBlock(group);
+        for (const dep of group.children.values()) {
+          addName(dep.key, dep);
+          expectBlock(dep);
+          onlyKeys(dep, ['specifier', 'version']);
+          for (const field of dep.children.values())
+            if (!isScalar(field.value)) fail(field, `"${field.key}" must be a plain version`);
+        }
+      }
     }
   }
-  return { names, badResolutions };
+
+  const packages = section('packages');
+  if (packages) {
+    expectBlock(packages);
+    for (const entry of packages.children.values()) {
+      addName(nameFromLockKey(entry.key), entry);
+      expectBlock(entry);
+      onlyKeys(entry, [
+        'resolution',
+        'engines',
+        'cpu',
+        'os',
+        'libc',
+        'hasBin',
+        'deprecated',
+        'peerDependencies',
+        'peerDependenciesMeta',
+      ]);
+      const resolution = entry.children.get('resolution');
+      if (!resolution || !CANONICAL_RESOLUTION.test(resolution.value ?? '')) {
+        fail(
+          entry,
+          `package ${entry.key} must have exactly one canonical registry resolution ({integrity: sha512-...})`,
+        );
+      }
+      for (const field of entry.children.values()) {
+        const ok = {
+          resolution: () => true,
+          engines: () => FLOW_MAP.test(field.value ?? ''),
+          cpu: () => FLOW_LIST.test(field.value ?? ''),
+          os: () => FLOW_LIST.test(field.value ?? ''),
+          libc: () => FLOW_LIST.test(field.value ?? ''),
+          hasBin: () => field.value === 'true',
+          deprecated: () => field.value !== null && /^'[^']*'$|^[^\s'"&*!|>{[]/.test(field.value),
+          peerDependencies: () => (versionMap(field), true),
+          peerDependenciesMeta: () => {
+            expectBlock(field);
+            for (const meta of field.children.values()) {
+              expectBlock(meta);
+              onlyKeys(meta, ['optional']);
+              for (const o of meta.children.values())
+                if (!BOOLEAN.test(o.value ?? '')) fail(o, '"optional" must be true or false');
+            }
+            return true;
+          },
+        }[field.key]?.();
+        if (ok === false) fail(field, `"${field.key}" is not in canonical form`);
+      }
+    }
+  }
+
+  const snapshots = section('snapshots');
+  if (snapshots) {
+    expectBlock(snapshots);
+    for (const entry of snapshots.children.values()) {
+      addName(nameFromLockKey(entry.key), entry);
+      expectBlock(entry);
+      onlyKeys(entry, ['dependencies', 'optionalDependencies', 'transitivePeerDependencies', 'optional']);
+      for (const field of entry.children.values()) {
+        if (field.key === 'dependencies' || field.key === 'optionalDependencies') versionMap(field);
+        else if (field.key === 'optional' && field.value !== 'true') fail(field, '"optional" must be true');
+        else if (field.key === 'transitivePeerDependencies') {
+          if (field.value !== null || field.children.size > 0)
+            fail(field, '"transitivePeerDependencies" must be a list');
+          for (const item of field.items) {
+            if (!BARE_KEY.test(item.value) && !QUOTED_KEY.test(item.value))
+              fail(item, 'list item is not a package name');
+            else addName(item.value.replace(/^'|'$/g, ''), item);
+          }
+        }
+      }
+    }
+  }
+  return { errors, names };
 }
 
 function readJson(path, errors) {
@@ -399,13 +472,9 @@ export function checkPolicy(webDir) {
   if (!existsSync(lockPath)) {
     if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
   } else {
-    const lockText = readFileSync(lockPath, 'utf8');
-    errors.push(...lockfileStructureErrors(lockText));
-    const { names, badResolutions } = readLockfile(lockText);
+    const { errors: lockErrors, names } = parseLockfile(readFileSync(lockPath, 'utf8'));
+    errors.push(...lockErrors);
     for (const name of names) checkForbidden(name, 'pnpm-lock.yaml', errors);
-    for (const entry of badResolutions) {
-      errors.push(`pnpm-lock.yaml: non-registry resolution is not allowed: ${entry}`);
-    }
   }
 
   return errors;

