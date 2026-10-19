@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Slice 1 Compose smoke test: runs the real deployment (deploy/docker-compose.yml)
+# Compose smoke test (slices 1-2): runs the real deployment (deploy/docker-compose.yml)
 # with SQL Server 2025 Express and verifies, against live containers:
 #   - Compose refuses to start without the required secrets
 #   - the app fails fast (exit 2) when started without its database settings
@@ -11,7 +11,10 @@
 #   - security headers (CSP with Trusted Types) on real responses
 #   - SQL Server really runs as Express (EngineEdition 4) and SQL Server 2025
 #   - the runtime login is least-privileged and SQL Server enforces TDS 8 strict
-#   - db-init is idempotent
+#   - db-init is idempotent; migrations are applied by the migration login, which
+#     is db_owner of the Goldmark database only; its password never reaches the app
+#   - the runtime login cannot UPDATE/DELETE/TRUNCATE the audit log or switch off
+#     system versioning; readiness requires the schema version this build expects
 #   - logs are JSON and contain none of the generated secrets
 #   - the SPA renders in a real browser under the served CSP (Playwright)
 #
@@ -36,10 +39,12 @@ chmod 700 "${work}"
 secret() { printf '%s-Aa9' "$(openssl rand -base64 48 | tr -dc 'A-Za-z0-9' | cut -c1-28)"; }
 sa_password="$(secret)"
 app_password="$(secret)"
+migration_password="$(secret)"
 cat > "${work}/.env" <<EOF
 SQLSERVER_ACCEPT_EULA=Y
 SQLSERVER_SA_PASSWORD=${sa_password}
 GOLDMARK_DB_PASSWORD=${app_password}
+GOLDMARK_DB_MIGRATION_PASSWORD=${migration_password}
 GOLDMARK_HTTPS_PORT=${port}
 GOLDMARK_TLS_HOSTNAMES=localhost,127.0.0.1
 EOF
@@ -110,7 +115,7 @@ echo "== Goldmark Compose smoke test (project ${project}, port ${port})"
 # --- Secrets are mandatory -------------------------------------------------------
 missing_output="$(docker compose -p "${project}-nosecrets" -f "${repo}/deploy/docker-compose.yml" --env-file /dev/null config 2>&1)"
 # Compose versions differ in which missing variable they report first.
-if [[ $? -ne 0 && "${missing_output}" =~ required\ variable\ (SQLSERVER_ACCEPT_EULA|SQLSERVER_SA_PASSWORD|GOLDMARK_DB_PASSWORD)\ is\ missing ]]; then
+if [[ $? -ne 0 && "${missing_output}" =~ required\ variable\ (SQLSERVER_ACCEPT_EULA|SQLSERVER_SA_PASSWORD|GOLDMARK_DB_PASSWORD|GOLDMARK_DB_MIGRATION_PASSWORD)\ is\ missing ]]; then
   pass "compose refuses to run without required secrets"
 else
   fail "compose refuses to run without required secrets" "${missing_output:0:200}"
@@ -258,14 +263,60 @@ check "runtime login is denied DDL" bash -c "! sql_out=\$(docker exec -e SQLCMDP
 check "SQL Server rejects a non-strict (TDS 7.x) encrypted client" bash -c "! docker exec -e SQLCMDPASSWORD='${app_password}' ${project}-sqlserver-1 /opt/mssql-tools18/bin/sqlcmd -S localhost -U goldmark_app -d Goldmark -Nm -J /goldmark/sql-tls-private/sqlserver.crt -F sqlserver -l 5 -b -Q 'SELECT 1' >/dev/null 2>&1"
 rerun="$("${compose[@]}" run --rm --no-deps db-init 2>&1)"
 rerun_code=$?
-if [[ ${rerun_code} -eq 0 && "${rerun}" == *"verified runtime login"* && "${rerun}" != *"created database"* ]]; then
-  pass "db-init is idempotent (re-run succeeds without re-creating the database)"
+if [[ ${rerun_code} -eq 0 && "${rerun}" == *"verified runtime login"* && "${rerun}" != *"created database"* \
+      && "${rerun}" == *"migrate: no migrations to apply"* ]]; then
+  pass "db-init is idempotent (re-run creates nothing and applies no migration)"
 else
-  fail "db-init is idempotent (re-run succeeds without re-creating the database)" "exit ${rerun_code}"
+  fail "db-init is idempotent (re-run creates nothing and applies no migration)" "exit ${rerun_code}"
+fi
+
+# --- Slice 2: migrations, migration login, runtime role --------------------------
+db_init() { "${compose[@]}" run --rm --no-deps "$@" db-init 2>&1; }
+expected_scripts="$(wc -l < "${repo}/db/migrations.sha256" | tr -d ' ')"
+applied_scripts="$(sql_as sa "${sa_password}" "SELECT COUNT(*) FROM dbo.SchemaVersions WHERE ScriptName LIKE N'Goldmark.Migrations.%';")"
+check "db-init applied every migration of this build (${applied_scripts:-?}/${expected_scripts})" [ "${applied_scripts}" == "${expected_scripts}" ]
+app_env_clean() {
+  ! docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "${project}-app-1" \
+    | grep -qF -e "${migration_password}" -e "${sa_password}" -e 'Goldmark__Migration__' -e 'Goldmark__Bootstrap__'
+}
+check "the app container never receives the migration or sa credentials" app_env_clean
+migrator_flags="$(sql_as goldmark_migrator "${migration_password}" "SELECT CONCAT(IS_MEMBER('db_owner'), IS_SRVROLEMEMBER('sysadmin'), (SELECT COUNT(*) FROM sys.login_token WHERE type = N'SERVER ROLE' AND name <> N'public'));")"
+check "the migration login is db_owner of Goldmark, not sysadmin, no server roles (got ${migrator_flags})" [ "${migrator_flags}" == 100 ]
+runtime_denied() { ! sql_as goldmark_app "${app_password}" "$1" >/dev/null; }
+check "runtime login cannot UPDATE the audit log" runtime_denied "UPDATE cmdb.AuditLog SET Action = 'x';"
+check "runtime login cannot DELETE from the audit log" runtime_denied "DELETE FROM cmdb.AuditLog;"
+check "runtime login cannot TRUNCATE the audit log" runtime_denied "TRUNCATE TABLE cmdb.AuditLog;"
+check "runtime login cannot switch off system versioning" runtime_denied "ALTER TABLE cmdb.Ci SET (SYSTEM_VERSIONING = OFF);"
+appended="$(sql_as goldmark_app "${app_password}" "INSERT INTO cmdb.AuditLog (ActorType, Action) VALUES ('System', 'smoke.append'); SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'smoke.append';")"
+check "runtime login can append to the audit log" [ "${appended}" == 1 ]
+same_password="$(db_init -e Goldmark__Migration__Password="${app_password}")"; same_code=$?
+if [[ ${same_code} -eq 2 && "${same_password}" == *"Goldmark:Migration:Password must differ from Goldmark:Database:Password"* ]]; then
+  pass "db-init refuses a migration password equal to the runtime password (exit 2)"
+else
+  fail "db-init refuses a migration password equal to the runtime password (exit 2)" "exit ${same_code}"
+fi
+
+# Readiness requires exactly this build's schema version: a newer one (as after a newer
+# build migrated the database) is not ready, and both versions are logged.
+sql_as sa "${sa_password}" "INSERT INTO dbo.SchemaVersions (ScriptName, Applied) VALUES (N'Goldmark.Migrations.9999_smoke_future.sql', SYSUTCDATETIME());" >/dev/null
+if wait_until 30 is_status /health/ready 503; then
+  pass "readiness turns 503 when the database schema is newer than this build"
+else
+  fail "readiness turns 503 when the database schema is newer than this build"
+fi
+mismatch_logged() {
+  "${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null \
+    | grep -F '"DatabaseSchemaVersion":9999' | grep -qF "\"ExpectedSchemaVersion\":${expected_scripts}"
+}
+check "the schema mismatch is logged with both versions (9999 vs ${expected_scripts})" mismatch_logged
+sql_as sa "${sa_password}" "DELETE FROM dbo.SchemaVersions WHERE ScriptName = N'Goldmark.Migrations.9999_smoke_future.sql';" >/dev/null
+if wait_until 30 is_status /health/ready 200; then
+  pass "readiness recovers once the schema version matches again"
+else
+  fail "readiness recovers once the schema version matches again"
 fi
 
 # --- bootstrap-db: only principals Goldmark created are managed ----------------------
-db_init() { "${compose[@]}" run --rm --no-deps "$@" db-init 2>&1; }
 login_password_works() { # login password: can it authenticate (to master, where every login can connect)?
   [[ "$(docker exec -e SQLCMDPASSWORD="$2" "${project}-sqlserver-1" /opt/mssql-tools18/bin/sqlcmd \
     -S localhost -U "$1" -d master -Ns -J /goldmark/sql-tls-private/sqlserver.crt -F sqlserver \
@@ -318,9 +369,11 @@ else
 fi
 
 # A password SQL Server's policy rejects fails before any database, login or user exists.
-weak="$(db_init -e Goldmark__Database__User=smoke_weak -e Goldmark__Database__Name=GoldmarkWeakProbe -e Goldmark__Database__Password=aaaaaaaaaaaaaaaa)"; weak_code=$?
-weak_state="$(sql_as sa "${sa_password}" "SELECT CONCAT(CASE WHEN DB_ID('GoldmarkWeakProbe') IS NULL THEN 'no-db' ELSE 'db' END, ',', CASE WHEN SUSER_ID('smoke_weak') IS NULL THEN 'no-login' ELSE 'login' END);")"
-if [[ ${weak_code} -ne 0 && "${weak_state}" == "no-db,no-login" ]]; then
+# Fresh names for both logins, so the policy check (not an existing login) is what fails.
+weak="$(db_init -e Goldmark__Database__User=smoke_weak -e Goldmark__Database__Name=GoldmarkWeakProbe -e Goldmark__Database__Password=aaaaaaaaaaaaaaaa \
+  -e Goldmark__Migration__User=smoke_weak_migrator)"; weak_code=$?
+weak_state="$(sql_as sa "${sa_password}" "SELECT CONCAT(CASE WHEN DB_ID('GoldmarkWeakProbe') IS NULL THEN 'no-db' ELSE 'db' END, ',', CASE WHEN SUSER_ID('smoke_weak') IS NULL AND SUSER_ID('smoke_weak_migrator') IS NULL THEN 'no-login' ELSE 'login' END);")"
+if [[ ${weak_code} -eq 1 && "${weak_state}" == "no-db,no-login" ]]; then
   pass "a password rejected by SQL Server policy leaves no database or login behind"
 else
   fail "a password rejected by SQL Server policy leaves no database or login behind" "exit ${weak_code}, ${weak_state}"
@@ -394,7 +447,7 @@ for n, line in enumerate(lines, 1):
 PY
 )"
 if [[ -z "${json_result}" ]]; then pass "app logs are JSON lines"; else fail "app logs are JSON lines" "${json_result}"; fi
-check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' -e '${other_password}' '${work}/app.log' '${work}/other.log' '${work}/compose-stderr.log'"
+check "no secret appears in any container log" bash -c "! grep -qF -e '${sa_password}' -e '${app_password}' -e '${migration_password}' -e '${other_password}' '${work}/app.log' '${work}/other.log' '${work}/compose-stderr.log'"
 
 # --- Browser: SPA renders under the served CSP / Trusted Types ---------------------
 if [[ "${GOLDMARK_SMOKE_SKIP_BROWSER:-}" == 1 ]]; then
