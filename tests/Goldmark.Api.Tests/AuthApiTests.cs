@@ -38,6 +38,16 @@ public sealed class AuthApiTests(GoldmarkFactory factory) : IClassFixture<Goldma
     }
 
     [Fact]
+    public void Api_times_are_written_as_UTC_with_the_Z_designator()
+    {
+        var options = new JsonSerializerOptions { Converters = { new Goldmark.Api.Hosting.UtcDateTimeConverter() } };
+
+        // Dapper reads datetime2 as an unspecified kind; Goldmark stores only UTC.
+        Assert.Equal("\"2026-10-20T14:02:00Z\"", JsonSerializer.Serialize(new DateTime(2026, 10, 20, 14, 2, 0, DateTimeKind.Unspecified), options));
+        Assert.Equal(new DateTime(2026, 10, 20, 14, 2, 0, DateTimeKind.Utc), JsonSerializer.Deserialize<DateTime>("\"2026-10-20T14:02:00Z\"", options));
+    }
+
+    [Fact]
     public void The_key_ring_directory_is_0700_and_key_files_0600()
     {
         var directory = Path.Combine(factory.CreateFile("unused"), "..", $"ring-{Guid.NewGuid():N}");

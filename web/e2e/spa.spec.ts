@@ -32,7 +32,8 @@ test('SPA renders under the production CSP with Trusted Types enforced', async (
   expect(csp).not.toContain('unsafe-inline');
   expect(csp).not.toContain('unsafe-eval');
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Goldmark CMDB' })).toBeVisible();
+  // Signed out, the app shows sign-in (slice 3): Fluent UI rendered under the served CSP.
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   expect(await page.evaluate(() => window.isSecureContext)).toBe(true);
   expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
   expect(errors).toEqual([]);
@@ -54,7 +55,9 @@ test('client-side routes fall back to the SPA shell', async ({ page }) => {
   await recordViolations(page);
   const response = await page.goto('/ci/00000000-0000-7000-8000-000000000000');
   expect(response?.status()).toBe(200);
-  await expect(page.getByRole('heading', { level: 1, name: 'Goldmark CMDB' })).toBeVisible();
+  // Signed out: sign-in first, then back to the page asked for.
+  await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+  expect(new URL(page.url()).searchParams.get('next')).toBe('/ci/00000000-0000-7000-8000-000000000000');
   expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
 });
 

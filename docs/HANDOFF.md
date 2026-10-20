@@ -8,8 +8,8 @@ in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 **As of 2026-10-20:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
 are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23. **Slice 3** is in
 progress: Fluent UI failed under the CSP and the owner chose a per-response style nonce
-(DEC-037); the backend (setup, sign-in, invitations, roles, deny by default, M6) is built
-(DEC-038, DEC-040); the UI is next; notes in §3. The owner placed the Windows
+(DEC-037); the backend (setup, sign-in, invitations, roles, deny by default, M6) and the UI are
+built (DEC-038, DEC-040); the PR is next; notes in §3. The owner placed the Windows
 service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
 the first distribution, not the target deployment (DEC-030, rule 8).
 
@@ -26,7 +26,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
-| 3 | **in progress** | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend done (DEC-040), UI next | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
+| 3 | **in progress** | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040), PR next | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
@@ -128,9 +128,10 @@ Slice **3** (`slice/03-auth`) is in progress. **Backend done** (DEC-040): migrat
 behind `DbSession` with the CA1857 gate, Identity on Dapper stores, server-side sessions, setup,
 invitations and two-factor reset with a separate code, Users & roles with its guards, the
 self-service two-factor page's API, deny-by-default and the M6 enumeration test, audit rows, the
-`goldmark-keys` volume. **Next: the UI** for screens 1, 1b, 2, 17 and the two-factor page, matching
-`docs/design/screens/slice-3/` (approved, DEC-040), with axe checks in Playwright; the SPA retries a
-request once with a fresh anti-forgery token when it is refused after a sign-in (DEC-040).
+`goldmark-keys` volume. **UI built** (DEC-040): screens 1, 1b, 2, 17 and the two-factor page on
+the approved boards (`docs/design/screens/slice-3/`, with the three deviations its README lists), an
+in-repo router, axe checks in Playwright (`@axe-core/playwright`, approved) and the theme contrast
+test. **Next: the slice-3 PR** (push, open, at most two Codex rounds).
 
 The Fluent UI v9 verification failed under
 `style-src 'self'`; the owner chose a per-response style nonce (DEC-037, options 1B and 2A),

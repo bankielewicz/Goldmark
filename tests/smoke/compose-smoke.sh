@@ -754,7 +754,10 @@ elif [[ -z "${GOLDMARK_E2E_CHANNEL:-}${GOLDMARK_E2E_CHROMIUM:-}" ]]; then
   fail "SPA renders in a browser under CSP + Trusted Types" "set GOLDMARK_E2E_CHANNEL or GOLDMARK_E2E_CHROMIUM"
 else
   spki="$(openssl x509 -pubkey -noout -in "${work}/app-cert.pem" | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | base64)"
-  if (cd "${repo}/web" && GOLDMARK_BASE_URL="${base}" GOLDMARK_TLS_SPKI_SHA256="${spki}" pnpm exec playwright test); then
+  # The slice-3 browser test signs in as the administrator first-run setup created above.
+  if (cd "${repo}/web" && GOLDMARK_BASE_URL="${base}" GOLDMARK_TLS_SPKI_SHA256="${spki}" \
+        GOLDMARK_E2E_ADMIN_USER=smoke.admin GOLDMARK_E2E_ADMIN_PASSWORD="${smoke_admin_password}" \
+        GOLDMARK_E2E_ADMIN_TOTP_KEY="${smoke_key:-}" pnpm exec playwright test); then
     pass "SPA renders in a browser under CSP + Trusted Types (Playwright)"
   else
     fail "SPA renders in a browser under CSP + Trusted Types (Playwright)"

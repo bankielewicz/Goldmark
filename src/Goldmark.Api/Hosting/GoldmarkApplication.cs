@@ -54,6 +54,7 @@ internal static class GoldmarkApplication
         builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();
         builder.Services.AddProblemDetails();
+        builder.Services.ConfigureHttpJsonOptions(json => json.SerializerOptions.Converters.Add(new UtcDateTimeConverter()));
         builder.Services.AddGoldmarkAuth();
 
         builder.Services.AddOptions<HstsOptions>().Configure<IOptions<HttpsOptions>>((hsts, https) =>

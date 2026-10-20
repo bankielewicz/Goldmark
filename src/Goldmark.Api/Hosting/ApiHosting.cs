@@ -38,6 +38,19 @@ internal static class ApiHosting
     }
 }
 
+/// <summary>
+/// Goldmark stores every time as UTC, and Dapper reads <c>datetime2</c> as an unspecified kind; the API
+/// writes them with the <c>Z</c> designator so a client never takes them for local time.
+/// </summary>
+internal sealed class UtcDateTimeConverter : System.Text.Json.Serialization.JsonConverter<DateTime>
+{
+    public override DateTime Read(ref System.Text.Json.Utf8JsonReader reader, Type typeToConvert, System.Text.Json.JsonSerializerOptions options) =>
+        reader.GetDateTime().ToUniversalTime();
+
+    public override void Write(System.Text.Json.Utf8JsonWriter writer, DateTime value, System.Text.Json.JsonSerializerOptions options) =>
+        writer.WriteStringValue(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+}
+
 /// <summary>Problem Details (RFC 9457) with a stable <c>code</c> the SPA maps to its messages.</summary>
 internal static class ApiProblems
 {

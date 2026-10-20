@@ -1218,6 +1218,23 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      `tools/common-passwords/build-common-passwords.mjs`; the licence ships beside the app
      (`common-passwords.LICENSE.txt`). Alternatives offered: the top 10M (702k entries), xato's list
      (licence conflicted), NCSC's top 100k (1,212 entries, too few).
+  6. **The UI step is approved** (owner, "APPROVED, start the UI", after the backend's verification).
+  7. **Slice 3 routes with a small in-repo router, no new package (B).** React Router does not conflict
+     with the host (the SPA fallback hands every non-file GET path to the shell; `/api` and `/health`
+     stay server-side), but its 8.4+ releases depend on `@remix-run/route-pattern`, which the npm policy
+     bans by the `@remix-run/` prefix; 8.5.0 is also under the 7-day age until 2026-10-26. Offered: 8.4.0
+     with an exact exception to the ban, the in-repo router, or 8.3.1. Slice 5 decides React Router
+     when it needs the deep links (US-53). Client routes must not end in a segment with a dot (the
+     fallback is `:nonfile`).
+  8. **Automated axe checks: `@axe-core/playwright` 4.13.0 (A)** (owner; NFR-A11Y-3): published
+     2026-08-11, MPL-2.0, its only dependency axe-core 4.13.x, no install scripts; dev-only (the smoke
+     test's Playwright run), never in the bundle or the image. `web/e2e/auth.spec.ts` signs in as the
+     smoke test's administrator and checks sign-in, setup, an invalid link, the dashboard, Users &
+     roles, the add-user panel and the two-factor page in light and dark: no serious or critical axe
+     violation, no CSP or Trusted Types violation. The theme contrast test (DEC-039's promise) is
+     `web/tests/contrast.test.mjs`: 51 checks of the pairs the screens use, recomputed from the brand
+     ramp with Fluent's own theme functions; it caught failed-rule text in the password checklist
+     using a danger token at 4.16:1 in dark, now the palette red the boards use (5.20:1).
 - **How the backend implements DEC-038 and the above** (reading PRD §8.1 "ASP.NET Core Identity"):
   - **NFR-SEC-3 gate without a new package.** Every Dapper call goes through `Data/DbSession.cs`, whose
     SQL arguments are `[ConstantExpected]`; the SDK's CA1857 is an error under warnings-as-errors, so
@@ -1390,3 +1407,34 @@ checks, all passing.
 | 11 | #19: the owner's effective CONTROL SERVER, honouring DENY | **Met** | DEC-035; integration: role grant + direct DENY refused, then accepted after REVOKE; nested-role owner still accepted |
 | 12 | Rule 7 (audit records, `/api/v1` parity, endpoint policies) | **Not applicable** | No application mutation, UI function or endpoint was added |
 | 13 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 3 acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine: 336 in-process tests, 178
+integration tests (SQL Server 2025), Compose smoke 94 unique checks with Playwright 7/7 inside
+(Chrome), web 48 policy tests and 56 dist and contrast tests, plus lint, typecheck and format.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | Fluent UI v9 verified under the served CSP and Trusted Types first (HANDOFF §1) | **Met** | DEC-037: per-response style nonce; real-server qualification in Chrome, Edge and Firefox; `fluent.spec.ts` in every smoke run |
+| 2 | Design-system and screen handoffs before UI code (rules 3, 4) | **Met** | DEC-039 (design system), DEC-040 (screens approved, `docs/design/screens/slice-3/`) |
+| 3 | US-02: one-time setup page protected by a setup token printed to the container log | **Met** | Event 3001 logged once per start while setup is not complete; integration `Setup_creates_the_first_administrator…`, `The_setup_token_is_logged_exactly_once…`; smoke: `docker compose logs app \| grep "Setup token"`, setup through the API |
+| 4 | US-02: the setup page is disabled permanently after use | **Met** | `cmdb.Installation` row with `DENY UPDATE, DELETE` for the runtime login (checked by `migrate`); integration: 409 after setup and after a restart, no new token; smoke: 409, no token after the app is re-created |
+| 5 | US-02: the admin enrols TOTP before reaching any other page | **Met** | Nothing is written until the authenticator code is verified; integration: no account row before verification |
+| 6 | US-03: sign-in with username, password and TOTP | **Met** | Integration `Sign_in_needs_the_password_and_then_a_code_that_works_once`; Playwright signs in with a TOTP code |
+| 7 | US-03: Identity's default hasher (PBKDF2) | **Met** | `UserManager` with Identity's `PasswordHasher` (v3: PBKDF2-HMAC-SHA512, 100,000 iterations, read from its source); integration: no password, code or key stored in clear |
+| 8 | US-03: lockout after 5 failures for 15 minutes, configurable | **Met** | `Goldmark:Auth:LockoutThreshold`, `LockoutMinutes`; integration `Five_failures_lock_an_account_and_an_unknown_name_alike` (passwords, codes and recovery codes; unknown names alike) |
+| 9 | US-03: recovery codes issued once and stored hashed | **Met** | Ten codes, PBKDF2 hashes, each works once; integration (setup, sign-in, regenerate) |
+| 10 | US-04: roles Admin, Editor, Viewer, Collector (service-only), Auditor | **Met** | `cmdb.Role`; Collector refused by the API and by a CHECK constraint; integration `Invitations_never_grant_Admin_or_Collector…` |
+| 11 | US-04 / M6: every endpoint declares a policy, endpoints without one fail closed, an automated test enumerates them | **Met** | `RequireAccess` / `AllowAnonymousByDesign`; fallback `DenyUnclassifiedEndpoints`; `EndpointInventoryTests` (inventory, 401 without credentials, 400 without anti-forgery, fallback denies everyone); `AccountAndAccessTests` (403 for a Viewer on every Admin endpoint, 401 for a password-only sign-in, 400 without the token) |
+| 12 | DEC-038: audit rows for every slice-3 mutation and sign-in event | **Met** | `AuditTrail` in the same transaction; integration asserts each action and that no row holds a secret |
+| 13 | DEC-038: invitation links with a separate code, 24 h, 5 tries, revocable, never Admin | **Met** | `UsersAndLinksTests` (code first, tries left, revoked after five, expiry, reissue, revoke removes the account) |
+| 14 | DEC-038: admin two-factor reset; self-service two-factor page | **Met** | `Locking_disabling_and_resetting_two_factor_end_the_persons_sessions`; `AccountAndAccessTests` (new codes, new authenticator keeps this session and ends the others) |
+| 15 | DEC-038: Dapper and the NFR-SEC-3 build gate | **Met** | `DbSession` with `[ConstantExpected]` (CA1857); `SqlGateTests`; `tests/sql-gate/check-sql-gate.sh` in CI |
+| 16 | DEC-038: Data Protection keys at a settings path, 0700/0600 | **Met** | `PrivateKeyRingRepository`; unit test; smoke: modes, another uid cannot read, only the app mounts `goldmark-keys` |
+| 17 | DEC-038: QR code as SVG, no-store, only to the person enrolling | **Met** | `QrCodeImage` (Net.Codecrete.QrCodeGenerator 3.2.1); unit and integration tests |
+| 18 | Server-side sessions: sign-out ends them, idle 30 min, 12 h, new key at every sign-in (owner, DEC-040) | **Met** | `SessionTicketStore`; integration: copied cookie refused after sign-out, idle and absolute expiry, planted session key ended at sign-in; smoke: copied cookie refused |
+| 19 | NFR-SEC-2: anti-forgery on cookie-authenticated mutations; SameSite; CSP | **Met** | `__Host-` cookies SameSite=Strict; `ApiAntiforgery`; M6 tests; smoke: POST without the header is 400 |
+| 20 | Rule 7: every UI function is available through `/api/v1` | **Met** | The SPA calls only `/api/v1` (`web/src/api.ts`); `docs/security/endpoint-access.md` lists every endpoint |
+| 21 | NFR-A11Y-1/3: WCAG 2.2 AA, axe checks in Playwright | **Met for slice 3's screens** | `web/e2e/auth.spec.ts`: sign-in, setup, invalid link, dashboard, Users & roles, add-user panel, two-factor page, light and dark; `web/tests/contrast.test.mjs` (51 pairs) |
+| 22 | CI green | **Not executed** | Runs on the PR |

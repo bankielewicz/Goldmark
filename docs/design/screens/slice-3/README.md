@@ -25,5 +25,13 @@ recovery codes are Identity's format `XXXXX-XXXXX` (the boards show `7KQ2-M9XD`)
 invitation removes the account it created; after a two-factor reset, sign-in with the right password
 says "Two-factor was reset for this account. Open the link your administrator gave you."
 
+Where the built UI differs from the boards, and why:
+
+- **Screen 1b's greeting appears from step 2**, after the code: a link alone reveals nothing about
+  the person (name, roles), since the separate code exists for the case where the link leaks.
+- **The shell's search box and As-of control are absent** until their slices (5 and 7): slice 3
+  shows only what exists (the sparse-shell board's own note).
+- **The Microsoft sign-in button (P1)** appears with OIDC, slice 25.
+
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.
