@@ -331,7 +331,8 @@ check "unknown API route returns 404" is_status /api/v1/cis 404
 
 # --- Slice 3: first-run setup, sessions, key ring (US-02, US-03, DEC-038) ------------
 # The setup token is the one secret Goldmark logs: once per start, until setup is complete.
-wait_until 60 bash -c "\"\${0}\" logs --no-color --no-log-prefix app 2>/dev/null | grep -q 'Setup token'" "${compose[@]}" >/dev/null 2>&1 || true
+setup_token_logged() { "${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null | grep -q 'Setup token'; }
+wait_until 60 setup_token_logged
 setup_token="$("${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null | grep 'Setup token' | python3 -c 'import json, sys; print(json.loads(sys.stdin.readline())["SetupToken"])' 2>/dev/null)"
 setup_lines="$("${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null | grep -c 'Setup token')"
 check "the setup token is logged once at start (found with: docker compose logs app | grep \"Setup token\")" bash -c "[[ '${setup_lines}' == 1 && -n '${setup_token}' ]]"
@@ -349,8 +350,8 @@ o = h[-1] & 15
 print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "$1"; }
 smoke_admin_password="smoke admin $(openssl rand -hex 8)"
 all_secrets+=("${smoke_admin_password}")
-check "setup status is 'required' before setup" bash -c "[[ \"\$(curl_tls ${base}/api/v1/setup 2>/dev/null)\" == *required* ]]" 2>/dev/null \
-  || true
+setup_required() { [[ "$(curl_tls "${base}/api/v1/setup" 2>/dev/null)" == *required* ]]; }
+check "setup status is 'required' before setup" setup_required
 setup_ok=false
 if [[ "$(api POST /api/v1/setup/token "{\"token\":\"${setup_token}\"}" | tail -n 1)" == 200 \
       && "$(api POST /api/v1/enrolment/account "{\"userName\":\"smoke.admin\",\"displayName\":\"Smoke Admin\",\"password\":\"${smoke_admin_password}\"}" | tail -n 1)" == 200 ]]; then
@@ -367,10 +368,12 @@ check "the administrator is signed in afterwards (GET /api/v1/users 200)" bash -
 check "a state-changing request without the anti-forgery header is refused (400)" \
   bash -c "[[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert '${work}/app-cert.pem' -b '${jar}' -X POST -H 'Content-Type: application/json' --data '{}' ${base}/api/v1/auth/sign-out)\" == 400 ]]"
 cp "${jar}" "${work}/copied-cookies.txt"
-check "sign-out answers 204" bash -c "[[ \"\$(api POST /api/v1/auth/sign-out | tail -n 1)\" == 204 ]]"
+sign_out_204() { [[ "$(api POST /api/v1/auth/sign-out | tail -n 1)" == 204 ]]; }
+check "sign-out answers 204" sign_out_204
 check "a session cookie copied before sign-out no longer works (server-side session ended)" \
   bash -c "[[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert '${work}/app-cert.pem' -b '${work}/copied-cookies.txt' ${base}/api/v1/users)\" == 401 ]]"
-check "setup is complete and refuses the token again (409)" bash -c "[[ \"\$(api POST /api/v1/setup/token '{\"token\":\"${setup_token}\"}' | tail -n 1)\" == 409 ]]"
+setup_refused_409() { [[ "$(api POST /api/v1/setup/token "{\"token\":\"${setup_token}\"}" | tail -n 1)" == 409 ]]; }
+check "setup is complete and refuses the token again (409)" setup_refused_409
 keyring_mode="$(docker run --rm --network none --user 1654:1654 -v "${project}_goldmark-keys:/k:ro" --entrypoint bash "${sql_image}" \
   -c 'stat -c "%a %u" /k; for f in /k/*.xml; do stat -c "%a %u" "$f"; done | sort -u' 2>&1 | tr '\n' ' ' | sed 's/ $//')"
 check "the key ring is 700 with 600 key files, owned by the app user (got: ${keyring_mode})" [ "${keyring_mode}" == "700 1654 600 1654" ]

@@ -375,7 +375,13 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 - **The cookie handler renews the request's session key on `SignInAsync`** when the request already
   has a live session (`ITicketStore.RenewAsync`, not `StoreAsync`), so the key would never rotate at
   sign-in. Endpoints that sign in carry `StartsNewSession`; `SessionTicketStore` then ends the
-  presented session and the handler stores a new key (DEC-040).
+  presented session and the handler stores a new key (DEC-040). It ends it for any request to those
+  two routes, even one that then fails: a signed-in test client that posts to
+  `/api/v1/enrolment/complete` is signed out (same-origin only, SameSite=Strict), and its anti-forgery
+  token is refused once, so retry with a fresh one.
+- **Smoke-script checks run in the script's shell only when passed as a function name**
+  (`check "…" my_function`): a `bash -c "…"` string cannot see the script's functions (`api`,
+  `curl_tls`, `totp`), so the check fails with "command not found".
 - **The fallback authorization policy also applies to requests with no endpoint**: without
   `DenyUnclassifiedEndpoints` a missing asset or a wrong method would be 401 instead of 404/405, and
   without an explicit `UseRouting()` after `UseStaticFiles()` the static files would sit behind it.
