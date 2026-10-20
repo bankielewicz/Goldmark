@@ -1148,7 +1148,17 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      and keeps only its hash in memory. It works once and is useless after setup completes or the
      process restarts. It is the only secret Goldmark ever logs; tests assert it is logged exactly
      once and that `TestSecrets` still never appear.
-- **Scope change (4B):** HANDOFF §1 moves Dapper and the NFR-SEC-3 gate from slice 5 to slice 3.
+  8. **Admins can reset a user's two-factor (owner, A).** For a user who lost both the authenticator and
+     the recovery codes: a confirmed, audited action on screen 17 clears their TOTP secret and recovery
+     codes and issues a new one-time link (as for invitations) to set up again.
+  9. **Self-service two-factor page (owner, A; small scope addition).** From the account menu, a signed-in
+     user can generate new recovery codes or move to a new authenticator, each confirmed with their
+     password and a current code. Audited.
+  10. **Collector is never given to a person (owner, A).** Screen 17 offers Admin, Editor, Viewer and
+     Auditor; the API refuses Collector on user accounts. Collector belongs to service identities with
+     API tokens (slices 8 and 13).
+- **Scope change (4B, 9):** HANDOFF §1 moves Dapper and the NFR-SEC-3 gate from slice 5 to slice 3, and
+  adds the self-service two-factor page to slice 3.
 
 ## DEC-039 Design system approved
 
