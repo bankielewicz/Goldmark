@@ -1120,10 +1120,17 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      failed, account locked, TOTP or recovery-code failure, recovery code used, sign-out,
      invitation created, redeemed or revoked, roles changed, account locked, unlocked, disabled or
      enabled. Slice 4 adds the audit screen, filters, CSV export and the retention path.
-  2. **New users get an invitation link (2A).** An admin creates the user; Goldmark shows a one-time
-     link once. Its token is random (at least 128 bits), stored only as a SHA-256 hash, single use,
-     and expires after 72 hours (a setting). Redeeming it sets the user's own password, enrols TOTP
-     and issues recovery codes; the admin never knows the password. Goldmark sends no email.
+  2. **New users get an invitation link plus a separate code (2A; hardened after a side agent noted
+     that a link alone works like a password).** An admin creates the user; Goldmark shows, once, a
+     link and a short code. The admin sends the link (chat, email) and tells the person the code
+     another way (phone, in person). The link's token is random (at least 128 bits), carried in the
+     URL fragment so it never reaches a server log or a referrer, stored only as a SHA-256 hash,
+     single use, and expires after **24 hours** (a setting). The page asks for the code first; 5 wrong
+     codes invalidate the link (audited). Only then does the person set their own password, enrol
+     TOTP and get recovery codes; the admin never knows the password. **Invitations offer Editor,
+     Viewer or Auditor only**: Admin is added on screen 17 after the person has signed in (audited),
+     so a leaked invitation can never yield an Admin account. Unused links can be revoked. Goldmark
+     sends no email.
   3. **QR code: `Net.Codecrete.QrCodeGenerator` 3.2.1 (3A, revised).** MIT, no dependencies, published
      2026-09-07, a .NET port of Project Nayuki's QR generator. QRCoder was the first choice but failed
      the owner's condition: on .NET 6 and later it depends on `System.Drawing.Common` 6.0.0. The server
@@ -1150,7 +1157,9 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      once and that `TestSecrets` still never appear.
   8. **Admins can reset a user's two-factor (owner, A).** For a user who lost both the authenticator and
      the recovery codes: a confirmed, audited action on screen 17 clears their TOTP secret and recovery
-     codes and issues a new one-time link (as for invitations) to set up again.
+     codes, signs them out everywhere, and issues a link and code exactly like an invitation's (same
+     24-hour expiry, 5-try limit, revocable) to set up again; their password is kept. Nobody can reset
+     their own two-factor this way.
   9. **Self-service two-factor page (owner, A; small scope addition).** From the account menu, a signed-in
      user can generate new recovery codes or move to a new authenticator, each confirmed with their
      password and a current code. Audited.
