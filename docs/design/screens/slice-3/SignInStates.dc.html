@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark sign-in states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1360px; height: 2620px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Sign-in · states</h1>
+    <p style="margin: 0; color: #424242">Focus moves to the MessageBar on an error or warning. A disabled or unknown account gets the same message as a wrong password. Card: Fluent Card appearance="outline"; Field, Input, Button, MessageBar, Spinner, Link.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{states}}" as="s" hint-placeholder-count="12">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{s.label}}</figcaption>
+        <dc-import name="SignInCard" dark="{{s.dark}}" step="{{s.step}}" state="{{s.state}}" oidc="{{s.oidc}}" hint-size="400px,560px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":2620}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const s = (label, state, step, dark, oidc) => ({ label, state, step: step || 'credentials', dark: !!dark, oidc: !!oidc });
+    return {
+      states: [
+        s('Loading · button busy, fields read-only', 'loading'),
+        s('Wrong username or password (also disabled / unknown account)', 'badCredentials'),
+        s('Locked after 5 failures (duration from settings)', 'locked'),
+        s('Wrong 6-digit code', 'badCode', 'code'),
+        s('Recovery code instead of the authenticator', 'none', 'recovery'),
+        s('Wrong or used recovery code', 'badRecovery', 'recovery'),
+        s('Session expired (30 min idle or 12 h)', 'expired'),
+        s('Setup not done yet', 'setup'),
+        s('Network or server error · Retry + Reference ID', 'network'),
+        s('Signed out', 'signedOut'),
+        s('Dark · locked', 'locked', 'credentials', true),
+        s('Dark · wrong recovery code', 'badRecovery', 'recovery', true)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

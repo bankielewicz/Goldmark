@@ -1190,6 +1190,101 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Mockups:** where `docs/design/screens/` differs (colours, dark primary buttons, focus ring),
   this system wins; each screen is redrawn in its slice's handoff.
 
+## DEC-040 Slice 3: sign-in on Identity's plug-in points, screens approved, password list
+
+- **Decision (owner, 2026-10-20, asked after "approved" for the backend; options and examples in the
+  session).**
+  1. **Identity, with its gaps patched at its plug-in points (A).** ASP.NET Core Identity's own source
+     (release/10.0) showed three gaps against ASVS L2: its authenticator provider accepts two time steps
+     either side and the same code again; `SignInManager.SignOutAsync` only clears cookies; a wrong
+     recovery code is not counted toward lockout. Goldmark keeps Identity's user manager, password
+     hasher, lockout counter and security stamps on its own Dapper tables, replaces the authenticator
+     token provider, keeps sessions on the server through the cookie handler's session store, and
+     writes the two sign-in steps itself (`SignInManager` is not used).
+  2. **The slice-3 screens canvas is approved as is (A):** version 29 of
+     https://claude.ai/artifact/Fmq9Gc7pAKZ1XMHc2zVy8k, copied to `docs/design/screens/slice-3/` after
+     checking every file against the published canvas. The UI must match it.
+  3. **Revoking an unused invitation removes the account it created (A):** the user name is free again;
+     the audit log keeps the invitation and its revocation.
+  4. **After a two-factor reset, the right password points to the link (A):** "Two-factor was reset for
+     this account. Open the link your administrator gave you." A wrong password still gets the generic
+     answer.
+  5. **The common-password list is Pwdb-Public's top 1M, 12 to 128 characters (A)** (DEC-038 item 6):
+     ignis-sec/Pwdb-Public at commit `9b53917431ed5cd57cd6cbec8c3a19cf9a5cd8dd`,
+     `wordlists/ignis-1M.txt` (SHA-256 `e9a88f67…a18c9fc8`), MIT, © 2020 Ata Hakçıl; 29,946 entries after
+     lower-casing and dropping lines that are not valid UTF-8 (ASVS 5.0 6.2.4 asks for at least the
+     3,000 most common passwords the policy allows; the 3,000th such entry is at rank 190,708). The list
+     was compiled from leaked passwords; the licence covers the compilation. Rebuilt reproducibly by
+     `tools/common-passwords/build-common-passwords.mjs`; the licence ships beside the app
+     (`common-passwords.LICENSE.txt`). Alternatives offered: the top 10M (702k entries), xato's list
+     (licence conflicted), NCSC's top 100k (1,212 entries, too few).
+- **How the backend implements DEC-038 and the above** (reading PRD §8.1 "ASP.NET Core Identity"):
+  - **NFR-SEC-3 gate without a new package.** Every Dapper call goes through `Data/DbSession.cs`, whose
+    SQL arguments are `[ConstantExpected]`; the SDK's CA1857 is an error under warnings-as-errors, so
+    interpolated, concatenated or variable SQL fails to build (constants, including constant
+    interpolation, pass). `SqlGateTests` keep Dapper out of every other file and CA1857 unsuppressed;
+    `tests/sql-gate/check-sql-gate.sh` (CI, .NET job) builds a fixture against the real `DbSession` and
+    expects CA1857 on exactly its five marked violations.
+  - **Passwords and lockout:** Identity's hasher (PBKDF2-HMAC-SHA512, 128-bit salt, 100,000 iterations:
+    its v3 defaults, read from its source); 12 to 128 characters, no composition rules, the bundled
+    list. Lockout through `UserManager.AccessFailedAsync` (5 failures, 15 minutes, settings), counting
+    wrong passwords, codes and recovery codes. Unknown, disabled and not-yet-set-up accounts fail
+    exactly like a wrong password, including the lockout: their failures are counted in memory, keyed
+    by a hash of the normalized name (what someone typed may be a password, so it is never stored or
+    logged), with a dummy hash computed so the time taken matches. An automatic lockout does not end
+    existing sessions (anyone can cause one); an administrator's lock does.
+  - **Codes:** `TotpTokenProvider` (Identity's `AuthenticatorTokenProvider` slot): RFC 6238, HMAC-SHA1
+    (what authenticator apps require; CA5350 is suppressed on that one method with this reason), the
+    current step or one either side, and a step is never accepted twice (`LastTotpTimeStep`, reset to
+    the verified step when a new key is installed). Recovery codes: Identity's generator
+    (`XXXXX-XXXXX`, no look-alike characters), ten, stored as PBKDF2 hashes, each works once.
+  - **Sessions:** `SessionTicketStore` (the cookie handler's `ITicketStore`) over `cmdb.UserSession`:
+    the cookie holds a 256-bit key, the row its SHA-256 hash and the ticket encrypted with Data
+    Protection; 30 minutes idle and 12 hours at most, enforced on the server. Each request re-checks
+    the person (exists, enabled, not locked by an administrator, two-factor set up, same security stamp)
+    and reads roles fresh. Each sign-in gets a new session key and ends the one the browser presented
+    (ASVS 5.0 V7.2.4; it also defeats session fixation): the cookie handler would otherwise renew the
+    presented key, so the two endpoints that sign in (`StartsNewSession`) never continue it. A new
+    authenticator keeps the current session and ends the others (V7.4.3).
+  - **First-run setup:** a 160-bit token, logged once per start at Warning (event 3001, "Setup token")
+    while setup is not complete, held only as a hash; the steps are carried in the encrypted enrolment
+    cookie and nothing is written until the authenticator is proven, then one transaction creates the
+    administrator, the role, the recovery codes and the `cmdb.Installation` row. The runtime login
+    cannot change or delete that row (`DENY`, checked by `migrate`), so setup can never run again; a
+    second browser finishing at the same time gets 409.
+  - **Links (invitation, two-factor reset):** a 256-bit token in the URL fragment, stored as SHA-256; a
+    6-character code from the same 26-character alphabet, stored as SHA-256 of token and code, so it
+    cannot be tried without the token; 5 wrong codes revoke the link; 24 hours; one open link per
+    person.
+  - **Deny by default:** the fallback policy's requirement (`DenyUnclassifiedEndpoints`) refuses every
+    application endpoint without a policy and lets a request that matched none through to its 404 (or
+    routing's 405). The pipeline calls `UseRouting`, `UseRateLimiter`, `UseAuthentication` and
+    `UseAuthorization` explicitly, after the security headers and static files.
+  - **Anti-forgery:** ASP.NET Core antiforgery on every state-changing `/api/v1` request (header
+    `X-Goldmark-Antiforgery`), tokens bound to the session's principal or to no one. Because signing in
+    ends the presented session, a token issued for it is refused once there; the SPA refetches the
+    token and retries once.
+  - **Rate limit:** 30 requests per minute per client address on the endpoints that take a credential
+    (`Goldmark:Auth:RequestsPerMinute`). The address is the TCP peer: forwarded headers are not
+    trusted, so behind a reverse proxy every client shares the proxy's budget (raise the setting
+    there; trusting a proxy's headers is a later, explicit setting).
+  - **Data Protection keys** (DEC-038 item 5): `PrivateKeyRingRepository` at `Goldmark:DataProtection:
+    KeyDirectory` (`/var/lib/goldmark/keys`, the `goldmark-keys` volume only the app mounts), directory
+    0700, files 0600, written atomically. Keys are not encrypted at rest, by DEC-038 5A, so Data
+    Protection logs "No XML encryptor configured" at Warning when it creates a key (every 90 days); that
+    warning is expected.
+  - **Audit actions:** `setup.completed`, `setup.token-rejected`, `auth.sign-in.succeeded`,
+    `auth.sign-in.failed` (with the reason), `auth.account.locked-out`, `auth.recovery-code.used`,
+    `auth.signed-out`, `user.invitation.created`/`reissued`/`revoked`/`redeemed`, `user.link.code-failed`,
+    `user.link.invalidated`, `user.roles.changed` (before and after), `user.locked`/`unlocked`/
+    `disabled`/`enabled`, `user.two-factor.reset`/`reset-completed`, `account.confirmation.failed`,
+    `account.recovery-codes.regenerated`, `account.authenticator.changed`. Each is written in the same
+    transaction as the change; none holds a secret.
+  - **API answers** are Problem Details with a stable `code` the SPA maps to the boards' messages.
+- **Dependencies:** Dapper 2.1.89 (published 2026-09-23, no dependencies on net10.0) and
+  Net.Codecrete.QrCodeGenerator 3.2.1, both in DEC-038. The integration tests now also reference
+  `Microsoft.AspNetCore.Mvc.Testing`, already pinned for the in-process tests. No other package.
+
 ---
 
 ## Slice 1 acceptance mapping

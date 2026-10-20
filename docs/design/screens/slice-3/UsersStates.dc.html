@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark users and roles states and dialogs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1800px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Users &amp; roles · states and dialogs</h1>
+    <p style="margin: 0; color: #424242">Regions only, without the app shell. Every action here is audited. Fluent: Skeleton, MessageBar, Dialog modalType="alert", Toast, Field, Menu with disabled MenuItems + Tooltip.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Loading · Skeleton rows, region busy</figcaption>
+      <div aria-busy="true" aria-label="Loading users" style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+        <span style="height: 14px; width: 40%; border-radius: 2px; background: var(--bg4)"></span>
+        <sc-for list="{{skeleton}}" as="k" hint-placeholder-count="6"><div style="display: grid; grid-template-columns: 24px 2fr 1fr 1fr; gap: 10px; align-items: center"><span style="width: 24px; height: 24px; border-radius: 50%; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div></sc-for>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Empty · only you exist</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: center">
+        <p style="margin: 0">You're the only user. Add someone to give them access.</p>
+        <button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Add user</button>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Error · Retry + Reference ID</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px">
+        <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span><b>Couldn't load users.</b> The server didn't answer in time.</span><span style="font-size: 12px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">4bf92f35</span></span></div><button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button></div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">403 · a non-admin opens the page</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+        <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">You don't have access to this page</h2>
+        <p style="margin: 0">Your role, Editor, can't open Users &amp; roles. An administrator can change your role.</p>
+        <a href="#" style="color: var(--blink)">Go to the dashboard</a>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Dark · 412 · someone else changed the roles</figcaption>
+      <div style="{{D}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="alertdialog" aria-label="Roles changed while you were editing" style="background: var(--bg1); color: var(--fg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Sam Rivera's roles changed while you were editing</h3>
+          <p style="margin: 0">Ingrid Berg saved a change at 14:02 UTC. Your change isn't saved yet.</p>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Discard mine</button><button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Review their changes</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Success toasts (bottom-end, polite)</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end; gap: 8px">
+        <sc-for list="{{toasts}}" as="t" hint-placeholder-count="3"><div role="status" style="width: 320px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); padding: 12px; display: flex; gap: 10px; align-items: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><b style="flex: 1">{{t}}</b></div></sc-for>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Add user · username already taken</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 2px">
+        <label for="taken-u" style="font-weight: 600">Username</label>
+        <input id="taken-u" aria-invalid="true" aria-describedby="taken-e" value="sam" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom: 2px solid var(--rdfg); border-radius: 4px; color: var(--fg1); font-family: Consolas, 'Courier New', monospace; font-size: 14px">
+        <span id="taken-e" style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>That username is already taken.</span>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Last-admin guard (stale view)</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div style="font-size: 16px; line-height: 22px; font-weight: 600">Roles for Dana Kowalski</div>
+        <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span>Dana Kowalski is now the only Admin, so Admin can't be removed. Give someone else Admin first.</span></div>
+        <label style="display: flex; gap: 8px; align-items: center; color: var(--fg3)"><input type="checkbox" checked disabled style="width: 16px; height: 16px">Admin</label>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Your own row · actions disabled with a reason</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; position: relative">
+        <div role="menu" aria-label="Actions for Dana Kowalski" style="width: 220px; padding: 4px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Edit roles…</a>
+          <span role="menuitem" aria-disabled="true" tabindex="0" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fgdis); background: var(--sub)">Lock…</span>
+          <span role="menuitem" aria-disabled="true" tabindex="-1" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fgdis)">Disable…</span>
+          <span role="menuitem" aria-disabled="true" tabindex="-1" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fgdis)">Reset two-factor…</span>
+        </div>
+        <div role="tooltip" style="position: absolute; left: 248px; top: 54px; width: 160px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">You can't lock your own account.</div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Lock · confirmation</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="alertdialog" aria-label="Lock Ingrid Berg?" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Lock Ingrid Berg?</h3>
+          <p style="margin: 0">Ingrid is signed out and can't sign in until you unlock the account. Unlock is on the same menu.</p>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Lock account</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Dark · Disable · destructive confirmation</figcaption>
+      <div style="{{D}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="alertdialog" aria-label="Disable Sam Rivera?" style="background: var(--bg1); color: var(--fg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Disable Sam Rivera?</h3>
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span>Sam can no longer sign in and is signed out now. Their history is kept; you can enable the account again.</span></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Disable account</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: #616161">Pending invitation · menu and revoke</figcaption>
+      <div style="{{L}} height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div role="menu" aria-label="Actions for Riley Chen" style="width: 220px; padding: 4px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Copy new link…</a>
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none; background: var(--sub)">Revoke invitation…</a>
+        </div>
+        <div role="alertdialog" aria-label="Revoke the invitation for Riley Chen?" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 16px; display: flex; flex-direction: column; gap: 8px">
+          <b>Revoke the invitation for Riley Chen?</b>
+          <span>The link and code stop working at once.</span>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Revoke</button></div>
+        </div>
+        <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">"Copy new link" issues a new link and code (shown once, as on the invitation board); the old ones stop working.</span>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '--bg1:#ffffff;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--brand:#8a5a00;--blink:#7d5200;--rdfg:#bc2f32;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--mboki:#0e700e;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);color:#242424;';
+    const D = '--bg1:#292929;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--brand:#7d5200;--blink:#c28a2a;--rdfg:#e37d80;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--mboki:#54b054;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);color:#ffffff;';
+    return {
+      L, D,
+      skeleton: [1, 2, 3, 4, 5, 6],
+      toasts: ['Sam Rivera now has Editor and Auditor', 'Invitation revoked', 'Account unlocked']
+    };
+  }
+}
+</script>
+</body>
+</html>

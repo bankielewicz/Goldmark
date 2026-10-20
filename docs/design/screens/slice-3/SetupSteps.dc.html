@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark first-run setup steps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 1800px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">First-run setup · steps</h1>
+    <p style="margin: 0; color: #424242">Each step change moves focus to the step heading and is announced. Fluent: Card appearance="outline", a list styled as the progress indicator (not colour-only: ✓ and the current step in bold), Field, Input, Button, MessageBar, Checkbox.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" dark="{{c.dark}}" flow="setup" step="{{c.step}}" state="none" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cards: [
+        { label: 'Step 2 · Admin account (no email field)', step: '2', dark: false },
+        { label: 'Step 3 · Two-factor: QR served by Goldmark + key as text', step: '3', dark: false },
+        { label: 'Step 4 · Recovery codes, shown once; Finish waits for the checkbox', step: '4', dark: false },
+        { label: 'Done', step: 'done', dark: false },
+        { label: 'Setup already complete (the URL afterwards)', step: 'complete', dark: false },
+        { label: 'Dark · step 3', step: '3', dark: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

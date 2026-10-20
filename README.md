@@ -178,6 +178,8 @@ db/migrations/            forward-only schema migrations (DbUp) and their hash m
 tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
 tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
 tests/smoke/              Compose smoke test (real containers + browser)
+tests/sql-gate/           proves non-constant SQL to DbSession fails the build (NFR-SEC-3)
+tools/common-passwords/   rebuilds the bundled common-password list from its pinned source
 web/                      React + TypeScript + Vite SPA, browser-only; dependency policy
 deploy/                   docker-compose.yml (bundled SQL Server), docker-compose.external-sql.yml,
                           .env.example, SQL Server scripts
