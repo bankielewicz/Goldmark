@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: side panel and dialogs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1500px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern</div>
+      <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Side panel and dialogs</h1>
+      <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242">Focus moves into the panel or dialog and returns to the control that opened it. Dialogs trap focus; Esc closes everything except a typed confirmation in progress.</p>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap; font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 16px">
+      <span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">InlineDrawer</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">OverlayDrawer</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Dialog modalType="alert"</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">useRestoreFocusTarget</span>
+    </div>
+  </div>
+
+  <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+    <section aria-label="{{t.name}}" style="{{t.vars}} background: var(--bg3); color: var(--fg1); border-radius: 8px; padding: 20px 24px; display: grid; grid-template-columns: 560px minmax(0, 1fr); gap: 24px; font-size: 14px; line-height: 20px">
+      <div style="grid-column: span 2; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Side panel · InlineDrawer position="end" at 1440 px; OverlayDrawer with a scrim below 1100 px</div>
+        <div style="height: 500px; display: flex; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: hidden">
+          <div aria-hidden="true" style="flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+            <span style="height: 12px; width: 60%; border-radius: 2px; background: var(--bg4)"></span>
+            <span style="height: 32px; border-radius: 4px; background: var(--bbg2)"></span>
+            <span style="height: 32px; border-radius: 4px; background: var(--bg4)"></span>
+            <span style="height: 32px; border-radius: 4px; background: var(--bg4)"></span>
+            <span style="height: 32px; border-radius: 4px; background: var(--bg4)"></span>
+          </div>
+          <aside aria-labelledby="drawer-title-{{t.key}}" style="width: 320px; flex: none; border-left: 1px solid var(--st2); display: flex; flex-direction: column; background: var(--bg1)">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px">
+              <h2 id="drawer-title-{{t.key}}" style="margin: 0; flex: 1; font-size: 20px; line-height: 28px; font-weight: 600">esx-blade-07</h2>
+              <button type="button" aria-label="Close details" style="width: 32px; height: 32px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 18px; outline: 2px solid var(--fo); outline-offset: -2px">✕</button>
+            </div>
+            <dl style="margin: 0; padding: 0 16px; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px 12px; flex: 1">
+              <dt style="color: var(--fg3)">Type</dt><dd style="margin: 0">HypervisorHost</dd>
+              <dt style="color: var(--fg3)">Lifecycle</dt><dd style="margin: 0">Active</dd>
+              <dt style="color: var(--fg3)">Cluster</dt><dd style="margin: 0"><a href="#" style="color: var(--blink)">cl-prod-a</a></dd>
+              <dt style="color: var(--fg3)">Model</dt><dd style="margin: 0">Dell MX740c</dd>
+              <dt style="color: var(--fg3)">Source</dt><dd style="margin: 0">vCenter vc01</dd>
+              <dt style="color: var(--fg3)">Last seen</dt><dd style="margin: 0">12 min ago</dd>
+            </dl>
+            <div style="display: flex; gap: 8px; padding: 16px; border-top: 1px solid var(--st2)">
+              <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Open CI</button>
+              <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Edit</button>
+            </div>
+          </aside>
+        </div>
+        <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Close button shown with keyboard focus (where focus lands on open). Sample data (fictional).</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-content: start">
+        <div role="alertdialog" aria-label="Retire 2 CIs?" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Confirmation</div>
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Retire 2 CIs?</h3>
+          <p style="margin: 0">esx-blade-07 and sql-prod-01 will be hidden by default and treated as absent by impact analysis. Their history is kept.</p>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Retire</button></div>
+        </div>
+
+        <div role="alertdialog" aria-label="Revoke token collector-vc01?" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Destructive confirmation</div>
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Revoke token "collector-vc01"?</h3>
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4Z"></path><path d="M8 6v3.5M8 11.3v.2"></path></svg><span>The vCenter collector stops sending data until it gets a new token. This cannot be undone.</span></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Revoke token</button></div>
+        </div>
+
+        <div role="alertdialog" aria-label="Merge CIs" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Typed confirmation (high impact)</div>
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Merge srv-app-07 into srv-app-07.corp.example?</h3>
+          <p style="margin: 0">Relationships and identifiers move to the surviving CI; the old ID redirects.</p>
+          <div style="display: flex; flex-direction: column; gap: 2px"><label for="typed-{{t.key}}" style="font-weight: 600">Type <span style="font-family: Consolas, 'Courier New', monospace">srv-app-07</span> to confirm</label><input id="typed-{{t.key}}" value="srv-app-0" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font-family: Consolas, 'Courier New', monospace"></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button><button type="button" disabled aria-disabled="true" style="height: 32px; padding: 0 16px; border: 1px solid var(--st2); border-radius: 4px; background: var(--bg2); color: var(--fgdis); font: inherit; font-weight: 600">Merge</button></div>
+        </div>
+
+        <div role="alertdialog" aria-label="This CI changed while you were editing" style="background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Concurrency conflict (HTTP 412)</div>
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">This CI changed while you were editing</h3>
+          <p style="margin: 0">Sam Rivera saved a change to Owner at 14:02 UTC. Your edits are not saved yet.</p>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Discard mine</button><button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Review their changes</button></div>
+        </div>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--blink:#7d5200;--bbg2:#fcefd8;--fo:#000000;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--blink:#c28a2a;--bbg2:#2c1d00;--fo:#ffffff;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);';
+    return {
+      themes: [
+        { key: 'light', name: 'Light', vars: LIGHT },
+        { key: 'dark', name: 'Dark', vars: DARK }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

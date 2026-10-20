@@ -50,6 +50,8 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-035 | Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER | Database |
 | DEC-036 | Windows service distribution placed as slice 4b | Process |
 | DEC-037 | Fluent UI under the CSP: a per-response style nonce | Security |
+| DEC-038 | Slice 3: authentication decisions (audit, invitations, QR, Dapper, keys, defaults, setup token) | Security |
+| DEC-039 | Design system approved | Front end |
 
 ---
 
@@ -1109,6 +1111,65 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   queries (not adopted), web fonts other than Fluent's icon font, the Reporting API, and keyboard
   behaviour outside Chrome. The product app does not render Fluent yet; screens use
   `createStyleRenderer()` once the design handoff is approved.
+
+## DEC-038 Slice 3: authentication decisions
+
+- **Decision (owner, 2026-10-20, asked one at a time; options and examples in the session).**
+  1. **Audit records now (1A).** Every slice-3 mutation and sign-in event writes a row to
+     `cmdb.AuditLog` and is tested for it (HANDOFF rule 7): setup completed, sign-in succeeded or
+     failed, account locked, TOTP or recovery-code failure, recovery code used, sign-out,
+     invitation created, redeemed or revoked, roles changed, account locked, unlocked, disabled or
+     enabled. Slice 4 adds the audit screen, filters, CSV export and the retention path.
+  2. **New users get an invitation link (2A).** An admin creates the user; Goldmark shows a one-time
+     link once. Its token is random (at least 128 bits), stored only as a SHA-256 hash, single use,
+     and expires after 72 hours (a setting). Redeeming it sets the user's own password, enrols TOTP
+     and issues recovery codes; the admin never knows the password. Goldmark sends no email.
+  3. **QR code: `Net.Codecrete.QrCodeGenerator` 3.2.1 (3A, revised).** MIT, no dependencies, published
+     2026-09-07, a .NET port of Project Nayuki's QR generator. QRCoder was the first choice but failed
+     the owner's condition: on .NET 6 and later it depends on `System.Drawing.Common` 6.0.0. The server
+     renders the QR code as SVG, served only to the user being enrolled, `Cache-Control: no-store`;
+     the CSP forbids `data:` images. New NuGet dependency, approved by the owner.
+  4. **Dapper now, with the NFR-SEC-3 build gate (4B).** Moved from slice 5: the user, role, session
+     and audit queries use Dapper, and a build rule fails on string interpolation or concatenation
+     inside Dapper calls, with a test proving the rule fails. Dapper is in the PRD (A1); its version is
+     the newest that is at least 7 days old.
+  5. **Key ring as files (5A).** ASP.NET Core Data Protection keys (cookies, antiforgery, encrypted
+     TOTP secrets) live in a directory from settings. In Docker that is a volume only the app mounts,
+     with `0700`/`0600` forced like the credential files (DEC-034); no certificate wrapping, because on
+     Linux its key would sit beside them. The Windows service (4b) uses DPAPI. Backups (24) must
+     include it: losing it signs everyone out and invalidates TOTP secrets; recovery codes, stored
+     hashed, still sign users in to enrol again.
+  6. **Defaults (6A), all settings.** Passwords 12–128 characters with no composition rules (NIST SP
+     800-63B), checked against a bundled list of common passwords (ASVS L2; the list's source and
+     licence are recorded when it is added); lockout after 5 failures for 15 minutes (US-03); sessions
+     end after 30 minutes idle and 12 hours at most.
+  7. **The setup token is logged, as the one exception (7A).** While no admin exists, each start
+     generates a new random token (at least 128 bits), logs it once at Warning under its own event ID,
+     and keeps only its hash in memory. It works once and is useless after setup completes or the
+     process restarts. It is the only secret Goldmark ever logs; tests assert it is logged exactly
+     once and that `TestSecrets` still never appear.
+- **Scope change (4B):** HANDOFF §1 moves Dapper and the NFR-SEC-3 gate from slice 5 to slice 3.
+
+## DEC-039 Design system approved
+
+- **Decision (owner, 2026-10-20, "approve as is").** The design-system canvas
+  (https://claude.ai/artifact/7xy5Ar6Ag7yKpAHYnXMdxg; files in `docs/design/system/`) is the base for
+  every screen handoff. It answers the design-system handoff (HANDOFF rule 4).
+- **What it fixes:** Fluent's `createLightTheme` / `createDarkTheme` with one muted-gold brand ramp
+  (`BrandVariants` 10–160, shade 80 `#8a5a00`) and Fluent's own token mapping; Fluent neutrals; status
+  as `Badge appearance="tint"` with icon and word: danger (Down), **severe, dark orange (Degraded:
+  yellow warning reads as the brand)**, success (OK), informative (Not seen); MessageBar with the
+  `colorStatus*` tokens; Fluent's type ramp, spacing, radii and per-component shadows; a Compact
+  density preference (Fluent size `small`); the app shell (NavDrawer inline at 1100 px and wider,
+  icon rail and overlay below; top bar with search, an As-of slot for slice 7, theme toggle, account
+  menu; skip link; Breadcrumb + h1 + Toolbar); the table, form, panel, dialog, feedback, state,
+  secret, badge and sign-in patterns; the accessibility rules.
+- **Measured:** every token value and contrast ratio was read from the installed themes and Fluent's
+  component source (a side agent caught that the first draft used remembered values). Lowest text
+  pair 4.8:1 (dark brand text and links). Slice 3 adds a unit test that recomputes the ratios from
+  the themes and fails below 4.5:1 for text and 3:1 for UI parts.
+- **Mockups:** where `docs/design/screens/` differs (colours, dark primary buttons, focus ring),
+  this system wins; each screen is redrawn in its slice's handoff.
 
 ---
 

@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: shared states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1700px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern · supersedes 00-SharedStates</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Shared states</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242">Every screen uses these. No illustrations; one plain sentence and the next action. Loading keeps the content's shape and marks the region busy.</p>
+  </div>
+
+  <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+    <section aria-label="{{t.name}}" style="{{t.vars}} background: var(--bg3); color: var(--fg1); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 20px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+
+        <div aria-busy="true" aria-label="Loading CI" style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Loading · Skeleton</div>
+          <span style="height: 20px; width: 55%; border-radius: 2px; background: var(--bg4)"></span>
+          <span style="height: 12px; width: 35%; border-radius: 2px; background: var(--bg4)"></span>
+          <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 10px; margin-top: 6px"><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div>
+        </div>
+
+        <div style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Empty</div>
+          <p style="margin: 0">No relationships yet. They come from collectors, or an editor can add one.</p>
+          <button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Add relationship</button>
+        </div>
+
+        <div style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Error · page-level</div>
+          <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span><b>Couldn't load this CI.</b> Goldmark can't reach its database right now.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">7f3a91c2</span></span></div>
+          </div>
+          <div style="display: flex; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button><button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: transparent; color: var(--blink); font: inherit; text-decoration: underline">Copy reference ID</button></div>
+        </div>
+
+        <div style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">403 · permission denied</div>
+          <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">You don't have access to this page</h2>
+          <p style="margin: 0">Your role, Viewer, can't open Users &amp; roles. An administrator can change your role.</p>
+          <a href="#" style="color: var(--blink)">Go to the dashboard</a>
+        </div>
+
+        <div style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Not found · unknown CI ID</div>
+          <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">We can't find that CI</h2>
+          <p style="margin: 0">No CI has the ID <span style="font-family: Consolas, 'Courier New', monospace">0190a7b2-…-9e41</span>.</p>
+          <div style="display: flex; gap: 8px; align-items: center; width: 100%"><label style="flex: 1; display: flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg3)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input aria-label="Search CIs" placeholder="Search CIs" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></label><a href="#" style="color: var(--blink)">Dashboard</a></div>
+        </div>
+
+        <div style="height: 210px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Stale source · where its values appear</div>
+          <dl style="margin: 0; display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 10px 12px; align-items: center">
+            <dt style="color: var(--fg3)">Model</dt><dd style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">Dell MX740c <span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--inbd); background: var(--inbg); color: var(--infg); font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>Stale · vCenter vc02 · 3 days</span></dd>
+            <dt style="color: var(--fg3)">CPU cores</dt><dd style="margin: 0">48</dd>
+          </dl>
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">The badge names the source and how old the value is.</span>
+        </div>
+
+        <div style="height: 150px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Merged CI · after the redirect</div>
+          <div role="status" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 7.2v4M8 4.8v.2"></path></svg>
+            <span>This CI was merged into <a href="#" style="color: var(--blink)">srv-app-07.corp.example</a>. You were redirected.</span>
+          </div>
+        </div>
+
+        <div style="height: 150px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Retired CI</div>
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4Z"></path><path d="M8 6v3.5M8 11.3v.2"></path></svg>
+            <span><b>Retired.</b> Hidden from lists and ignored by impact analysis; its history is kept.</span>
+          </div>
+        </div>
+
+        <div style="height: 150px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">As of · slice 7 (screens 4, 5, 6)</div>
+          <div role="status" style="display: flex; gap: 8px; align-items: center; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>
+            <span style="flex: 1">Viewing as of 2026-10-06 14:00 UTC (read-only)</span>
+            <button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Return to now</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </sc-for>
+  <div style="font-size: 12px; line-height: 16px; color: #616161">Sample data (fictional). The 412 conflict dialog and the typed confirmation are on the side panel and dialogs board; the shown-once secret has its own board.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg3:#f5f5f5;--bg4:#f0f0f0;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--blink:#7d5200;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;';
+    const DARK = '--bg1:#292929;--bg3:#141414;--bg4:#0a0a0a;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--blink:#c28a2a;--infg:#adadad;--inbg:#0a0a0a;--inbd:#525252;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;';
+    return {
+      themes: [
+        { name: 'Light', vars: LIGHT },
+        { name: 'Dark', vars: DARK }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

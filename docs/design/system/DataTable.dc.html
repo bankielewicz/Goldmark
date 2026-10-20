@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: data table</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1500px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern</div>
+      <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Data table</h1>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap; font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 16px">
+      <span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Toolbar</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">SearchBox</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Dropdown</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">DataGrid sortable multiselect</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Menu</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Badge tint</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Skeleton</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">MessageBar</span>
+    </div>
+  </div>
+
+  <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+    <section aria-label="{{t.name}}" style="{{t.vars}} background: var(--bg3); color: var(--fg1); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 12px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+
+      <div role="toolbar" aria-label="Filters" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+        <label style="display: flex; align-items: center; gap: 6px; width: 260px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg3); font-size: 14px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input aria-label="Filter by name" placeholder="Filter by name" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></label>
+        <button type="button" aria-haspopup="listbox" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px">Type: All types <span aria-hidden="true">⌄</span></button>
+        <button type="button" aria-haspopup="listbox" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px">Lifecycle: Active <span aria-hidden="true">⌄</span></button>
+        <span style="flex: 1"></span>
+        <button type="button" aria-haspopup="menu" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Columns</button>
+        <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Export CSV</button>
+      </div>
+
+      <div role="toolbar" aria-label="Selected rows" style="display: flex; align-items: center; gap: 4px; height: 40px; padding: 0 8px 0 12px; background: var(--bbg2); border-radius: 4px; font-size: 14px">
+        <span style="font-weight: 600; margin-right: 8px">2 selected</span>
+        <button type="button" style="height: 32px; padding: 0 10px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-size: 14px">Retire…</button>
+        <button type="button" style="height: 32px; padding: 0 10px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-size: 14px">Assign owner…</button>
+        <span style="flex: 1"></span>
+        <button type="button" style="height: 32px; padding: 0 10px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-size: 14px">Clear selection</button>
+      </div>
+
+      <div style="position: relative; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: hidden">
+        <div role="region" aria-label="CIs, scrolls horizontally" tabindex="0" style="overflow-x: auto">
+          <table style="width: 100%; min-width: 1180px; border-collapse: collapse; font-size: 14px; line-height: 20px">
+            <thead>
+              <tr style="text-align: left; background: var(--bg1); box-shadow: inset 0 -1px 0 var(--st1)">
+                <th scope="col" style="width: 44px; height: 44px; padding: 0 0 0 12px"><input type="checkbox" aria-label="Select all rows" style="width: 16px; height: 16px; accent-color: var(--cbrand)"></th>
+                <th scope="col" aria-sort="ascending" style="padding: 0 8px; font-weight: 600">Name <span aria-hidden="true">↑</span></th>
+                <th scope="col" style="padding: 0 8px; font-weight: 600">Type</th>
+                <th scope="col" style="padding: 0 8px; font-weight: 600">Lifecycle</th>
+                <th scope="col" style="padding: 0 8px; font-weight: 600">Impact status</th>
+                <th scope="col" style="padding: 0 8px; font-weight: 600">Source</th>
+                <th scope="col" style="padding: 0 8px; font-weight: 600">Updated</th>
+                <th scope="col" style="width: 44px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+                <tr style="{{r.rowStyle}}">
+                  <td style="height: 44px; padding: 0 0 0 12px; border-bottom: 1px solid var(--st2)"><input type="checkbox" checked="{{r.checked}}" aria-label="Select {{r.name}}" style="width: 16px; height: 16px; accent-color: var(--cbrand)"></td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><a href="#" style="color: var(--fg1); text-decoration: none; font-weight: 600">{{r.name}}</a></td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); color: var(--fg2)">{{r.type}}</td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{r.lifeStyle}}">{{r.life}}</span></td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{r.statusStyle}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{r.statusIcon}}"></path></svg>{{r.status}}</span></td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--st2); background: var(--bg1); color: var(--fg3); font-size: 12px; font-weight: 600">{{r.source}}</span></td>
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); color: var(--fg3); font-size: 12px">{{r.updated}}</td>
+                  <td style="padding: 0 6px; border-bottom: 1px solid var(--st2)"><button type="button" aria-label="Actions for {{r.name}}" aria-haspopup="menu" aria-expanded="{{r.menuOpen}}" style="{{r.menuButtonStyle}}">⋯</button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <div role="menu" aria-label="Actions for esx-blade-07" style="position: absolute; right: 44px; top: 214px; width: 180px; padding: 4px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; flex-direction: column; font-size: 14px">
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none; background: var(--sub)">Open</a>
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Edit</a>
+          <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Retire…</a>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: var(--fg3)">
+        <span aria-live="polite">Showing 50 of 5,312 CIs</span>
+        <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Load more</button>
+        <span style="flex: 1"></span>
+        <span>Header stays put while the body scrolls · the region scrolls sideways, never the page · Sample data (fictional)</span>
+      </div>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px">
+        <div aria-busy="true" aria-label="Loading CIs" style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Loading · Skeleton rows</div>
+          <div style="display: grid; grid-template-columns: 16px 2fr 1fr 1fr; gap: 10px; align-items: center"><span style="height: 16px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div>
+          <div style="display: grid; grid-template-columns: 16px 2fr 1fr 1fr; gap: 10px; align-items: center"><span style="height: 16px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div>
+          <div style="display: grid; grid-template-columns: 16px 2fr 1fr 1fr; gap: 10px; align-items: center"><span style="height: 16px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div>
+        </div>
+        <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Empty · one sentence + the next action</div>
+          <p style="margin: 0; font-size: 14px; line-height: 20px">No CIs match these filters.</p>
+          <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Clear filters</button>
+        </div>
+        <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Error · MessageBar intent="error"</div>
+          <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px; font-size: 14px; line-height: 20px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 6px"><span><b>Couldn't load CIs.</b> The server didn't answer in time.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">4bf92f35</span> <button type="button" style="height: 24px; padding: 0 6px; border: none; border-radius: 4px; background: transparent; color: var(--blink); font: inherit; font-size: 12px; text-decoration: underline">Copy</button></span></div>
+            <button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--cbrand:#8a5a00;--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--blink:#7d5200;--bbg2:#fcefd8;--fo:#000000;--rdfg:#bc2f32;--rdbg:#fdf6f6;--rdbd:#f1bbbc;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);';
+    const DARK = '--cbrand:#c28a2a;--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--blink:#c28a2a;--bbg2:#2c1d00;--fo:#ffffff;--rdfg:#e37d80;--rdbg:#3f1011;--rdbd:#d13438;--orfg:#e9835e;--orbg:#411200;--orbd:#da3b01;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--infg:#adadad;--inbg:#0a0a0a;--inbd:#525252;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);';
+    const badge = (k) => 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; font-weight: 600';
+    const icon = { down: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5', degraded: 'M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2', ok: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4', unknown: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 4.5V8l2.5 1.5' };
+    const status = { Down: ['rd', icon.down], Degraded: ['or', icon.degraded], Healthy: ['gn', icon.ok], 'Not seen': ['in', icon.unknown] };
+    const life = { Planned: 'in', Active: 'gn', Retiring: 'or', Retired: 'in' }; // Retired is muted by the informative tint, never by opacity
+    const data = [
+      ['app-sql-ag01-lsn', 'ClusterNetworkName', 'Active', 'Degraded', 'SQL collector', '4 min ago', false, false],
+      ['esx-blade-07', 'HypervisorHost', 'Active', 'Down', 'vCenter vc01', '12 min ago', true, true],
+      ['sql-prod-01', 'SqlInstance', 'Active', 'Healthy', 'SQL collector', '4 min ago', true, false],
+      ['srv-print-03', 'Server', 'Retiring', 'Not seen', 'AD corp.example', '3 days ago', false, false],
+      ['vc01', 'HypervisorManager', 'Active', 'Healthy', 'vCenter vc01', '1 h ago', false, false],
+      ['vm-hr-legacy', 'VirtualMachine', 'Planned', 'Healthy', 'CSV hr-assets', '2 days ago', false, false]
+    ];
+    const rows = data.map(([name, type, l, s, source, updated, checked, menuOpen]) => ({
+      name, type, life: l, status: s, source, updated, checked,
+      menuOpen: menuOpen ? 'true' : 'false',
+      lifeStyle: badge(life[l]),
+      statusStyle: badge(status[s][0]),
+      statusIcon: status[s][1],
+      rowStyle: checked ? 'background: var(--bbg2)' : '',
+      menuButtonStyle: 'width: 32px; height: 32px; border: none; border-radius: 4px; color: var(--fg2); font-size: 18px; line-height: 1; ' + (menuOpen ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : 'background: transparent')
+    }));
+    return {
+      themes: [
+        { name: 'Light · createLightTheme(goldmarkBrand) · comfortable density', vars: LIGHT },
+        { name: 'Dark · createDarkTheme(goldmarkBrand) · comfortable density', vars: DARK }
+      ],
+      rows
+    };
+  }
+}
+</script>
+</body>
+</html>
