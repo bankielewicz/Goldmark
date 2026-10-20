@@ -126,8 +126,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 Slice **3** (`slice/03-auth`) is in progress. The Fluent UI v9 verification failed under
 `style-src 'self'`; the owner chose a per-response style nonce (DEC-037, options 1B and 2A),
 which is built and tested, and passes with a real server in Chrome 155.0.8059.84, Edge
-155.0.4283.62 and Firefox 158 (DEC-037). **The Fluent gate is recorded as passed once Firefox's
-exact version is in DEC-037** (the user agent shows only 158.0). Then the design-system handoff
+155.0.4283.62 and Firefox 158.0.1 (DEC-037): **the Fluent gate is passed.** Then the design-system handoff
 (rule 4) and the slice's screen handoff (rule 3) before any UI code. Screens create Fluent's
 renderer with `createStyleRenderer()` (`web/src/styleNonce.ts`) inside `RendererProvider`.
 
@@ -170,7 +169,7 @@ And for slice 24:
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
 | Availability groups (and #20) | owner: place in the plan (DEC-030, DEC-036) |
-| Fluent UI v9 under the CSP: per-response style nonce, passing in Chrome, Edge and Firefox; Firefox's exact version outstanding (DEC-037) | 3 |
+| Fluent UI v9 under the CSP: per-response style nonce, qualified in Chrome, Edge and Firefox (DEC-037) | 3 (done) |
 | #5 renew the generated TLS certificate without a restart | 24 |
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |

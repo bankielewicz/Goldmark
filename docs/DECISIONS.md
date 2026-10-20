@@ -1096,14 +1096,13 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Qualification with the real server sending the sampler page (2A), 2026-10-20.** The API's Release
   build (Production environment) with the sampler build as its web root, on the owner's WSL machine;
   Edge and Firefox opened it from Windows by hand after the owner checked the certificate's SHA-256
-  fingerprint (`4C:6C:AA:7F:…:FD:DC:D8:F2`). All three pass. The gate is recorded as passed once
-  Firefox's exact version (Help → About Firefox) replaces the user-agent value below:
+  fingerprint (`4C:6C:AA:7F:…:FD:DC:D8:F2`). All three pass, so the gate is passed (2026-10-20):
 
   | Browser | Version | Result |
   |---|---|---|
   | Google Chrome (Linux, headless, Playwright) | 155.0.8059.84 | **Pass**: 12/12 self-checks, keyboard and pointer checks, exact violation list, new nonce on reload |
   | Microsoft Edge (Windows, 64-bit) | 155.0.4283.62 | **Pass**: 12/12 self-checks; exactly the five control violations |
-  | Mozilla Firefox (Windows, 64-bit) | 158.0 per its user agent; exact version pending from the owner | **Pass**: 12/12 self-checks; exactly the five control violations, so Trusted Types are enforced too |
+  | Mozilla Firefox (Windows, 64-bit) | 158.0.1 | **Pass**: 12/12 self-checks; exactly the five control violations, so Trusted Types are enforced too |
 
 - **Not covered:** Tabster's focus-outline feature writes a `<style>` with text and no nonce
   (`tabster` `Outline.js`); Fluent does not use it, and it would be blocked, visibly. Container
