@@ -1,28 +1,74 @@
 # Endpoint access policy
 
-Every endpoint must declare its access policy (PRD US-04, M6). Slice 1 has no
-authentication yet, so every endpoint that exists today is **anonymous by
-design**. Each one carries `EndpointAccess("Anonymous", <rationale>)` metadata
-plus `AllowAnonymous`. `EndpointInventoryTests` fails if an endpoint is added
-without a classification here and in the test.
+Every endpoint declares its access policy (PRD US-04, M6), and anything else is denied: the
+fallback authorization policy refuses every application endpoint without a policy, to everyone,
+signed in or not (deny by default, NFR-SEC-2). A request that matches no endpoint gets its 404, and a
+known path with the wrong method its 405. `EndpointInventoryTests` (in-process) and
+`AccountAndAccessTests` (against SQL Server) are the M6 enumeration test; change this file, the
+inventory in `EndpointInventoryTests` and the endpoint together.
 
-| Endpoint | Policy | Why anonymous | What it can reveal |
-|---|---|---|---|
-| `GET, HEAD /health/live` | Anonymous | Container orchestrators, load balancers and the image `HEALTHCHECK` call it without credentials | `Healthy` only; `Cache-Control: no-store` |
-| `GET, HEAD /health/ready` | Anonymous | As above; readiness gates traffic | `Healthy` / `Unhealthy` only. No component names, versions, host names or error text; failure details go to the log (exception text at Debug only) |
-| `GET, HEAD /health/{**path}` (unmatched health paths) | Anonymous | Catch-all `404`, so a mistyped probe path (e.g. `/health/readiness`) never gets the SPA shell with `200` | Nothing: a generic 404 |
-| `* /api/{**path}` (unmatched API routes) | Anonymous | Catch-all that returns a Problem Details `404` so unknown API paths never return the SPA shell | Nothing: a generic 404 |
-| `GET, HEAD {**path:nonfile}` (SPA shell) | Anonymous | The browser must load the sign-in screen before the user is authenticated | Static HTML with no data |
-| Static files (`/assets/*`, `/favicon.svg`) | Anonymous (static file middleware, not an endpoint) | Same as the SPA shell | Compiled front-end code; no data or secrets |
+An endpoint is either **anonymous by design** (`AllowAnonymousByDesign(rationale)`) or requires one
+policy (`RequireAccess(policy)`, which sets the authorization policy and this metadata in one call):
 
-## Plan for slice 3 (authentication and roles)
+| Policy | Who passes |
+|---|---|
+| `SignedIn` | A signed-in session (password and second factor), any role |
+| `Admin` | A signed-in session with the Admin role |
+| `TwoFactorPending` | A password verified within the last 5 minutes, second factor not yet given (sign-in step 2 only) |
+| `Enrolment` | An enrolment in progress, for 30 minutes: first-run setup after the setup token, an invitation or two-factor reset after its code, or a new authenticator after the password and a code |
 
-- A deny-by-default fallback authorization policy is added: an endpoint with
-  no policy rejects the request.
-- The inventory test becomes the M6 enumeration test: every endpoint must have
-  either an authorization policy or `AllowAnonymousByDesign` with a rationale,
-  and every non-anonymous endpoint is exercised for `401`/`403`.
-- The anonymous endpoints above stay anonymous. The readiness endpoint gains a
-  schema-version compatibility check in slice 2 but still returns only status text.
-- If a richer health report is ever needed (component status, versions), it
-  goes on a separate endpoint that requires the `Admin` role.
+The three cookies are `__Host-` (Secure, Path=/, no Domain), HttpOnly and SameSite=Strict, encrypted
+by ASP.NET Core Data Protection. A session lives on the server (`cmdb.UserSession`): sign-out, an
+administrator's lock or disable, and a two-factor reset end it there, and it ends after 30 minutes
+idle or 12 hours (DEC-038, DEC-040). Every POST, PUT, PATCH and DELETE under `/api/v1` needs the
+anti-forgery token in `X-Goldmark-Antiforgery` (from `GET /api/v1/auth/antiforgery`); API responses
+are `Cache-Control: no-store`. Requests that take a credential are rate limited per client address
+(`Goldmark:Auth:RequestsPerMinute`, 30 by default; HTTP 429).
+
+The M6 tests check that every non-anonymous endpoint answers 401 without credentials and 401 to a
+password-only sign-in, every Admin endpoint 403 to a signed-in Viewer, and every state-changing
+endpoint 400 without the anti-forgery token.
+
+## Anonymous by design
+
+| Endpoint | Why anonymous | What it can reveal |
+|---|---|---|
+| `GET, HEAD /health/live` | Container orchestrators, load balancers and the image `HEALTHCHECK` call it without credentials | `Healthy` only; `Cache-Control: no-store` |
+| `GET, HEAD /health/ready` | As above; readiness gates traffic | `Healthy` / `Unhealthy` only. No component names, versions, host names or error text; failure details go to the log (exception text at Debug only) |
+| `GET, HEAD /health/{**path}` (unmatched health paths) | Catch-all `404`, so a mistyped probe path never gets the SPA shell with `200` | Nothing: a generic 404 |
+| `* /api/{**path}` (unmatched API routes) | Catch-all Problem Details `404`, so unknown API paths never return the SPA shell | Nothing: a generic 404 |
+| `GET, HEAD {**path:nonfile}` (SPA shell) | The browser must load the sign-in screen before the user is authenticated | Static HTML with no data, plus a fresh style nonce per response (DEC-037); `no-store` |
+| Static files (`/assets/*`, `/favicon.svg`) | Same as the SPA shell (static file middleware, not an endpoint) | Compiled front-end code; no data or secrets. HTML is never a static file (DEC-037) |
+| `GET /api/v1/auth/antiforgery` | The SPA needs an anti-forgery token before it can sign in | A token bound to the caller's own session, or to no one |
+| `GET /api/v1/auth/session` | The SPA must know whether to show sign-in or setup | The caller's own state: setup status and, when signed in, their own id, user name, display name and roles |
+| `POST /api/v1/auth/sign-in` | Sign-in step 1: the password is the credential | Only "incorrect", "locked" or "next: two-factor". Unknown, disabled and not-yet-set-up accounts answer exactly like a wrong password, including the lockout; a person locked by an administrator, or whose two-factor was reset, learns it only with the right password |
+| `GET /api/v1/setup` | The SPA must know whether first-run setup is needed | `required`, `complete` or `unknown` |
+| `POST /api/v1/setup/token` | First-run setup step 1: the setup token from the log is the credential | Whether the token is this process's; nothing once setup is complete (409) |
+| `POST /api/v1/links/check` | An invitation or reset link's token is the credential | Whether the link is valid, expired or no longer valid (used and revoked look the same), its purpose and the tries left |
+| `POST /api/v1/links/redeem` | The token plus its separate code are the credential; 5 wrong codes revoke the link | With the right code: the person's user name, display name and roles |
+
+## Requiring a policy
+
+| Endpoint | Policy | Notes |
+|---|---|---|
+| `POST /api/v1/auth/sign-in/two-factor` | TwoFactorPending | A code works once; a wrong code or recovery code counts toward lockout. Starts a new session, ending the one the browser presented |
+| `POST /api/v1/auth/sign-out` | SignedIn | Ends the session on the server |
+| `GET /api/v1/enrolment` | Enrolment | The enrolment's next step and whose it is |
+| `POST /api/v1/enrolment/account` | Enrolment | Setup only: the first administrator's user name, display name and password |
+| `POST /api/v1/enrolment/password` | Enrolment | Invitation: a new password; reset: the current one (failures count toward lockout) |
+| `POST /api/v1/enrolment/authenticator` | Enrolment | A new authenticator key, kept in the enrolment until a code proves it |
+| `GET /api/v1/enrolment/authenticator.svg` | Enrolment | The QR code, SVG, `no-store`, only to the person enrolling |
+| `POST /api/v1/enrolment/complete` | Enrolment | Verifies a code and commits the setup, invitation or reset in one transaction; returns 10 recovery codes once and signs in (a new session) |
+| `GET /api/v1/account/two-factor` | SignedIn | Own status: set up since, recovery codes remaining |
+| `POST /api/v1/account/two-factor/recovery-codes` | SignedIn | Needs the password and a current code; returns 10 new codes once |
+| `POST /api/v1/account/two-factor/authenticator` | SignedIn | Needs the password and a current code or a recovery code; starts the new-authenticator enrolment |
+| `POST /api/v1/account/two-factor/authenticator/verify` | SignedIn | Installs the new authenticator; other sessions end, this one continues |
+| `GET /api/v1/users`, `GET /api/v1/users/{id}`, `GET /api/v1/users/export` | Admin | Screen 17's list, one person (with ETag), CSV export (formula cells neutralized) |
+| `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once |
+| `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |
+| `POST /api/v1/users/{id}/lock`, `/unlock`, `/disable`, `/enable` | Admin | Not on yourself; the last enabled Admin cannot be disabled; lock and disable end the person's sessions |
+| `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself; clears the authenticator and recovery codes, ends sessions, issues a link and code |
+| `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working); revoke, which removes the unused account |
+
+If a richer health report is ever needed (component status, versions), it goes on a separate
+endpoint that requires the Admin role.

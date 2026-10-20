@@ -84,6 +84,8 @@ jobs:
         run: dotnet restore Goldmark.slnx --locked-mode
       - run: dotnet format Goldmark.slnx --verify-no-changes --no-restore
       - run: dotnet build Goldmark.slnx -c Release --no-restore
+      - name: NFR-SEC-3 gate self-test (non-constant SQL to DbSession fails the build)
+        run: tests/sql-gate/check-sql-gate.sh Release
       # In-process tests only; the SQL Server integration tests run in db-integration.
       - run: dotnet test --project tests/Goldmark.Api.Tests -c Release --no-build
 

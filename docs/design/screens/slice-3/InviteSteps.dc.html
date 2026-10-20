@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark invitation and reset steps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 1800px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Accept invitation / set up two-factor again · steps</h1>
+    <p style="margin: 0; color: #424242">One flow, two variants. Invitation: confirm code → choose password → two-factor → recovery codes. Reset: confirm code → your current password (kept) → two-factor → recovery codes. The link's token stays in the URL fragment, so it never reaches a server log.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" dark="{{c.dark}}" flow="{{c.flow}}" step="{{c.step}}" state="none" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cards: [
+        { label: 'Invitation · step 2 · choose a password (username read-only)', flow: 'invite', step: '2', dark: false },
+        { label: 'Invitation · step 3 · two-factor', flow: 'invite', step: '3', dark: false },
+        { label: 'Invitation · step 4 · recovery codes', flow: 'invite', step: '4', dark: false },
+        { label: 'Invitation · done (signs them in)', flow: 'invite', step: 'done', dark: false },
+        { label: 'Reset · step 1 · confirm code', flow: 'reset', step: '1', dark: false },
+        { label: 'Dark · reset · step 2 · current password', flow: 'reset', step: '2', dark: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build fixture for tests/sql-gate/check-sql-gate.sh (NFR-SEC-3, DEC-040). Not part of
+    Goldmark.slnx: with IncludeViolations=true it must fail to build, with CA1857 on exactly the
+    calls marked in Violations.cs.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\Goldmark.Api\Goldmark.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IncludeViolations)' != 'true'">
+    <Compile Remove="Violations.cs" />
+  </ItemGroup>
+
+</Project>

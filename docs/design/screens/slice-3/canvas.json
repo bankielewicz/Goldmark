@@ -1,0 +1,293 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-20T16:30:00Z"
+  },
+  "title": "Goldmark Slice 3 Screens",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "1 \u00b7 Sign-in \u00b7 light \u00b7 credentials (OIDC P1 shown)"
+    },
+    "SignInDark.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "1 \u00b7 Sign-in \u00b7 dark \u00b7 two-factor code"
+    },
+    "SignInPhone.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "1 \u00b7 Sign-in \u00b7 phone"
+    },
+    "SignInCard.dc.html": {
+      "x": 3510,
+      "y": 0,
+      "w": 400,
+      "h": 560,
+      "title": "Component \u00b7 sign-in card"
+    },
+    "SignInStates.dc.html": {
+      "x": 3990,
+      "y": 0,
+      "w": 1360,
+      "h": 2620,
+      "title": "1 \u00b7 Sign-in \u00b7 states"
+    },
+    "Setup.dc.html": {
+      "x": 0,
+      "y": 3020,
+      "w": 1440,
+      "h": 1000,
+      "title": "2 \u00b7 First-run setup \u00b7 light \u00b7 step 1"
+    },
+    "SetupSteps.dc.html": {
+      "x": 1520,
+      "y": 3020,
+      "w": 1840,
+      "h": 1800,
+      "title": "2 \u00b7 First-run setup \u00b7 steps"
+    },
+    "SetupStates.dc.html": {
+      "x": 3440,
+      "y": 3020,
+      "w": 1840,
+      "h": 1800,
+      "title": "2 \u00b7 First-run setup \u00b7 states"
+    },
+    "WizardCard.dc.html": {
+      "x": 5360,
+      "y": 3020,
+      "w": 560,
+      "h": 780,
+      "title": "Component \u00b7 wizard card"
+    },
+    "Invite.dc.html": {
+      "x": 0,
+      "y": 5220,
+      "w": 1440,
+      "h": 1000,
+      "title": "1b \u00b7 Accept invitation \u00b7 dark \u00b7 step 1"
+    },
+    "InviteSteps.dc.html": {
+      "x": 1520,
+      "y": 5220,
+      "w": 1840,
+      "h": 1800,
+      "title": "1b \u00b7 Invitation and reset \u00b7 steps"
+    },
+    "InviteStates.dc.html": {
+      "x": 3440,
+      "y": 5220,
+      "w": 1840,
+      "h": 1800,
+      "title": "1b \u00b7 Invitation and reset \u00b7 states"
+    },
+    "InvitePhone.dc.html": {
+      "x": 5360,
+      "y": 5220,
+      "w": 390,
+      "h": 1100,
+      "title": "1b \u00b7 Invitation \u00b7 phone \u00b7 step 3"
+    },
+    "Users.dc.html": {
+      "x": 0,
+      "y": 7420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 \u00b7 Users & roles \u00b7 light \u00b7 row menu"
+    },
+    "UsersDark.dc.html": {
+      "x": 1520,
+      "y": 7420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 \u00b7 Users & roles \u00b7 dark \u00b7 edit roles"
+    },
+    "UsersAdd.dc.html": {
+      "x": 3040,
+      "y": 7420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 \u00b7 Add user \u00b7 light"
+    },
+    "UsersInvite.dc.html": {
+      "x": 4560,
+      "y": 7420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 \u00b7 Invitation created (shown once) \u00b7 dark"
+    },
+    "Users1024.dc.html": {
+      "x": 6080,
+      "y": 7420,
+      "w": 1024,
+      "h": 768,
+      "title": "17 \u00b7 1024 \u00b7 add user as overlay drawer"
+    },
+    "UsersReset.dc.html": {
+      "x": 7184,
+      "y": 7420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 \u00b7 Reset two-factor \u00b7 confirmation"
+    },
+    "UsersStates.dc.html": {
+      "x": 0,
+      "y": 8720,
+      "w": 1440,
+      "h": 1800,
+      "title": "17 \u00b7 Users & roles \u00b7 states and dialogs"
+    },
+    "UsersPage.dc.html": {
+      "x": 1520,
+      "y": 8720,
+      "w": 1440,
+      "h": 900,
+      "title": "Component \u00b7 users page"
+    },
+    "TwoFactor.dc.html": {
+      "x": 0,
+      "y": 10920,
+      "w": 1440,
+      "h": 900,
+      "title": "Two-factor page \u00b7 light \u00b7 account menu open"
+    },
+    "TwoFactorDark.dc.html": {
+      "x": 1520,
+      "y": 10920,
+      "w": 1440,
+      "h": 900,
+      "title": "Two-factor page \u00b7 dark \u00b7 confirm new codes"
+    },
+    "TwoFactor1024.dc.html": {
+      "x": 3040,
+      "y": 10920,
+      "w": 1024,
+      "h": 768,
+      "title": "Two-factor page \u00b7 1024"
+    },
+    "TwoFactorFlows.dc.html": {
+      "x": 4144,
+      "y": 10920,
+      "w": 1600,
+      "h": 1400,
+      "title": "Two-factor page \u00b7 flows and states"
+    },
+    "TwoFactorPage.dc.html": {
+      "x": 5824,
+      "y": 10920,
+      "w": 1440,
+      "h": 900,
+      "title": "Component \u00b7 two-factor page"
+    },
+    "Notes.dc.html": {
+      "x": 0,
+      "y": 12720,
+      "w": 1440,
+      "h": 1200,
+      "title": "Components per screen \u00b7 design-system changes"
+    },
+    "UsersPanel.dc.html": {
+      "x": 3040,
+      "y": 8720,
+      "w": 400,
+      "h": 852,
+      "title": "Component \u00b7 users side panel"
+    },
+    "TwoFactorDialog.dc.html": {
+      "x": 7344,
+      "y": 10920,
+      "w": 480,
+      "h": 600,
+      "title": "Component \u00b7 two-factor dialog"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "SignInDark.dc.html",
+    "SignInPhone.dc.html",
+    "SignInCard.dc.html",
+    "SignInStates.dc.html",
+    "Setup.dc.html",
+    "SetupSteps.dc.html",
+    "SetupStates.dc.html",
+    "WizardCard.dc.html",
+    "Invite.dc.html",
+    "InviteSteps.dc.html",
+    "InviteStates.dc.html",
+    "InvitePhone.dc.html",
+    "Users.dc.html",
+    "UsersDark.dc.html",
+    "UsersAdd.dc.html",
+    "UsersInvite.dc.html",
+    "Users1024.dc.html",
+    "UsersReset.dc.html",
+    "UsersStates.dc.html",
+    "UsersPage.dc.html",
+    "UsersPanel.dc.html",
+    "TwoFactor.dc.html",
+    "TwoFactorDark.dc.html",
+    "TwoFactor1024.dc.html",
+    "TwoFactorFlows.dc.html",
+    "TwoFactorPage.dc.html",
+    "TwoFactorDialog.dc.html",
+    "Notes.dc.html"
+  ],
+  "notes": {
+    "rowSignIn": {
+      "x": 0,
+      "y": -280,
+      "text": "Screen 1 \u00b7 Sign-in",
+      "kind": "title1",
+      "maxW": 5350
+    },
+    "rowSetup": {
+      "x": 0,
+      "y": 2740,
+      "text": "Screen 2 \u00b7 First-run setup",
+      "kind": "title1",
+      "maxW": 5920
+    },
+    "rowInvite": {
+      "x": 0,
+      "y": 4940,
+      "text": "Screen 1b \u00b7 Accept invitation / set up two-factor again",
+      "kind": "title1",
+      "maxW": 5750
+    },
+    "rowUsers": {
+      "x": 0,
+      "y": 7140,
+      "text": "Screen 17 \u00b7 Users & roles",
+      "kind": "title1",
+      "maxW": 8624
+    },
+    "rowTwoFactor": {
+      "x": 0,
+      "y": 10640,
+      "text": "Two-factor authentication (self-service)",
+      "kind": "title1",
+      "maxW": 7824
+    },
+    "rowNotes": {
+      "x": 0,
+      "y": 12440,
+      "text": "Notes",
+      "kind": "title1",
+      "maxW": 1440
+    }
+  },
+  "designSystems": []
+}

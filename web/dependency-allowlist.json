@@ -66,6 +66,10 @@
     "@playwright/test": {
       "justification": "Browser smoke test proving the SPA renders under the production CSP and Trusted Types (PRD §8.1 lists Playwright). Uses a system Chrome/Chromium; browsers are never downloaded by an install script.",
       "approvedBy": "PRD §8.1; slice 1"
+    },
+    "@axe-core/playwright": {
+      "justification": "Automated axe accessibility checks in the Playwright end-to-end suite (NFR-A11Y-3; PRD §8.1 \"Playwright + axe\"). Test-only: runs in the smoke test, never reaches the bundle or the image. Brings axe-core (MPL-2.0).",
+      "approvedBy": "owner, 2026-10-20 (slice 3, DEC-040)"
     }
   },
   "allowBuilds": {}

@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark tokens: type, spacing, shape, elevation, density</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1560px; box-sizing: border-box; padding: 48px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 28px">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Foundations</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Type, spacing, shape, elevation, density</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242; max-width: 980px">Fluent's type ramp, spacing, radius and shadow tokens only. Font: Fluent's fontFamilyBase (Segoe UI and the system stack); no web fonts. Nothing below 12 px.</p>
+  </div>
+
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Type ramp in use</h2>
+      <div style="display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 12px 16px; align-items: baseline">
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Page title (h1)<br><span style="font-family: Consolas, 'Courier New', monospace">title3 · 24/32 · 600</span></div>
+        <div style="font-size: 24px; line-height: 32px; font-weight: 600">Users &amp; roles</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Section heading (h2)<br><span style="font-family: Consolas, 'Courier New', monospace">subtitle1 · 20/28 · 600</span></div>
+        <div style="font-size: 20px; line-height: 28px; font-weight: 600">Role assignments</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Panel / card title<br><span style="font-family: Consolas, 'Courier New', monospace">subtitle2 · 16/22 · 600</span></div>
+        <div style="font-size: 16px; line-height: 22px; font-weight: 600">sql-prod-01.corp.example</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Body<br><span style="font-family: Consolas, 'Courier New', monospace">body1 · 14/20 · 400</span></div>
+        <div style="font-size: 14px; line-height: 20px">Editors can create, edit and retire CIs and relationships.</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Table header<br><span style="font-family: Consolas, 'Courier New', monospace">body1Strong · 14/20 · 600</span></div>
+        <div style="font-size: 14px; line-height: 20px; font-weight: 600">Last sign-in</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Table cell<br><span style="font-family: Consolas, 'Courier New', monospace">body1 · 14/20 · 400</span></div>
+        <div style="font-size: 14px; line-height: 20px">2026-10-19 08:41 UTC</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Caption / meta<br><span style="font-family: Consolas, 'Courier New', monospace">caption1 · 12/16 · Foreground3</span></div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Updated 4 minutes ago by vCenter vc01</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Monospace (IDs, secrets)<br><span style="font-family: Consolas, 'Courier New', monospace">fontFamilyMonospace · 14/20</span></div>
+        <div style="font-family: Consolas, 'Courier New', Courier, monospace; font-size: 14px; line-height: 20px">0190a7b2-0000-7000-8000-00000000c1d4</div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Shown-once secret<br><span style="font-family: Consolas, 'Courier New', monospace">monospace · 16/22 · 600</span></div>
+        <div style="font-family: Consolas, 'Courier New', Courier, monospace; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: 0.04em">7KQ2-M9XD</div>
+      </div>
+    </div>
+
+    <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Spacing (4 px grid, Fluent spacing tokens)</h2>
+      <div style="display: grid; grid-template-columns: 200px 120px minmax(0, 1fr); gap: 8px 16px; align-items: center; font-size: 13px; line-height: 18px">
+        <div style="font-family: Consolas, 'Courier New', monospace">XXS 2 · XS 4</div><div style="display: flex; gap: 4px"><span style="width: 2px; height: 12px; background: #8a5a00"></span><span style="width: 4px; height: 12px; background: #8a5a00"></span></div><div>Label → input (Field); toolbar items</div>
+        <div style="font-family: Consolas, 'Courier New', monospace">S 8</div><div><span style="display: block; width: 8px; height: 12px; background: #8a5a00"></span></div><div>Button groups; table cell inline padding; icon → text</div>
+        <div style="font-family: Consolas, 'Courier New', monospace">M 12</div><div><span style="display: block; width: 12px; height: 12px; background: #8a5a00"></span></div><div>Form field gap (compact); panel padding (compact)</div>
+        <div style="font-family: Consolas, 'Courier New', monospace">L 16</div><div><span style="display: block; width: 16px; height: 12px; background: #8a5a00"></span></div><div>Form field gap; card and panel padding; page padding below 768 px</div>
+        <div style="font-family: Consolas, 'Courier New', monospace">XXL 24</div><div><span style="display: block; width: 24px; height: 12px; background: #8a5a00"></span></div><div>Section gap; page padding at 1024 px</div>
+        <div style="font-family: Consolas, 'Courier New', monospace">XXXL 32</div><div><span style="display: block; width: 32px; height: 12px; background: #8a5a00"></span></div><div>Page padding at 1280 px and wider</div>
+      </div>
+      <h2 style="margin: 8px 0 0; font-size: 20px; line-height: 28px; font-weight: 600">Shape</h2>
+      <div style="display: flex; gap: 16px; align-items: flex-end; font-size: 12px; line-height: 16px; color: #424242">
+        <div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 88px; height: 40px; border: 1px solid #616161; border-radius: 4px; background: #ffffff"></div><span>Medium 4 · controls, badges</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 88px; height: 56px; border: 1px solid #e0e0e0; border-radius: 6px; background: #ffffff"></div><span>Large 6 · cards, panels</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 88px; height: 56px; border-radius: 8px; background: #ffffff; box-shadow: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14)"></div><span>XLarge 8 · dialogs</span></div>
+        <div style="display: flex; flex-direction: column; gap: 6px; align-items: center"><div style="width: 40px; height: 40px; border-radius: 50%; background: #fcefd8; color: #7d5200; display: flex; align-items: center; justify-content: center; font-weight: 600">DK</div><span>Circular · avatar</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Elevation (the shadow tokens each Fluent component uses, read from the installed source)</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; padding: 24px; background: #f5f5f5; border-radius: 6px">
+      <div style="height: 110px; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px; box-sizing: border-box; font-size: 13px; line-height: 18px"><b>No shadow</b><br>Tables, panels, Card appearance="outline": Stroke2 border instead</div>
+      <div style="height: 110px; background: #ffffff; border-radius: 4px; padding: 14px; box-sizing: border-box; font-size: 13px; line-height: 18px; box-shadow: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14)"><b>shadow8</b><br>Toast, Tooltip</div>
+      <div style="height: 110px; background: #ffffff; border-radius: 4px; padding: 14px; box-sizing: border-box; font-size: 13px; line-height: 18px; box-shadow: 0 0 2px rgba(0,0,0,.12), 0 8px 16px rgba(0,0,0,.14)"><b>shadow16</b><br>Menu, Popover, Combobox and Dropdown lists</div>
+      <div style="height: 110px; background: #ffffff; border-radius: 8px; padding: 14px; box-sizing: border-box; font-size: 13px; line-height: 18px; box-shadow: 0 0 8px rgba(0,0,0,.12), 0 32px 64px rgba(0,0,0,.14)"><b>shadow64</b><br>Dialog, OverlayDrawer (over a scrim)</div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Density · a user preference (profile menu); default Comfortable</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 14px; line-height: 20px; font-weight: 600">Comfortable · Fluent size "medium"</div>
+        <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; font-size: 14px; line-height: 20px">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 44px; align-items: center; padding: 0 8px; font-weight: 600; border-bottom: 1px solid #d1d1d1"><span>Name</span><span>Type</span><span>Lifecycle</span></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 44px; align-items: center; padding: 0 8px; border-bottom: 1px solid #f0f0f0"><span>sql-prod-01</span><span>SqlInstance</span><span>Active</span></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 44px; align-items: center; padding: 0 8px"><span>esx-blade-07</span><span>HypervisorHost</span><span>Active</span></div>
+        </div>
+        <div style="display: flex; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; border-radius: 4px; border: none; background: #8a5a00; color: #ffffff; font: inherit; font-size: 14px; font-weight: 600">Save</button><input aria-label="Comfortable input" value="32 px controls" style="height: 32px; box-sizing: border-box; padding: 0 10px; border: 1px solid #d1d1d1; border-bottom-color: #616161; border-radius: 4px; font: inherit; font-size: 14px; width: 220px"></div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Rows 44 px · controls 32 px · field gap 16 · panel padding 16</div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 14px; line-height: 20px; font-weight: 600">Compact · Fluent size "small"</div>
+        <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden; font-size: 14px; line-height: 20px">
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 34px; align-items: center; padding: 0 8px; font-weight: 600; border-bottom: 1px solid #d1d1d1"><span>Name</span><span>Type</span><span>Lifecycle</span></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 34px; align-items: center; padding: 0 8px; border-bottom: 1px solid #f0f0f0"><span>sql-prod-01</span><span>SqlInstance</span><span>Active</span></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 34px; align-items: center; padding: 0 8px; border-bottom: 1px solid #f0f0f0"><span>esx-blade-07</span><span>HypervisorHost</span><span>Active</span></div>
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; height: 34px; align-items: center; padding: 0 8px"><span>vc01</span><span>HypervisorManager</span><span>Active</span></div>
+        </div>
+        <div style="display: flex; gap: 8px"><button type="button" style="height: 24px; padding: 0 8px; border-radius: 4px; border: none; background: #8a5a00; color: #ffffff; font: inherit; font-size: 12px; font-weight: 600">Save</button><input aria-label="Compact input" value="24 px controls" style="height: 24px; box-sizing: border-box; padding: 0 8px; border: 1px solid #d1d1d1; border-bottom-color: #616161; border-radius: 4px; font: inherit; font-size: 12px; width: 220px"></div>
+        <div style="font-size: 12px; line-height: 16px; color: #616161">Rows 34 px · controls 24 px (still ≥ 24 × 24 targets) · field gap 12 · panel padding 12. Text stays 14 px in tables; the nav and top bar do not change.</div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

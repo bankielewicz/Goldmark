@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: unauthenticated layout</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Unauthenticated layout (screens 1 and 2)</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242">No app shell. A centred card on the app ground, the product mark and instance name above it, the version below. Sign-in card 400 px, setup wizard 560 px; full width under 480 px. The content of each step comes in the slice-3 screen handoff.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; flex: 1; min-height: 0">
+    <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+      <section aria-label="{{t.name}}" style="{{t.vars}} position: relative; background: var(--bg3); color: var(--fg1); border-radius: 8px; padding: 32px 24px 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; font-size: 14px; line-height: 20px">
+        <div style="position: absolute; top: 12px; left: 16px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-top: 24px">
+          <span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 6px; background: var(--brand); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700">G</span>
+          <div style="display: flex; flex-direction: column"><span style="font-size: 16px; line-height: 22px; font-weight: 600">Goldmark</span><span style="font-size: 12px; line-height: 16px; color: var(--fg3)">SAMPLE Contoso Infrastructure</span></div>
+        </div>
+        <main style="width: {{t.cardWidth}}px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+          <sc-if value="{{t.wizard}}" hint-placeholder-val="{{false}}">
+            <ol aria-label="Setup progress" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-size: 12px; line-height: 16px">
+              <li style="display: flex; flex-direction: column; gap: 4px; color: var(--fg2)"><span style="height: 4px; border-radius: 2px; background: var(--bfg1)"></span>✓ Step 1</li>
+              <li aria-current="step" style="display: flex; flex-direction: column; gap: 4px; font-weight: 600"><span style="height: 4px; border-radius: 2px; background: var(--bfg1)"></span>Step 2 (current)</li>
+              <li style="display: flex; flex-direction: column; gap: 4px; color: var(--fg3)"><span style="height: 4px; border-radius: 2px; background: var(--st1)"></span>Step 3</li>
+              <li style="display: flex; flex-direction: column; gap: 4px; color: var(--fg3)"><span style="height: 4px; border-radius: 2px; background: var(--st1)"></span>Step 4</li>
+            </ol>
+          </sc-if>
+          <h1 tabindex="-1" style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">{{t.heading}}</h1>
+          <p style="margin: 0; color: var(--fg2)">One short sentence explaining this step.</p>
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <label for="field-{{t.key}}" style="font-weight: 600">Field label</label>
+            <input id="field-{{t.key}}" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">
+          </div>
+          <button type="button" style="height: 32px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Primary action</button>
+        </main>
+        <div style="flex: 1"></div>
+        <footer style="font-size: 12px; line-height: 16px; color: var(--fg3)">Goldmark 0.3.0 · Sample data (fictional)</footer>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg3:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;';
+    const DARK = '--bg1:#292929;--bg3:#141414;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;';
+    return {
+      themes: [
+        { key: 'light', name: 'Light · sign-in card, 400 px', vars: LIGHT, cardWidth: 400, wizard: false, heading: 'Sign in' },
+        { key: 'dark', name: 'Dark · setup wizard card, 560 px, with progress', vars: DARK, cardWidth: 560, wizard: true, heading: 'Step heading (receives focus)' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

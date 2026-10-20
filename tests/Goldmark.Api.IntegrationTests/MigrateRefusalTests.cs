@@ -30,6 +30,8 @@ public sealed class MigrateRefusalTests(SqlServerFixture sql)
     // the same GRANT to the user does not (the role's DENY wins), so it changes nothing.
     [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditLog (Action) TO goldmark_runtime;", "permission on cmdb.AuditLog column Action UPDATE")]
     [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditLog (Action) TO {0};", null)]
+    [InlineData("REVOKE DELETE ON OBJECT::cmdb.Installation FROM goldmark_runtime;", "permission on cmdb.Installation DELETE")]
+    [InlineData("GRANT UPDATE ON OBJECT::cmdb.Installation (SetupCompletedBy) TO goldmark_runtime;", "permission on cmdb.Installation column SetupCompletedBy UPDATE")]
     [InlineData("GRANT INSERT ON OBJECT::dbo.SchemaVersions TO {0};", "permission on dbo.SchemaVersions INSERT")]
     [InlineData("ALTER ROLE db_datawriter ADD MEMBER {0};", "database role db_datawriter")]
     [InlineData("GRANT CREATE TABLE TO {0};", "database permission CREATE TABLE")]
@@ -37,6 +39,7 @@ public sealed class MigrateRefusalTests(SqlServerFixture sql)
     [InlineData("REVOKE SELECT ON SCHEMA::cmdb FROM goldmark_runtime;", "missing permission on schema cmdb SELECT")]
     [InlineData("REVOKE UPDATE ON SCHEMA::cmdb FROM goldmark_runtime;", "missing permission on schema cmdb UPDATE")]
     [InlineData("DENY INSERT ON OBJECT::cmdb.AuditLog TO goldmark_runtime;", "missing permission on cmdb.AuditLog INSERT")]
+    [InlineData("DENY INSERT ON OBJECT::cmdb.Installation TO goldmark_runtime;", "missing permission on cmdb.Installation INSERT")]
     [InlineData("REVOKE SELECT ON OBJECT::dbo.SchemaVersions FROM goldmark_runtime;", "missing permission on dbo.SchemaVersions SELECT")]
     public async Task Migrate_refuses_a_runtime_login_whose_effective_rights_differ_from_its_role(string change, string? finding)
     {

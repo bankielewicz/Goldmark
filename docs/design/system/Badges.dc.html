@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: badge vocabulary</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1100px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Badge vocabulary</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242">All are Fluent <span style="font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" size="medium"</span>; the colour prop is named per row. Status badges carry an icon; every badge carries its word. Ratios are text on badge background, measured from the installed themes.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+      <section aria-label="{{t.name}}" style="{{t.vars}} background: var(--bg1); color: var(--fg1); border: 1px solid var(--st2); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; font-size: 14px; line-height: 20px">
+        <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="6">
+          <div style="display: flex; flex-direction: column; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--st2)">
+            <div style="font-weight: 600">{{g.label}}</div>
+            <div style="display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center">
+              <sc-for list="{{g.badges}}" as="b" hint-placeholder-count="4">
+                <span style="display: inline-flex; flex-direction: column; gap: 4px; align-items: flex-start">
+                  <span style="{{b.style}}"><sc-if value="{{b.hasIcon}}" hint-placeholder-val="{{true}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{b.icon}}"></path></svg></sc-if>{{b.text}}</span>
+                  <span style="font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 16px; color: var(--fg3)">{{b.prop}}</span>
+                </span>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </section>
+    </sc-for>
+  </div>
+
+  <table style="border-collapse: collapse; font-size: 13px; line-height: 18px; background: #ffffff; border: 1px solid #e0e0e0">
+    <thead><tr style="text-align: left; background: #f5f5f5"><th scope="col" style="padding: 8px 12px; border-bottom: 1px solid #d1d1d1">color prop</th><th scope="col" style="padding: 8px 12px; border-bottom: 1px solid #d1d1d1">Tokens</th><th scope="col" style="padding: 8px 12px; border-bottom: 1px solid #d1d1d1">Light</th><th scope="col" style="padding: 8px 12px; border-bottom: 1px solid #d1d1d1">Dark</th></tr></thead>
+    <tbody>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">danger</td><td style="padding: 6px 12px">colorPaletteRed Foreground1 / Background1 / Border1</td><td style="padding: 6px 12px">#bc2f32 on #fdf6f6 · 5.5:1</td><td style="padding: 6px 12px">#e37d80 on #3f1011 · 5.8:1</td></tr>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">severe</td><td style="padding: 6px 12px">colorPaletteDarkOrange Foreground1 / Background1 / Border1</td><td style="padding: 6px 12px">#c43501 on #fdf6f3 · 5.1:1</td><td style="padding: 6px 12px">#e9835e on #411200 · 6.0:1</td></tr>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">success</td><td style="padding: 6px 12px">colorPaletteGreen Foreground1 / Background1 / Border1</td><td style="padding: 6px 12px">#0e700e on #f1faf1 · 5.9:1</td><td style="padding: 6px 12px">#54b054 on #052505 · 6.1:1</td></tr>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">informative</td><td style="padding: 6px 12px">colorNeutralForeground3 / Background4 / Stroke2</td><td style="padding: 6px 12px">#616161 on #f0f0f0 · 5.4:1</td><td style="padding: 6px 12px">#adadad on #0a0a0a · 8.8:1</td></tr>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">subtle</td><td style="padding: 6px 12px">colorNeutralForeground3 / Background1 / Stroke2</td><td style="padding: 6px 12px">#616161 on #ffffff · 6.2:1</td><td style="padding: 6px 12px">#adadad on #292929 · 6.5:1</td></tr>
+      <tr><td style="padding: 6px 12px; font-family: Consolas, 'Courier New', monospace">brand</td><td style="padding: 6px 12px">colorBrandForeground2 / BrandBackground2 / BrandStroke2</td><td style="padding: 6px 12px">#7d5200 on #fcefd8 · 6.0:1</td><td style="padding: 6px 12px">#d39c3e on #2c1d00 · 6.7:1</td></tr>
+    </tbody>
+  </table>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--fg1:#242424;--fg3:#616161;--st2:#e0e0e0;--rdfg:#bc2f32;--rdbg:#fdf6f6;--rdbd:#f1bbbc;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--brfg:#7d5200;--brbg:#fcefd8;--brbd:#f3d08f;';
+    const DARK = '--bg1:#292929;--fg1:#ffffff;--fg3:#adadad;--st2:#525252;--rdfg:#e37d80;--rdbg:#3f1011;--rdbd:#d13438;--orfg:#e9835e;--orbg:#411200;--orbd:#da3b01;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--infg:#adadad;--inbg:#0a0a0a;--inbd:#525252;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--brfg:#d39c3e;--brbg:#2c1d00;--brbd:#5f3f00;';
+    const css = (k) => 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; line-height: 16px; font-weight: 600';
+    const I = {
+      down: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5',
+      warn: 'M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2',
+      ok: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4',
+      clock: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 4.5V8l2.5 1.5',
+      question: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM6.2 6.2a1.9 1.9 0 1 1 2.6 1.8c-.6.3-.8.6-.8 1.2M8 11.4v.1',
+      lock: 'M4.5 7.5h7v6h-7zM5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2'
+    };
+    const props = { rd: 'danger', or: 'severe', gn: 'success', in: 'informative', sb: 'subtle', br: 'brand' };
+    const b = (text, k, icon) => ({ text, style: css(k), hasIcon: !!icon, icon: icon ? I[icon] : '', prop: props[k] });
+    const groups = [
+      { label: 'Impact status (always with icon)', badges: [b('Down', 'rd', 'down'), b('Degraded', 'or', 'warn'), b('Healthy', 'gn', 'ok'), b('Not seen', 'in', 'clock'), b('Unknown', 'in', 'question')] },
+      { label: 'Lifecycle', badges: [b('Planned', 'in'), b('Active', 'gn'), b('Retiring', 'or'), b('Retired', 'sb')] },
+      { label: 'Provenance (names the source)', badges: [b('vCenter vc01', 'sb'), b('SQL collector', 'sb'), b('CSV hr-assets', 'sb'), b('Manual', 'sb'), b('Overridden', 'br'), b('Stale · 3 days', 'in', 'clock')] },
+      { label: 'Role', badges: [b('Admin', 'sb'), b('Editor', 'sb'), b('Viewer', 'sb'), b('Auditor', 'sb'), b('Collector', 'sb')] },
+      { label: 'Two-factor authentication', badges: [b('Enrolled', 'gn', 'ok'), b('Not enrolled', 'in')] },
+      { label: 'Account state', badges: [b('Active', 'gn'), b('Locked', 'or', 'lock'), b('Disabled', 'in'), b('Pending first sign-in', 'in')] }
+    ];
+    return {
+      groups,
+      themes: [
+        { name: 'Light', vars: LIGHT },
+        { name: 'Dark', vars: DARK }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

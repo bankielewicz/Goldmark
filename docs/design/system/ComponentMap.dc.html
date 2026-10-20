@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark: element to Fluent v9 map, deviations, mockup changes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 2000px; box-sizing: border-box; padding: 48px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Reference</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Element → Fluent v9 component / token</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242; max-width: 1000px">What each element on the pattern boards is built with. Every style comes from these components or makeStyles with Fluent tokens; the app creates Fluent's renderer with <span style="font-family: Consolas, 'Courier New', monospace">createStyleRenderer()</span> so its style elements carry the page's nonce (DEC-037).</p>
+  </div>
+
+  <table style="border-collapse: collapse; font-size: 14px; line-height: 20px; background: #ffffff; border: 1px solid #e0e0e0">
+    <thead>
+      <tr style="text-align: left; background: #f5f5f5">
+        <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1; width: 200px">Pattern</th>
+        <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1; width: 330px">Element</th>
+        <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Fluent v9 component and props / tokens</th>
+      </tr>
+    </thead>
+    <tbody style="vertical-align: top">
+      <tr><td rowspan="6" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">App shell</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Left navigation, groups, items</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">NavDrawer type="inline" (≥ 1100 px) · NavSectionHeader · NavItem · selected = aria-current="page"</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Icon rail and overlay below 1100 px</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">NavDrawer type="overlay" opened by Hamburger · rail items Tooltip relationship="label"</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Top bar: search, theme, user menu</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">SearchBox · ToggleButton (theme, aria-pressed) · Avatar + Menu (MenuTrigger, MenuList, MenuItem)</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Page header</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Breadcrumb · BreadcrumbItem · BreadcrumbButton (current) · Title3 as h1 · Toolbar</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Skip link</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Link, visually hidden until focused (makeStyles), first in tab order</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">Themes</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">FluentProvider theme = createLightTheme(goldmarkBrand) | createDarkTheme(goldmarkBrand) inside RendererProvider</td></tr>
+
+      <tr><td rowspan="5" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">Data table</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Grid, sorting, selection, sticky header</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">DataGrid sortable selectionMode="multiselect" size="medium"|"small" · DataGridHeader (sticky via makeStyles) · aria-sort on DataGridHeaderCell</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Toolbar: filter, dropdowns, columns, export</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Toolbar · SearchBox · Dropdown · Menu with MenuItemCheckbox (column chooser) · Button</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Row actions, bulk actions</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Menu on a Button appearance="subtle" (aria-label "Actions for …") · Toolbar shown when rows are selected</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Paging</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Button "Load more" (cursor paging; result count announced in a polite live region)</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">Loading, empty, error</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">Skeleton + SkeletonItem (region aria-busy) · Text + Button · MessageBar intent="error" + MessageBarActions</td></tr>
+
+      <tr><td rowspan="4" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">Forms</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Label, required, hint, validation</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Field label required hint validationState validationMessage (linked by aria-describedby automatically)</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Inputs</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Input · Input type="password" + contentAfter Button (show/hide, aria-pressed) · Input inputMode="numeric" autoComplete="one-time-code" maxLength=6 · Textarea · Dropdown · Combobox · Checkbox · Switch</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Submit error, buttons</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">MessageBar intent="error" (receives focus) · forms: Button appearance="primary" then "secondary", under the last field · dialogs: Fluent's DialogActions order, secondary then primary, end-aligned</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">Unsaved changes</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">Dialog (modalType="alert") on navigation away</td></tr>
+
+      <tr><td rowspan="3" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">Side panel, dialogs</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Details / edit panel</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">InlineDrawer position="end" (≥ 1440 where the mockups use it) · OverlayDrawer below · DrawerHeader, DrawerHeaderTitle, DrawerBody, DrawerFooter · useRestoreFocusTarget on the opener</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Confirm, destructive, typed confirmation</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Dialog modalType="alert" · DialogSurface, DialogTitle, DialogContent, DialogActions · typed: Field + Input, confirm Button disabled until it matches</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">412 conflict</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">Dialog modalType="alert" with "Review their changes" (primary) / "Discard mine"</td></tr>
+
+      <tr><td rowspan="3" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">Feedback, states</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Page messages</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">MessageBar intent info | warning | error | success · MessageBarTitle · MessageBarActions · reference ID with a Copy Button</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Completed actions</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Toaster (one per app, position="bottom-end", politeness="polite") · Toast intent="success" · ToastTitle</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">403, not found, merged, retired, as-of</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">Text and Link in the page body (no illustration) · MessageBar for merged / retired / as-of banners</td></tr>
+
+      <tr><td rowspan="2" style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-weight: 600">Secrets, badges</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Shown-once value</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">MessageBar intent="warning" · Text font="monospace" · Button (Copy; Toast "Copied") · Checkbox gating the close Button</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0">Status, lifecycle, provenance, role, MFA, account</td><td style="padding: 8px 12px; border-bottom: 1px solid #e0e0e0; font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" with icon slot (see the badge board for each colour) · PresenceBadge is not used</td></tr>
+
+      <tr><td style="padding: 8px 12px; font-weight: 600">Sign-in layout</td><td style="padding: 8px 12px">Centred card, steps</td><td style="padding: 8px 12px; font-family: Consolas, 'Courier New', monospace">Card appearance="outline" (no shadow) · Field · Button · MessageBar · step heading receives focus on change</td></tr>
+    </tbody>
+  </table>
+
+  <section style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Deviations from Fluent defaults</h2>
+      <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 8px">
+        <li><b>Brand ramp</b> (BrandVariants 10–160, muted gold). The only colour input; Fluent's own mapping from ramp to tokens is unchanged.</li>
+        <li><b>Degraded uses Fluent's "severe" colours</b> (dark orange), not "warning" (yellow): yellow sits too close to the gold brand. See the badge board.</li>
+        <li><b>Density:</b> a Compact preference switches Fluent's size prop to "small" on tables and controls; no custom sizes.</li>
+        <li>No other overrides: no custom greys, radii, shadows, type sizes or focus styles.</li>
+      </ol>
+    </div>
+    <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the mockups (this system wins)</h2>
+      <ol style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 8px">
+        <li><b>Dark primary buttons</b> are deep gold (shade 70) with white text, Fluent's mapping, not light gold (#e6b450) with dark text.</li>
+        <li><b>Dark brand text</b> is shade 100 (#c28a2a, 4.8:1), not #e6b450.</li>
+        <li><b>Status colours</b> are Fluent's palette tokens, not the mockups' --dn / --wn / --ok values; Degraded becomes orange.</li>
+        <li><b>Neutrals</b> are Fluent's; the mockups' greys (e.g. --bd #e0e0e0, --fg2 #5c5c5c) move to the nearest Fluent token.</li>
+        <li><b>Focus</b> is Fluent's black/white two-tone ring everywhere, never a gold ring.</li>
+        <li><b>The As-of control</b> is an empty slot until slice 7 (screens 4, 5, 6).</li>
+        <li><b>Nav</b> hides items for screens not yet built; Settings and Apps &amp; integrations stay tagged P1.</li>
+        <li><b>The TOTP QR code</b> (screen 2) is an image Goldmark serves, not inline data.</li>
+      </ol>
+      <p style="margin: 0; font-size: 12px; line-height: 16px; color: #616161">00-SharedStates and every screen mockup carry the old colour values; they are redrawn in their slice's screen handoff. The States board here supersedes 00-SharedStates.</p>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

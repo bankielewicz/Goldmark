@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Setup and invitation wizard card</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <main aria-labelledby="wz-heading-{{uid}}" style="width: 100%; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+    <sc-if value="{{welcome.show}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; border-bottom: 1px solid var(--st2)">
+        <div style="font-size: 16px; line-height: 22px; font-weight: 600">{{welcome.title}}</div>
+        <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap"><span style="color: var(--fg2)">{{welcome.text}}</span>
+          <sc-for list="{{welcome.roles}}" as="r" hint-placeholder-count="2"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{r}}</span></sc-for>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{showProgress}}" hint-placeholder-val="{{true}}">
+      <ol aria-label="Progress" style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; font-size: 12px; line-height: 16px">
+        <sc-for list="{{progress}}" as="p" hint-placeholder-count="4">
+          <li aria-current="{{p.current}}" style="{{p.style}}"><span style="{{p.bar}}"></span>{{p.label}}</li>
+        </sc-for>
+      </ol>
+    </sc-if>
+
+    <h1 id="wz-heading-{{uid}}" tabindex="-1" style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">{{heading}}</h1>
+
+    <sc-if value="{{msg.show}}" hint-placeholder-val="{{false}}">
+      <div role="{{msg.role}}" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: {{msg.bg}}; border: 1px solid {{msg.bd}}; border-radius: 4px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="{{msg.icon}}" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="{{msg.path}}"></path></svg>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <span>{{msg.text}}</span>
+          <sc-if value="{{msg.signIn}}" hint-placeholder-val="{{false}}"><a href="#" style="color: var(--blink)">Go to sign-in</a></sc-if>
+          <sc-if value="{{msg.reference}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">7f3a91c2</span></span></sc-if>
+        </div>
+        <sc-if value="{{msg.reference}}" hint-placeholder-val="{{false}}"><button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button></sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isSetupToken}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">Find the setup token in the Goldmark log:</p>
+      <div style="display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px"><code style="flex: 1; font-family: Consolas, 'Courier New', monospace; font-size: 13px">docker compose logs app | grep "Setup token"</code><button type="button" aria-label="Copy command" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Copy</button></div>
+      <p style="margin: 0; font-size: 12px; line-height: 16px; color: var(--fg3)">Other installations: the Goldmark service log. A new token is printed each time Goldmark starts, until setup is complete.</p>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-token-{{uid}}" style="font-weight: 600">Setup token</label>
+        <input id="wz-token-{{uid}}" autocomplete="off" spellcheck="false" value="{{tokenValue}}" aria-invalid="{{tokenInvalid}}" style="{{tokenStyle}}">
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isCode}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">Enter the code your administrator gave you.</p>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-code-{{uid}}" style="font-weight: 600">Code</label>
+        <input id="wz-code-{{uid}}" autocomplete="off" spellcheck="false" value="{{shortCodeValue}}" aria-invalid="{{shortCodeInvalid}}" aria-describedby="wz-code-hint-{{uid}}" style="{{shortCodeStyle}}">
+        <sc-if value="{{shortCodeInvalid}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>That code doesn't match. 4 tries left.</span></sc-if>
+        <span id="wz-code-hint-{{uid}}" style="font-size: 12px; line-height: 16px; color: var(--fg3)">The code reaches you separately from this link, by phone or in person. Not case-sensitive.</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isNewPassword}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-user-{{uid}}" style="font-weight: 600">Username</label>
+        <input id="wz-user-{{uid}}" autocomplete="username" readonly="{{usernameReadOnly}}" value="{{usernameValue}}" style="{{usernameStyle}}">
+      </div>
+      <sc-if value="{{isSetupAccount}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="wz-name-{{uid}}" style="font-weight: 600">Display name</label>
+          <input id="wz-name-{{uid}}" value="Dana Kowalski" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">
+        </div>
+      </sc-if>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-pw-{{uid}}" style="font-weight: 600">Password</label>
+        <div style="{{pwBoxStyle}}">
+          <input id="wz-pw-{{uid}}" type="password" autocomplete="new-password" value="sample-password" aria-invalid="{{pwInvalid}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none">
+          <button type="button" aria-label="Show password" aria-pressed="false" style="width: 28px; height: 28px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"></path><circle cx="10" cy="10" r="2.5"></circle></svg></button>
+        </div>
+        <sc-if value="{{pwInvalid}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>This is a commonly used password. Choose another.</span></sc-if>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-pw2-{{uid}}" style="font-weight: 600">Confirm password</label>
+        <input id="wz-pw2-{{uid}}" type="password" autocomplete="new-password" value="sample-passwrd" aria-invalid="{{pwInvalid}}" style="{{confirmStyle}}">
+        <sc-if value="{{pwInvalid}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>The passwords don't match.</span></sc-if>
+      </div>
+      <ul aria-label="Password rules" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 16px">
+        <sc-for list="{{rules}}" as="ru" hint-placeholder-count="3">
+          <li style="{{ru.style}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{ru.icon}}"></path></svg>{{ru.text}}</li>
+        </sc-for>
+      </ul>
+    </sc-if>
+
+    <sc-if value="{{isResetPassword}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">Your password stays the same. Enter it to continue.</p>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-cur-{{uid}}" style="font-weight: 600">Password</label>
+        <input id="wz-cur-{{uid}}" type="password" autocomplete="current-password" value="sample-password" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isTotp}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">Scan this code with your authenticator app, or enter the key by hand.</p>
+      <div style="display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap">
+        <svg role="img" aria-label="QR code for your authenticator app (sample, not a real key)" width="184" height="184" viewBox="-2 -2 29 29" style="flex: none; background: #ffffff; border: 1px solid var(--st2); border-radius: 4px"><path d="{{qrFinders}}" fill="#000000" fill-rule="evenodd"></path><path d="{{qrModules}}" fill="#000000"></path></svg>
+        <div style="flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 8px">
+          <span style="font-weight: 600">Key</span>
+          <div style="display: flex; align-items: center; gap: 8px"><span style="font-family: Consolas, 'Courier New', monospace; font-size: 15px; line-height: 22px; letter-spacing: 0.06em">SAMP LEKE Y4GO LDMA RKXQ 7T2Z</span></div>
+          <button type="button" style="align-self: flex-start; height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Copy key</button>
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Works with Microsoft Authenticator, Google Authenticator, 1Password, Bitwarden or any TOTP app.</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="wz-totp-{{uid}}" style="font-weight: 600">6-digit code from the app</label>
+        <input id="wz-totp-{{uid}}" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="{{totpValue}}" aria-invalid="{{totpInvalid}}" style="{{totpStyle}}">
+        <sc-if value="{{totpInvalid}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>That code didn't work. Codes change every 30 seconds.</span></sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isCodes}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span><b>These codes are shown only once.</b> Each one signs you in once if you lose your authenticator.</span></div>
+      <ul aria-label="Recovery codes" style="margin: 0; padding: 12px 16px; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px; font-family: Consolas, 'Courier New', monospace; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: 0.04em">
+        <sc-for list="{{codes}}" as="c" hint-placeholder-count="10"><li>{{c}}</li></sc-for>
+      </ul>
+      <div style="display: flex; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Copy all</button><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Download .txt</button></div>
+      <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox" style="width: 16px; height: 16px; accent-color: var(--cbrand)">I have stored these codes safely</label>
+    </sc-if>
+
+    <sc-if value="{{isDone}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbok); border: 1px solid var(--mbokbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><span>{{doneText}}</span></div>
+    </sc-if>
+
+    <sc-if value="{{isComplete}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">An administrator already exists, so this page is closed for good.</p>
+      <a href="#" style="color: var(--blink)">Go to sign-in</a>
+    </sc-if>
+
+    <sc-if value="{{isTerminal}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0; color: var(--fg2)">Links work once and expire after 24 hours. Your administrator can create a new link and code on the Users &amp; roles page.</p>
+    </sc-if>
+
+    <sc-if value="{{button.show}}" hint-placeholder-val="{{true}}">
+      <button type="submit" disabled="{{button.disabled}}" style="{{button.style}}"><sc-if value="{{button.loading}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent"></span></sc-if>{{button.label}}</button>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":560},"flow":{"editor":"enum","options":["setup","invite","reset"],"default":"setup"},"step":{"editor":"enum","options":["1","2","3","4","done","complete"],"default":"1"},"state":{"editor":"enum","options":["none","loading","wrongToken","completedElsewhere","passwordErrors","wrongTotp","network","wrongCode","expired","invalid","dead"],"default":"none"},"$preview":{"width":560,"height":780}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--rdfg:#bc2f32;--gnfg:#0e700e;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--mbok:#f1faf1;--mbokbd:#9fd89f;--mboki:#0e700e;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--rdfg:#e37d80;--gnfg:#54b054;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--mbok:#052505;--mbokbd:#107c10;--mboki:#54b054;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 560;
+    const flow = this.props.flow ?? 'setup';
+    const step = String(this.props.step ?? '1');
+    const state = this.props.state ?? 'none';
+    const terminal = state === 'expired' || state === 'invalid' || state === 'dead';
+    const n = { '1': 1, '2': 2, '3': 3, '4': 4 }[step] || 0;
+    const labels = {
+      setup: ['Setup token', 'Admin account', 'Two-factor', 'Recovery codes'],
+      invite: ['Confirm code', 'Password', 'Two-factor', 'Recovery codes'],
+      reset: ['Confirm code', 'Your password', 'Two-factor', 'Recovery codes']
+    }[flow];
+    const headings = {
+      setup: ['Enter the setup token', 'Create the admin account', 'Set up two-factor authentication', 'Save your recovery codes'],
+      invite: ['Confirm your code', 'Choose a password', 'Set up two-factor authentication', 'Save your recovery codes'],
+      reset: ['Confirm your code', 'Sign in with your password', 'Set up two-factor authentication', 'Save your recovery codes']
+    }[flow];
+    const heading = terminal ? 'This link can’t be used' : step === 'done' ? (flow === 'setup' ? 'Goldmark is ready' : 'You’re all set') : step === 'complete' ? 'Setup is already complete' : headings[n - 1];
+    const icons = { error: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5', warning: 'M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2', info: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7.2v4M8 4.8v.2' };
+    const kinds = { error: ['var(--mberr)', 'var(--mberrbd)', 'var(--mberri)', 'alert'], warning: ['var(--mbwrn)', 'var(--mbwrnbd)', 'var(--mbwrni)', 'alert'], info: ['var(--mbinfo)', 'var(--mbinfobd)', 'var(--mbinfoi)', 'status'] };
+    const messages = {
+      wrongToken: ['error', 'That token isn’t valid. Use the newest one in the log; a new token is printed whenever Goldmark restarts.'],
+      completedElsewhere: ['info', 'Setup was completed in another browser.'],
+      network: ['error', 'Couldn’t reach Goldmark. Nothing was saved; try again.'],
+      expired: ['warning', 'This link has expired. Ask your administrator for a new one.'],
+      invalid: ['warning', 'This link is no longer valid. Ask your administrator for a new one.'],
+      dead: ['error', 'This link no longer works. Ask your administrator for a new one.']
+    };
+    const m = messages[state];
+    const k = m ? kinds[m[0]] : null;
+    const field = 'height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; ';
+    const ok = 'border-bottom: 1px solid var(--stacc)';
+    const bad = 'border-bottom: 2px solid var(--rdfg)';
+    const mono = 'font-family: Consolas, \'Courier New\', monospace; font-size: 16px; letter-spacing: 0.1em; ';
+    const pwBad = state === 'passwordErrors';
+    const check = 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4';
+    const cross = 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5';
+    const dot = 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13z';
+    const rule = (text, status) => ({ text: text + (status === 'pass' ? ' · done' : status === 'fail' ? ' · not met' : ''), icon: status === 'pass' ? check : status === 'fail' ? cross : dot, style: 'display: flex; align-items: center; gap: 6px; color: ' + (status === 'pass' ? 'var(--gnfg)' : status === 'fail' ? 'var(--rdfg)' : 'var(--fg3)') });
+    // Sample QR: finder patterns plus pseudo-random modules (not a real key).
+    const N = 25;
+    let seed = 20261020;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const finder = (x, y) => 'M' + x + ' ' + y + 'h7v7h-7zM' + (x + 1) + ' ' + (y + 1) + 'v5h5v-5zM' + (x + 2) + ' ' + (y + 2) + 'h3v3h-3z';
+    let modules = '';
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const inFinder = (x < 8 && y < 8) || (x >= N - 8 && y < 8) || (x < 8 && y >= N - 8);
+      if (!inFinder && rnd() < 0.48) modules += 'M' + x + ' ' + y + 'h1v1h-1z';
+    }
+    const buttonLabels = { setup: ['Continue', 'Create admin', 'Verify', 'Finish'], invite: ['Continue', 'Continue', 'Verify', 'Finish'], reset: ['Continue', 'Continue', 'Verify', 'Finish'] }[flow];
+    const loading = state === 'loading';
+    const finishLocked = n === 4;
+    const primary = 'height: 32px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 4px; font: inherit; font-weight: 600; ';
+    const enabled = primary + 'border: none; background: var(--brand); color: #ffffff';
+    const disabledStyle = primary + 'border: 1px solid var(--st2); background: var(--bg2); color: var(--fgdis)';
+    const showButton = !terminal && step !== 'complete' && state !== 'completedElsewhere';
+    const button = step === 'done'
+      ? { show: true, label: flow === 'setup' ? 'Go to the dashboard' : 'Go to Goldmark', style: enabled, disabled: false, loading: false }
+      : { show: showButton && n > 0, label: loading ? 'Checking…' : buttonLabels[n - 1], style: loading || finishLocked ? disabledStyle : enabled, disabled: loading || finishLocked, loading };
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: ' + width + 'px; height: 780px; box-sizing: border-box; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      uid: (dark ? 'd' : 'l') + flow + step + state,
+      welcome: flow !== 'setup' && !terminal && step !== 'done'
+        ? { show: true, title: flow === 'invite' ? 'Welcome, Sam Rivera' : 'Set up two-factor again, Sam Rivera', text: flow === 'invite' ? 'You’re invited to Goldmark as' : 'An administrator reset your two-factor. Your roles:', roles: ['Editor', 'Auditor'] }
+        : { show: false, roles: [] },
+      showProgress: n > 0 && !terminal,
+      progress: labels.map((label, i) => ({
+        label: (i + 1 < n ? '✓ ' : '') + label,
+        current: i + 1 === n ? 'step' : null,
+        style: 'display: flex; flex-direction: column; gap: 4px; ' + (i + 1 === n ? 'font-weight: 600; color: var(--fg1)' : i + 1 < n ? 'color: var(--fg2)' : 'color: var(--fg3)'),
+        bar: 'height: 4px; border-radius: 2px; background: ' + (i + 1 <= n ? 'var(--bfg1)' : 'var(--st1)')
+      })),
+      heading,
+      msg: m ? { show: true, text: m[1], bg: k[0], bd: k[1], icon: k[2], role: k[3], path: icons[m[0]], signIn: state === 'completedElsewhere', reference: state === 'network' } : { show: false },
+      isSetupToken: !terminal && flow === 'setup' && n === 1,
+      tokenValue: state === 'wrongToken' ? 'gm-setup-SAMPLE-old' : '',
+      tokenInvalid: state === 'wrongToken' ? 'true' : 'false',
+      tokenStyle: field + mono + (state === 'wrongToken' ? bad : ok),
+      isCode: !terminal && flow !== 'setup' && n === 1,
+      shortCodeValue: state === 'wrongCode' ? 'K7Q-2MZ' : '',
+      shortCodeInvalid: state === 'wrongCode',
+      shortCodeStyle: field + mono + 'width: 160px; ' + (state === 'wrongCode' ? bad : ok),
+      isNewPassword: !terminal && n === 2 && flow !== 'reset',
+      isSetupAccount: flow === 'setup',
+      usernameValue: flow === 'setup' ? 'dana' : 'sam',
+      usernameReadOnly: flow !== 'setup',
+      usernameStyle: field + (flow === 'setup' ? ok : 'background: var(--bg2); border-color: var(--st2)'),
+      pwInvalid: pwBad,
+      pwBoxStyle: 'display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 2px 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; ' + (pwBad ? bad : ok),
+      confirmStyle: field + (pwBad ? bad : ok),
+      rules: pwBad
+        ? [rule('12 to 128 characters', 'pass'), rule('Not a commonly used password', 'fail'), rule('Matches the confirmation', 'fail')]
+        : [rule('12 to 128 characters', 'pass'), rule('Not a commonly used password (checked when you continue)', 'pending'), rule('Matches the confirmation', 'pass')],
+      isResetPassword: !terminal && n === 2 && flow === 'reset',
+      isTotp: !terminal && n === 3,
+      qrFinders: finder(0, 0) + finder(N - 7, 0) + finder(0, N - 7),
+      qrModules: modules,
+      totpValue: state === 'wrongTotp' ? '730141' : '',
+      totpInvalid: state === 'wrongTotp',
+      totpStyle: field + mono + 'width: 160px; ' + (state === 'wrongTotp' ? bad : ok),
+      isCodes: !terminal && n === 4,
+      codes: ['7KQ2-M9XD', 'P4VT-0WQ3', 'NL8R-B6YZ', '1CF5-HJ2K', 'R9MD-3XTQ', 'W6PB-8LZN', 'D2HK-5VQC', 'T7YF-0RMG', 'B3XS-9KPW', 'G5NJ-4QTD'],
+      isDone: step === 'done',
+      doneText: flow === 'setup' ? 'The admin account is ready, with two-factor authentication on. Add other people on the Users & roles page.' : 'Your password and two-factor authentication are set up.',
+      isComplete: step === 'complete',
+      isTerminal: terminal,
+      button
+    };
+  }
+}
+</script>
+</body>
+</html>

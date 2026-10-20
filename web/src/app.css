@@ -1,27 +1,13 @@
-:root {
+/* Fluent UI styles everything else (with the page's nonce, DEC-037); this file only resets the page. */
+html,
+body {
+  margin: 0;
+}
+
+body {
   font-family:
     'Segoe UI',
     system-ui,
     -apple-system,
     sans-serif;
-  line-height: 1.5;
-  color-scheme: light dark;
-}
-
-body {
-  margin: 0;
-}
-
-.shell-header {
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 20%, transparent);
-}
-
-.shell-brand {
-  font-weight: 600;
-}
-
-.shell-main {
-  max-width: 60rem;
-  padding: 1.5rem;
 }

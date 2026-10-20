@@ -80,6 +80,8 @@ services:
       - "${GOLDMARK_HTTPS_PORT:-8443}:8443"
     volumes:
       - goldmark-tls:/var/lib/goldmark/tls
+      # Sign-in key ring (ASP.NET Core Data Protection, DEC-038 item 5); only the app mounts it.
+      - goldmark-keys:/var/lib/goldmark/keys
       - ${GOLDMARK_SQL_SERVER_CERT_FILE:-/dev/null}:/run/goldmark/sql-tls/server.crt:ro
       - goldmark-db-runtime:/var/lib/goldmark/db-runtime:ro
     depends_on:
@@ -93,5 +95,7 @@ services:
 
 volumes:
   goldmark-tls: {}
+  # Back up with the database (see docker-compose.yml).
+  goldmark-keys: {}
   goldmark-db-runtime: {}
   goldmark-db-admin: {}

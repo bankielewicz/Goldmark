@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark two-factor flows and states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1600px; height: 1400px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Two-factor page · flows and states</h1>
+    <p style="margin: 0; color: #424242">Every change asks for the password and a current code first (a recovery code when the old phone is gone). Repeated failures lock the account like sign-in does. Fluent: Dialog, Field, Input, MessageBar, Checkbox, Toast.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+    <sc-for list="{{dialogs}}" as="d" hint-placeholder-count="5">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{d.label}}</figcaption>
+        <div style="{{d.ground}}">
+          <dc-import name="TwoFactorDialog" dark="{{d.dark}}" kind="{{d.kind}}" state="{{d.state}}" hint-size="480px,520px"></dc-import>
+        </div>
+      </figure>
+    </sc-for>
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+      <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Success toasts</figcaption>
+      <div style="padding: 16px; background: #f5f5f5; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; align-items: flex-end">
+        <div role="status" style="width: 340px; background: #ffffff; border-radius: 4px; box-shadow: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14); padding: 12px; display: flex; gap: 10px; align-items: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0e700e" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><b>New recovery codes are ready</b></div>
+        <div role="status" style="width: 340px; background: #ffffff; border-radius: 4px; box-shadow: 0 0 2px rgba(0,0,0,.12), 0 4px 8px rgba(0,0,0,.14); padding: 12px; display: flex; gap: 10px; align-items: center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#0e700e" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><b>New authenticator set up. The old one no longer works.</b></div>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1600,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const light = 'padding: 4px; background: #f5f5f5; border-radius: 8px';
+    const dark = 'padding: 4px; background: #141414; border-radius: 8px';
+    return {
+      dialogs: [
+        { label: 'New recovery codes · shown once', kind: 'newCodes', state: 'none', dark: false, ground: light },
+        { label: 'New authenticator · confirm (recovery code allowed)', kind: 'confirmAuth', state: 'none', dark: false, ground: light },
+        { label: 'Dark · new authenticator · scan and verify', kind: 'newAuth', state: 'none', dark: true, ground: dark },
+        { label: 'Wrong password or code', kind: 'confirmCodes', state: 'wrongCode', dark: false, ground: light },
+        { label: 'Dark · locked after repeated failures', kind: 'confirmCodes', state: 'locked', dark: true, ground: dark }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

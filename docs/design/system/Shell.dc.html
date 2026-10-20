@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark app shell</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <sc-if value="{{skipFocus}}" hint-placeholder-val="{{false}}">
+    <a href="#main" style="position: absolute; top: 6px; left: 8px; z-index: 5; padding: 6px 12px; background: var(--bg1); color: var(--fg1); font-size: 14px; line-height: 20px; font-weight: 600; text-decoration: none; border-radius: 4px; outline: 2px solid var(--fo); outline-offset: 0; box-shadow: 0 0 0 4px var(--fi)">Skip to content</a>
+  </sc-if>
+
+  <header style="height: 48px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--st2)">
+    <button type="button" aria-label="Collapse navigation" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg></button>
+    <div style="display: flex; align-items: center; gap: 8px; min-width: 0">
+      <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 4px; background: var(--brand); color: var(--onbrand); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">G</span>
+      <span style="font-size: 14px; line-height: 20px; font-weight: 600; white-space: nowrap">Goldmark</span>
+      <sc-if value="{{showInstance}}" hint-placeholder-val="{{true}}"><span style="font-size: 14px; line-height: 20px; color: var(--fg3); white-space: nowrap">· SAMPLE Contoso Infrastructure</span></sc-if>
+    </div>
+    <div style="flex: 1; display: flex; justify-content: center; min-width: 0">
+      <label style="display: flex; align-items: center; gap: 8px; width: {{searchWidth}}px; max-width: 100%; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg3); font-size: 14px">
+        <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg>
+        <input aria-label="Search CIs" placeholder="Search CIs, Enter to search" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none">
+      </label>
+    </div>
+    <div title="The As-of control arrives in slice 7" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border: 1px dashed var(--st1); border-radius: 4px; color: var(--fg3); font-size: 12px; white-space: nowrap">As of · slice 7</div>
+    <button type="button" aria-label="Switch to {{otherTheme}} theme" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{themeIcon}}"></path></svg></button>
+    <button type="button" aria-label="Account: Dana Kowalski" aria-haspopup="menu" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)">
+      <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">DK</span>
+      <svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"></path></svg>
+    </button>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <nav aria-label="Main" style="{{navStyle}}">
+      <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <sc-if value="{{showLabels}}" hint-placeholder-val="{{true}}">
+            <div style="padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div>
+          </sc-if>
+          <sc-if value="{{showRailDivider}}" hint-placeholder-val="{{false}}">
+            <div style="height: 1px; margin: 6px 10px; background: var(--st2)"></div>
+          </sc-if>
+          <sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+            <a href="#" aria-current="{{it.current}}" aria-label="{{it.aria}}" style="{{it.style}}">
+              <span style="{{it.barStyle}}"></span>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{it.icon}}"></path></svg>
+              <sc-if value="{{showLabels}}" hint-placeholder-val="{{true}}">
+                <span style="flex: 1; white-space: nowrap">{{it.label}}</span>
+                <sc-if value="{{it.p1}}" hint-placeholder-val="{{false}}"><span style="font-size: 10px; line-height: 14px; font-weight: 600; padding: 0 4px; border-radius: 4px; border: 1px solid var(--st1); color: var(--fg3)">P1</span></sc-if>
+              </sc-if>
+            </a>
+          </sc-for>
+        </div>
+      </sc-for>
+      <sc-if value="{{railTooltip}}" hint-placeholder-val="{{false}}">
+        <div role="tooltip" style="position: absolute; left: 52px; top: {{tooltipTop}}px; padding: 4px 8px; background: var(--bg1); color: var(--fg1); font-size: 12px; line-height: 16px; border-radius: 4px; box-shadow: var(--sh16); white-space: nowrap">Users &amp; roles</div>
+      </sc-if>
+    </nav>
+
+    <main id="main" style="flex: 1; min-width: 0; overflow: hidden; padding: {{pad}}px; display: flex; flex-direction: column; gap: 16px">
+      <nav aria-label="Breadcrumb" style="font-size: 14px; line-height: 20px; color: var(--fg3); display: flex; gap: 6px; align-items: center">
+        <a href="#" style="color: var(--fg2); text-decoration: none">Administration</a>
+        <span aria-hidden="true">›</span>
+        <span aria-current="page" style="color: var(--fg1)">Users &amp; roles</span>
+      </nav>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600; flex: 1">Users &amp; roles</h1>
+        <div role="toolbar" aria-label="Page actions" style="display: flex; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--st1); background: var(--bg1); color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Export CSV</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border-radius: 4px; border: none; background: var(--brand); color: var(--onbrand); font: inherit; font-size: 14px; font-weight: 600">Add user</button>
+        </div>
+      </div>
+
+      <div style="flex: 1; min-height: 0; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: auto">
+        <table style="width: 100%; min-width: 860px; border-collapse: collapse; font-size: 14px; line-height: 20px">
+          <thead>
+            <tr style="text-align: left">
+              <th scope="col" style="height: 44px; padding: 0 8px 0 16px; font-weight: 600; border-bottom: 1px solid var(--st1)">Name</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Username</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Roles</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Two-factor</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Account</th>
+              <th scope="col" aria-sort="descending" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Last sign-in ↓</th>
+              <th scope="col" style="width: 44px; border-bottom: 1px solid var(--st1)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{users}}" as="u" hint-placeholder-count="6">
+              <tr>
+                <td style="height: 44px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 50%; background: var(--ntbg); color: var(--fg2); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600">{{u.initials}}</span>{{u.name}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); font-family: Consolas, 'Courier New', monospace">{{u.username}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--st1); background: var(--bg2); font-size: 12px; font-weight: 600">{{u.role}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{u.mfaStyle}}">{{u.mfa}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{u.stateStyle}}">{{u.state}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); color: var(--fg2)">{{u.last}}</td>
+                <td style="padding: 0 6px; border-bottom: 1px solid var(--st2)"><button type="button" aria-label="Actions for {{u.name}}" style="width: 32px; height: 32px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 18px; line-height: 1">⋯</button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--fg3)">
+        <span>{{stateNote}}</span>
+        <span>Sample data (fictional)</span>
+      </div>
+    </main>
+
+    <sc-if value="{{overlay}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <nav aria-label="Main (expanded)" style="position: absolute; top: 0; left: 0; bottom: 0; width: 260px; background: var(--bg2); box-shadow: var(--sh64); padding: 8px; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; overflow: hidden">
+        <sc-for list="{{overlayGroups}}" as="g" hint-placeholder-count="5">
+          <div style="display: flex; flex-direction: column; gap: 2px">
+            <div style="padding: 10px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div>
+            <sc-for list="{{g.items}}" as="it" hint-placeholder-count="3">
+              <a href="#" aria-current="{{it.current}}" style="{{it.style}}">
+                <span style="{{it.barStyle}}"></span>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{it.icon}}"></path></svg>
+                <span style="flex: 1; white-space: nowrap">{{it.label}}</span>
+                <sc-if value="{{it.p1}}" hint-placeholder-val="{{false}}"><span style="font-size: 10px; line-height: 14px; font-weight: 600; padding: 0 4px; border-radius: 4px; border: 1px solid var(--st1); color: var(--fg3)">P1</span></sc-if>
+              </a>
+            </sc-for>
+          </div>
+        </sc-for>
+      </nav>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"collapsed":{"editor":"boolean","default":false},"overlay":{"editor":"boolean","default":false},"sparse":{"editor":"boolean","default":false},"skipFocus":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--onbrand:#ffffff;--fo:#000000;--fi:#ffffff;--okfg:#0e700e;--okbg:#f1faf1;--okbd:#9fd89f;--wnfg:#c43501;--wnbg:#fdf6f3;--wnbd:#f4bfab;--dnfg:#bc2f32;--dnbg:#fdf6f6;--dnbd:#f1bbbc;--ntfg:#616161;--ntbg:#f0f0f0;--ntbd:#e0e0e0;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--onbrand:#ffffff;--fo:#ffffff;--fi:#000000;--okfg:#54b054;--okbg:#052505;--okbd:#107c10;--wnfg:#e9835e;--wnbg:#411200;--wnbd:#da3b01;--dnfg:#e37d80;--dnbg:#3f1011;--dnbd:#d13438;--ntfg:#adadad;--ntbg:#0a0a0a;--ntbd:#525252;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 900;
+    const collapsed = this.props.collapsed ?? false;
+    const overlay = this.props.overlay ?? false;
+    const sparse = this.props.sparse ?? false;
+    const skipFocus = this.props.skipFocus ?? false;
+    const icons = {
+      dashboard: 'M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z',
+      search: 'M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17',
+      graph: 'M3 10a2 2 0 1 0 4 0a2 2 0 1 0-4 0M13 5a2 2 0 1 0 4 0a2 2 0 1 0-4 0M13 15a2 2 0 1 0 4 0a2 2 0 1 0-4 0M6.8 9.1l6.4-3.2M6.8 10.9l6.4 3.2',
+      impact: 'M11 2L4 11h5l-1 7 7-9h-5z',
+      services: 'M3 7h14v9H3zM7 7V5h6v2M3 11h14',
+      review: 'M4 5h2M4 10h2M4 15h2M9 5h7M9 10h7M9 15h7',
+      quality: 'M10 2l6 2v5c0 4-3 7-6 8-3-1-6-4-6-8V4zM7 10l2 2 4-4',
+      storage: 'M4 5c0-1.1 2.7-2 6-2s6 .9 6 2-2.7 2-6 2-6-.9-6-2zM4 5v10c0 1.1 2.7 2 6 2s6-.9 6-2V5M4 10c0 1.1 2.7 2 6 2s6-.9 6-2',
+      history: 'M10 4a6 6 0 1 1-6 6M4 4v4h4M10 7v3l2 2',
+      sources: 'M7 3v4M13 3v4M5 7h10v3a5 5 0 0 1-10 0zM10 15v3',
+      csv: 'M10 3v9M6 8l4 4 4-4M4 14v3h12v-3',
+      tokens: 'M12.5 3a4.5 4.5 0 1 1-3.6 7.2L3 16v1h3v-2h2v-2h1.5',
+      webhooks: 'M8 12l4-4M7 9l-2 2a3 3 0 0 0 4 4l2-2M13 11l2-2a3 3 0 0 0-4-4L9 7',
+      apps: 'M3 3h5v5H3zM12 3h5v5h-5zM3 12h5v5H3zM12 12h5v5h-5z',
+      types: 'M3 3h7l7 7-7 7-7-7zM7 7h.01',
+      users: 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5',
+      audit: 'M5 2h7l4 4v12H5zM12 2v4h4M8 10h5M8 13h5',
+      settings: 'M10 7a3 3 0 1 1 0 6 3 3 0 0 1 0-6zM10 2v2M10 16v2M2 10h2M16 10h2M4.3 4.3l1.4 1.4M14.3 14.3l1.4 1.4M4.3 15.7l1.4-1.4M14.3 5.7l1.4-1.4'
+    };
+    const full = [
+      { label: 'Overview', items: [['Dashboard', 'dashboard']] },
+      { label: 'Inventory', items: [['Search', 'search', 'hover'], ['Graph explorer', 'graph'], ['Impact analysis', 'impact'], ['Business services', 'services']] },
+      { label: 'Data hygiene', items: [['Review queue', 'review'], ['Data quality', 'quality'], ['Storage groups', 'storage'], ['Change history', 'history']] },
+      { label: 'Integration', items: [['Sources & collectors', 'sources'], ['CSV import', 'csv'], ['API tokens', 'tokens'], ['Webhooks', 'webhooks'], ['Apps & integrations', 'apps', null, true]] },
+      { label: 'Administration', items: [['Types & attributes', 'types'], ['Users & roles', 'users', 'selected'], ['Audit log', 'audit', 'focus'], ['Settings', 'settings', null, true]] }
+    ];
+    const sparseGroups = [
+      { label: 'Overview', items: [['Dashboard', 'dashboard']] },
+      { label: 'Administration', items: [['Users & roles', 'users', 'selected']] }
+    ];
+    const rail = collapsed;
+    const build = (groups, showLabels) => groups.map((g) => ({
+      label: g.label,
+      items: g.items.map(([label, icon, state, p1]) => {
+        const selected = state === 'selected';
+        const hover = state === 'hover';
+        const focus = state === 'focus';
+        const base = 'position: relative; display: flex; align-items: center; gap: 10px; height: ' + (showLabels ? '40px' : '36px') + '; flex: none; box-sizing: border-box; padding: 0 ' + (showLabels ? '12px' : '0') + '; justify-content: ' + (showLabels ? 'flex-start' : 'center') + '; border-radius: 4px; text-decoration: none; font-size: 14px; line-height: 20px;';
+        const color = selected ? ' color: var(--fg1); font-weight: 600;' : ' color: var(--fg2);';
+        const bg = hover ? ' background: var(--sub);' : selected ? ' background: var(--bbg2);' : '';
+        const ring = focus ? ' outline: 2px solid var(--fo); outline-offset: -2px; box-shadow: inset 0 0 0 3px var(--fi);' : '';
+        return {
+          label,
+          aria: showLabels ? null : label,
+          icon: icons[icon],
+          p1: !!p1,
+          current: selected ? 'page' : null,
+          style: base + color + bg + ring,
+          barStyle: selected ? 'position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--bfg1);' : 'display: none;'
+        };
+      })
+    }));
+    const groups = build(sparse ? sparseGroups : full, !rail);
+    const navWidth = rail ? 48 : 260;
+    const notes = [];
+    if (!rail && !sparse) notes.push('States shown: Search = hover, Users & roles = selected, Audit log = keyboard focus.');
+    if (rail && !overlay) notes.push('Below 1100 px the nav is an icon rail; each icon has its label as tooltip and accessible name.');
+    if (overlay) notes.push('The menu button opens the full nav as an overlay drawer over a scrim; focus is trapped in it, Esc closes it.');
+    if (sparse) notes.push('Slice 3 shows only the screens that exist. Skip-to-content link shown in its focused state.');
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif;',
+      navStyle: 'position: relative; flex: none; width: ' + navWidth + 'px; box-sizing: border-box; padding: 8px ' + (rail ? '4px' : '8px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: ' + (rail ? '0' : '2px') + '; overflow: hidden;',
+      groups,
+      overlayGroups: build(full, true),
+      showLabels: !rail,
+      showRailDivider: rail,
+      railTooltip: rail && !overlay,
+      tooltipTop: 619,
+      overlay,
+      skipFocus,
+      showInstance: width >= 1100,
+      searchWidth: width >= 1100 ? 420 : 280,
+      pad: width >= 1280 ? 32 : 24,
+      otherTheme: dark ? 'light' : 'dark',
+      themeIcon: dark ? 'M10 6a4 4 0 1 1 0 8 4 4 0 0 1 0-8zM10 1v2M10 17v2M1 10h2M17 10h2M3.6 3.6l1.4 1.4M15 15l1.4 1.4M3.6 16.4L5 15M15 5l1.4-1.4' : 'M15 12.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 9.5z',
+      stateNote: notes.join(' '),
+      users: [
+        { initials: 'DK', name: 'Dana Kowalski', username: 'dana', role: 'Admin', mfa: 'Enrolled', mfaStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--okbd); background: var(--okbg); color: var(--okfg); font-size: 12px; font-weight: 600', state: 'Active', stateStyle: 'font-size: 14px; color: var(--fg1)', last: '2026-10-20 08:12 UTC' },
+        { initials: 'SR', name: 'Sam Rivera', username: 'sam', role: 'Editor', mfa: 'Enrolled', mfaStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--okbd); background: var(--okbg); color: var(--okfg); font-size: 12px; font-weight: 600', state: 'Active', stateStyle: 'font-size: 14px; color: var(--fg1)', last: '2026-10-19 17:40 UTC' },
+        { initials: 'IB', name: 'Ingrid Berg', username: 'ingrid', role: 'Auditor', mfa: 'Enrolled', mfaStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--okbd); background: var(--okbg); color: var(--okfg); font-size: 12px; font-weight: 600', state: 'Locked', stateStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--wnbd); background: var(--wnbg); color: var(--wnfg); font-size: 12px; font-weight: 600', last: '2026-10-18 09:03 UTC' },
+        { initials: 'RC', name: 'Riley Chen', username: 'riley', role: 'Viewer', mfa: 'Not enrolled', mfaStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--ntbd); background: var(--ntbg); color: var(--ntfg); font-size: 12px; font-weight: 600', state: 'Pending first sign-in', stateStyle: 'font-size: 14px; color: var(--fg2)', last: 'Never' },
+        { initials: 'PL', name: 'Pat Lee', username: 'pat', role: 'Viewer', mfa: 'Enrolled', mfaStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--okbd); background: var(--okbg); color: var(--okfg); font-size: 12px; font-weight: 600', state: 'Disabled', stateStyle: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--ntbd); background: var(--ntbg); color: var(--ntfg); font-size: 12px; font-weight: 600', last: '2026-09-02 14:55 UTC' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -27,7 +27,14 @@ public sealed class MigrationTests(SqlServerFixture sql)
     [InlineData("RelationshipType")]
     [InlineData("Relationship")]
     [InlineData("AuditLog")]
-    public async Task The_baseline_tables_exist_in_the_cmdb_schema(string table)
+    [InlineData("Role")]
+    [InlineData("UserAccount")]
+    [InlineData("UserRole")]
+    [InlineData("RecoveryCode")]
+    [InlineData("UserInvitation")]
+    [InlineData("UserSession")]
+    [InlineData("Installation")]
+    public async Task The_application_tables_exist_in_the_cmdb_schema(string table)
     {
         var (installation, _) = await sql.SharedAsync("schema");
 

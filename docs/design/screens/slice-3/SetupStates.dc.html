@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark first-run setup states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 1800px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">First-run setup · states</h1>
+    <p style="margin: 0; color: #424242">Errors are linked to their field and announced; a failed submit moves focus to the MessageBar. The setup token is the one secret Goldmark ever logs (DEC-038): a new one each start until setup is done.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" dark="{{c.dark}}" flow="setup" step="{{c.step}}" state="{{c.state}}" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      cards: [
+        { label: 'Wrong or old setup token', step: '1', state: 'wrongToken', dark: false },
+        { label: 'Loading on Continue', step: '1', state: 'loading', dark: false },
+        { label: 'Setup completed in another browser', step: '2', state: 'completedElsewhere', dark: false },
+        { label: 'Password errors (common password, mismatch)', step: '2', state: 'passwordErrors', dark: false },
+        { label: 'Wrong 6-digit code', step: '3', state: 'wrongTotp', dark: false },
+        { label: 'Dark · network error with Retry and Reference ID', step: '2', state: 'network', dark: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

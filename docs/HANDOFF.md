@@ -5,9 +5,12 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
-are merged, with the handoff and docs PRs #11, #13, #16 and #21. Next: **slice 3**
-(Fluent UI check first, then auth); notes in §3. The owner placed the Windows
+**As of 2026-10-20:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
+are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23. **Slice 3** is in
+progress: Fluent UI failed under the CSP and the owner chose a per-response style nonce
+(DEC-037); the backend (setup, sign-in, invitations, roles, deny by default, M6) and the UI are
+built (DEC-038, DEC-040); **PR #24** is open, both review rounds done (Codex: 5 then 4 findings,
+all fixed); next is the owner's merge; notes in §3. The owner placed the Windows
 service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
 the first distribution, not the target deployment (DEC-030, rule 8).
 
@@ -24,10 +27,10 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
-| 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
+| 3 | **in progress** | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); PR #24 open, review rounds 1 and 2 done, awaiting the owner's merge | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
-| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
+| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
 | 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
@@ -103,7 +106,10 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    - ask before adding a dependency the PRD didn't anticipate, or changing scope;
    - if blocked (install failure, missing credential, network block), stop and
      say exactly what is needed;
-   - keep chat updates short; details go in PR descriptions and `DECISIONS.md`.
+   - keep chat updates short; details go in PR descriptions and `DECISIONS.md`;
+   - when asking the owner for a decision, explain it in plain terms with a
+     concrete example, and give lettered options with a recommendation (owner,
+     2026-10-20).
 7. **Every slice, in addition to its own criteria** (from Codex on PR #11):
    - every new mutation writes audit records and tests them (US-07; slice 4
      builds the log itself);
@@ -119,10 +125,37 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-The next slice is **3** (`slice/03-auth`). Its first step is the Fluent UI v9
-verification under the served CSP and Trusted Types (DEC-017, DEC-021); if it fails,
-stop and bring options. Then the design-system handoff (rule 4) and the slice's
-screen handoff (rule 3) before any UI code.
+Slice **3** (`slice/03-auth`) is in progress. **Backend done** (DEC-040): migration 0003, Dapper
+behind `DbSession` with the CA1857 gate, Identity on Dapper stores, server-side sessions, setup,
+invitations and two-factor reset with a separate code, Users & roles with its guards, the
+self-service two-factor page's API, deny-by-default and the M6 enumeration test, audit rows, the
+`goldmark-keys` volume. **UI built** (DEC-040): screens 1, 1b, 2, 17 and the two-factor page on
+the approved boards (`docs/design/screens/slice-3/`, with the four deviations its README lists), an
+in-repo router, axe checks in Playwright (`@axe-core/playwright`, approved) and the theme contrast
+test. **PR #24** is open. Review round 1 (Codex, 5 findings, all fixed with tests): failed attempts are
+counted atomically and never shorten a lock; sign-out reports success only once the server session is
+gone; a recovery code spent on a new authenticator is audited in the same transaction; unknown-name
+failures keep no idle expiry; after a lost key ring, a recovery-code sign-in goes straight to a new
+authenticator (DEC-040 notes). Review round 2 (Codex, 4 findings, all fixed with tests): session rows
+are written in the endpoint's transaction, so a recovery code is spent only with its session and
+sign-out is audited only with the deleted session; the lost-key setup keeps a Retry; links state the
+configured lifetime and wrong-code limit. Both rounds are used (rule 2): later findings go to the owner
+as fix-now or defer. Next: the owner merges.
+
+The Fluent UI v9 verification failed under
+`style-src 'self'`; the owner chose a per-response style nonce (DEC-037, options 1B and 2A),
+which is built and tested, and passes with a real server in Chrome 155.0.8059.84, Edge
+155.0.4283.62 and Firefox 158.0.1 (DEC-037): **the Fluent gate is passed.** The design-system handoff (rule 4)
+is approved (DEC-039); next is the slice's screen handoff (rule 3), before any UI code. The
+owner's slice-3 decisions are DEC-038: audit rows now, invitation links,
+Net.Codecrete.QrCodeGenerator, Dapper and the NFR-SEC-3 gate now, the key ring as files, account
+and session defaults, the setup token logged once. Screens create Fluent's
+renderer with `createStyleRenderer()` (`web/src/styleNonce.ts`) inside `RendererProvider`.
+
+Running the qualification page: build the sampler as a web root
+(`pnpm exec vite build --config vite.config.ts --outDir <dir> --emptyOutDir e2e/fluent-check/app`
+in `web/`), start the API with `ASPNETCORE_WEBROOT=<dir>`, open it in the browser and read the
+"Self-check" result; in Playwright, `GOLDMARK_FLUENT_CHECK_DIRECT=1` runs `fluent.spec.ts` against it.
 
 Slices 3 and 4 come before the Windows service (slice 4b, DEC-036), which ports what
 they store. Keep it cheap (rule 8): sign-in keys (ASP.NET Core Data Protection,
@@ -140,7 +173,9 @@ Slice 2c left these for slice 4b:
 And for slice 24:
 
 - **Backups (US-60, slice 24)** must include the `goldmark-db-admin` volume, or a
-  restore needs the `sa` recovery (`docs/ops/database-recovery.md`).
+  restore needs the `sa` recovery (`docs/ops/database-recovery.md`), and the
+  `goldmark-keys` volume, restored as a pair with the database (DEC-038 item 5):
+  without it every authenticator must be set up again with a recovery code.
 
 ## 4. Open issues and owners
 
@@ -158,10 +193,11 @@ And for slice 24:
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
 | Availability groups (and #20) | owner: place in the plan (DEC-030, DEC-036) |
-| Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
+| Fluent UI v9 under the CSP: per-response style nonce, qualified in Chrome, Edge and Firefox (DEC-037) | 3 (done) |
 | #5 renew the generated TLS certificate without a restart | 24 |
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
+| #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3) | owner: merge **together**, see §5.2 |
 | Dependabot PR #9 (`web-dev-tooling` group, 3 updates) | owner: merge when CI (incl. the npm policy job) is green |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
@@ -336,6 +372,40 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   disabled (DEC-027). SQL Server is ready in about 10 s.
 - Analyzer CA1711 rejects type names ending in `Collection` (xUnit collection
   definitions are named `…Tests`).
+- **The SPA shell is a template** (DEC-037): `SpaShell` reads `wwwroot/index.html` once, at the
+  first shell request. After replacing the web root (a rebuilt `web/dist`, a qualification build),
+  restart the app, or it keeps sending the old page. HTML is never a static file, so
+  `/index.html` is a 404.
+- **Griffel picks right-to-left classes where `useStyles()` runs**, not where the class is used:
+  a component inside `<FluentProvider dir="rtl">` must call the hook itself.
+- **Playwright's `route.fetch()` does not use the browser's SPKI pin** (it fails with
+  "self-signed certificate"); capture headers from a browser navigation instead.
+- **`pnpm add` in `/mnt/c/...` is slow** (Fluent UI's 88 packages took 12 minutes, with no output
+  through a pipe); run it in the background.
+- **A minimal-API lambda whose only parameter is `HttpContext` binds as a `RequestDelegate`**: its
+  returned `IResult` is dropped and the response is an empty 200. Give it a second parameter (slice 3:
+  the anti-forgery token endpoint).
+- **The cookie handler renews the request's session key on `SignInAsync`** when the request already
+  has a live session (`ITicketStore.RenewAsync`, not `StoreAsync`), so the key would never rotate at
+  sign-in. Endpoints that sign in carry `StartsNewSession`; `SessionTicketStore` then ends the
+  presented session and the handler stores a new key (DEC-040). It ends it for any request to those
+  two routes, even one that then fails: a signed-in test client that posts to
+  `/api/v1/enrolment/complete` is signed out (same-origin only, SameSite=Strict), and its anti-forgery
+  token is refused once, so retry with a fresh one.
+- **Smoke-script checks run in the script's shell only when passed as a function name**
+  (`check "…" my_function`): a `bash -c "…"` string cannot see the script's functions (`api`,
+  `curl_tls`, `totp`), so the check fails with "command not found".
+- **The fallback authorization policy also applies to requests with no endpoint**: without
+  `DenyUnclassifiedEndpoints` a missing asset or a wrong method would be 401 instead of 404/405, and
+  without an explicit `UseRouting()` after `UseStaticFiles()` the static files would sit behind it.
+- **Antiforgery refuses plain HTTP** when its cookie is `Secure` (an `InvalidOperationException`, so a
+  500): in-process test clients use `https://localhost` (`GoldmarkFactory`, `GoldmarkApp`).
+- **CA1857 and `[ConstantExpected]`** are the NFR-SEC-3 gate: a `static readonly` string, a ternary of
+  two literals and a forwarded parameter without the attribute all fail; `const` strings, constant
+  concatenation and constant interpolation pass (measured, DEC-040).
+- **Identity's lockout counter is per account**; the unknown-name counter (`UnknownUserThrottle`) is in
+  memory, so a restart forgets it. Tests that need several codes for one person within 30 seconds use
+  `Authenticator.NextCodeAsync()`, which never reuses a step (Goldmark refuses a reused code).
 
 ### 5.5 The agent's sandbox (local verification)
 
@@ -386,7 +456,7 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-035, the slice-1, slice-2, slice-2b and
+- `docs/DECISIONS.md`: DEC-001…DEC-039, the slice-1, slice-2, slice-2b and
   slice-2c acceptance mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/ops/external-sql-server.md` (existing SQL Server, Mode Existing, every

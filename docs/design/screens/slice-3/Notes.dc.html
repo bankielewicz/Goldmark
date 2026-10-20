@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slice 3 screens: components, changes and notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1200px; box-sizing: border-box; padding: 48px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Slice 3 screens · components, changes and notes</h1>
+
+  <table style="border-collapse: collapse; background: #ffffff; border: 1px solid #e0e0e0">
+    <thead><tr style="text-align: left; background: #f5f5f5"><th scope="col" style="padding: 10px 12px; border-bottom: 1px solid #d1d1d1; width: 230px">Screen</th><th scope="col" style="padding: 10px 12px; border-bottom: 1px solid #d1d1d1">Fluent v9 components</th></tr></thead>
+    <tbody style="vertical-align: top">
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">1 Sign-in</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Card appearance="outline" · Title3 (h1) · Field · Input (autocomplete username / current-password / one-time-code) · Button (primary; contentAfter show/hide with aria-pressed) · Spinner (in the button) · MessageBar (error, warning, info) · Link · Divider [P1]</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">1b Accept invitation / reset</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">Card · progress as an ordered list (aria-current="step") · Badge tint subtle (roles) · Field · Input · Button · MessageBar · image (QR served by Goldmark) + Text font="monospace" · Checkbox</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">2 First-run setup</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">as 1b, plus a code block with a Copy Button for the log command</td></tr>
+      <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">17 Users &amp; roles</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">NavDrawer (sparse) · Breadcrumb · Toolbar · SearchBox · Dropdown · DataGrid sortable · Avatar · Badge tint (subtle, success, severe, informative) · Menu with disabled MenuItems + Tooltip · InlineDrawer / OverlayDrawer (below 1100 px) · Checkbox group · Dialog modalType="alert" · MessageBar · Toast · Skeleton</td></tr>
+      <tr><td style="padding: 8px 12px; font-weight: 600">Two-factor page</td><td style="padding: 8px 12px; font-family: Consolas, 'Courier New', monospace">Card appearance="outline" · Badge tint success · Button · Dialog · Field · Input · MessageBar · Checkbox · Toast · account Menu with MenuItemCheckbox (Compact density)</td></tr>
+    </tbody>
+  </table>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+    <section style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the design system</h2>
+      <p style="margin: 0">None. Every colour, type step, radius and shadow is a token from the approved system (DEC-039).</p>
+      <h2 style="margin: 8px 0 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the handoff</h2>
+      <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
+        <li><b>No Copy button on the invitation or reset code</b> (a side agent's finding): a Copy button invites pasting link and code into one chat, which defeats the separate code. The code is shown large to be read aloud; the checkbox says "I sent the link and told them the code by phone or in person".</li>
+        <li>Codes avoid look-alike characters (0/O, 1/I/L) so they can be read aloud.</li>
+        <li>Recovery-code step on sign-in links back with "Use your authenticator app instead".</li>
+        <li>The two-factor page's confirmation accepts a recovery code when the old phone is gone.</li>
+      </ol>
+    </section>
+    <section style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Notes for the build</h2>
+      <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
+        <li>The invitation and reset token is in the URL fragment (#t=…), so it never reaches a server log or a referrer; the page sends it with the code.</li>
+        <li>Failed sign-ins are counted for unknown usernames too, so "locked" never confirms that an account exists.</li>
+        <li>The QR codes on these boards are samples, not real keys. The real one is an SVG image Goldmark serves, no-store, only to the person enrolling.</li>
+        <li>Disabled actions stay focusable and explain themselves (aria-disabled + Tooltip), so keyboard users learn why.</li>
+        <li>Every action on these screens writes an audit row (DEC-038).</li>
+        <li>Sample data (fictional), *.corp.example.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

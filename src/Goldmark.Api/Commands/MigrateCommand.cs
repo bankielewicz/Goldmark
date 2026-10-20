@@ -88,15 +88,17 @@ internal static class MigrateCommand
         FROM sys.fn_my_permissions(N'dbo.SchemaVersions', N'OBJECT')
         WHERE permission_name <> N'SELECT'
         UNION ALL
-        SELECT N'permission on cmdb.AuditLog', p.name
-        FROM (VALUES (N'UPDATE'), (N'DELETE')) AS p(name)
-        WHERE HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', p.name) = 1
+        -- Append-only tables: the audit log (0002) and the setup-complete row (0003).
+        SELECT N'permission on ' + t.name, p.name
+        FROM (VALUES (N'cmdb.AuditLog'), (N'cmdb.Installation')) AS t(name)
+        CROSS JOIN (VALUES (N'UPDATE'), (N'DELETE')) AS p(name)
+        WHERE HAS_PERMS_BY_NAME(t.name, N'OBJECT', p.name) = 1
         UNION ALL
         -- A column-level GRANT overrides the table-level DENY, so check every column too.
-        SELECT N'permission on cmdb.AuditLog column', c.name COLLATE DATABASE_DEFAULT + N' UPDATE'
-        FROM sys.columns AS c
-        WHERE c.object_id = OBJECT_ID(N'cmdb.AuditLog')
-            AND HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', N'UPDATE', c.name, N'COLUMN') = 1
+        SELECT N'permission on ' + t.name + N' column', c.name COLLATE DATABASE_DEFAULT + N' UPDATE'
+        FROM (VALUES (N'cmdb.AuditLog'), (N'cmdb.Installation')) AS t(name)
+        JOIN sys.columns AS c ON c.object_id = OBJECT_ID(t.name)
+        WHERE HAS_PERMS_BY_NAME(t.name, N'OBJECT', N'UPDATE', c.name, N'COLUMN') = 1
         UNION ALL
         SELECT N'missing database role', N'goldmark_runtime' WHERE ISNULL(IS_ROLEMEMBER(N'goldmark_runtime'), 0) <> 1
         UNION ALL
@@ -104,9 +106,10 @@ internal static class MigrateCommand
         FROM (VALUES (N'SELECT'), (N'INSERT'), (N'UPDATE'), (N'DELETE')) AS p(name)
         WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb', N'SCHEMA', p.name), 0) = 0
         UNION ALL
-        SELECT N'missing permission on cmdb.AuditLog', p.name
-        FROM (VALUES (N'SELECT'), (N'INSERT')) AS p(name)
-        WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb.AuditLog', N'OBJECT', p.name), 0) = 0
+        SELECT N'missing permission on ' + t.name, p.name
+        FROM (VALUES (N'cmdb.AuditLog'), (N'cmdb.Installation')) AS t(name)
+        CROSS JOIN (VALUES (N'SELECT'), (N'INSERT')) AS p(name)
+        WHERE ISNULL(HAS_PERMS_BY_NAME(t.name, N'OBJECT', p.name), 0) = 0
         UNION ALL
         SELECT N'missing permission on dbo.SchemaVersions', N'SELECT'
         WHERE ISNULL(HAS_PERMS_BY_NAME(N'dbo.SchemaVersions', N'OBJECT', N'SELECT'), 0) = 0;

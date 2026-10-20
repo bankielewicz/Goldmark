@@ -9,9 +9,14 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup Label="Runtime">
+    <!-- Dapper: data access with SQL kept as constants (PRD §8.1, A1; DEC-038 4B). Every call goes
+         through Data/DbSession.cs, whose SQL parameters must be compile-time constants (NFR-SEC-3, DEC-040). -->
+    <PackageVersion Include="Dapper" Version="2.1.89" />
     <!-- DbUp: forward-only T-SQL migrations (PRD A1, DEC-026). Run only by the migrate command. -->
     <PackageVersion Include="dbup-sqlserver" Version="7.2.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="7.1.1" />
+    <!-- QR code for authenticator enrolment, rendered as SVG on the server (DEC-038 3A): MIT, no dependencies. -->
+    <PackageVersion Include="Net.Codecrete.QrCodeGenerator" Version="3.2.1" />
     <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
     <!-- Security override for a vulnerable transitive dependency of SqlClient (DEC-010). -->
     <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />

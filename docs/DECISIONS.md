@@ -49,6 +49,9 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-034 | Generated database credentials; `sa` disabled; tested recovery | Database |
 | DEC-035 | Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER | Database |
 | DEC-036 | Windows service distribution placed as slice 4b | Process |
+| DEC-037 | Fluent UI under the CSP: a per-response style nonce | Security |
+| DEC-038 | Slice 3: authentication decisions (audit, invitations, QR, Dapper, keys, defaults, setup token) | Security |
+| DEC-039 | Design system approved | Front end |
 
 ---
 
@@ -395,6 +398,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   and `trusted-types 'none'` before adoption, as the first step of slice 3.
   If it needs a nonce or `unsafe-inline`, that comes back for a decision, not
   a silent change.
+- **Resolved in slice 3 (DEC-037):** Fluent UI fails under `style-src 'self'` (every
+  runtime `<style>` element is blocked); the owner chose a per-response style nonce.
+  The shell's `style-src` is now `'self' 'nonce-…'`; every other response keeps the
+  policy above.
 
 ## DEC-018 CI design, and CodeQL / dependency review availability
 
@@ -1022,6 +1029,297 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   the owner when the slice starts.
 - **Not in it:** availability groups and #20, still for the owner to place (DEC-030).
 
+## DEC-037 Fluent UI under the CSP: a per-response style nonce
+
+- **Measured first (slice 3, before any screen).** A production build of a Fluent UI v9
+  sampler (`@fluentui/react-components` 9.74.9, Griffel 1.21.4), served by the real API under
+  the slice-1 policy, renders unstyled in Chrome 155: Griffel and FluentProvider create 22 empty
+  `<style>` elements and fill them through `CSSStyleSheet.insertRule`, and `style-src 'self'`
+  blocks creating them (22 `style-src-elem` violations, no sheets). Griffel then drops every rule
+  silently (`createIsomorphicStyleSheet` falls back to an SSR buffer when `sheet` is null), so the
+  check asserts computed styles, not only the absence of violations. Trusted Types caused nothing.
+  The same result with the server sending the sampler itself and with the test swapping it in.
+- **Decision (owner, 2026-10-20: 1B, 2A, after a Codex review).** Options measured:
+  - **A** the hash of the empty string in `style-src`: works, but authorises *every* empty
+    `<style>` element on the page, not only Fluent's; rejected by the owner as a known broadening
+    when a narrower supported mechanism exists;
+  - **B** a per-response nonce through Griffel's supported renderer option: **chosen**;
+  - **C** `'unsafe-inline'`: breaks NFR-SEC-2; **D** replacing Fluent: changes PRD §8.1;
+  - **E** Griffel build-time extraction plus a static theme without FluentProvider: not pursued
+    and `@griffel/vite-plugin` not added (owner). It would not remove FluentProvider's runtime
+    theme element anyway.
+- **How it works** (`Hosting/SpaShell.cs`, `Security/SecurityHeadersMiddleware.cs`, `web/src/styleNonce.ts`):
+  - every shell response (GET or HEAD on any client route) gets 256 bits from the OS CSPRNG,
+    base64url-encoded, used once;
+  - the nonce goes in `style-src` only (`style-src 'self' 'nonce-…'`); `script-src` stays `'self'`,
+    and every other response, including error pages, keeps the slice-1 policy. The middleware adds
+    it only to a 200 response that set it, and refuses anything but base64url of at least 128 bits;
+  - the shell template is the built `index.html` with `<meta property="csp-nonce"
+    nonce="__GOLDMARK_STYLE_NONCE__">`, read once; the server writes the nonce into that one
+    attribute (a template without exactly one placeholder is a 500 without a nonce; no build is a 404);
+  - the app reads it through the element's `nonce` property, never `content`; browsers hide the
+    attribute value from the DOM, so CSS selectors cannot read it. `createStyleRenderer()` passes it
+    to Griffel's `createDOMRenderer(document, { styleElementAttributes: { nonce } })` through
+    `RendererProvider`; FluentProvider stamps its theme element from the same attributes;
+  - the shell is `Cache-Control: no-store`, with no `ETag`, `Last-Modified` or `Accept-Ranges`, and
+    every conditional or range request gets a complete 200, so a body and a policy from different
+    responses can never be combined. Fingerprinted assets stay `immutable`;
+  - HTML is never served as a static file (every HTML type is removed from the static file
+    middleware's content types), so `/index.html`, case variants and Windows aliases such as 8.3
+    names cannot return the template without a nonce;
+  - the nonce is never logged or persisted: request logs carry method, path and status only, and
+    `StyleNonceFeature` is not a record, so formatting it prints no value.
+- **Tests:** in-process (`SpaHostingTests`, `SecurityHeadersTests`): a distinct nonce on 50
+  consecutive responses, header and body equal, at least 128 bits; conditional and range requests
+  (`If-None-Match`, `If-Modified-Since`, `If-Match`, `If-Unmodified-Since`, `Range` + `If-Range`)
+  get a complete matching 200 with no validators; HEAD; `/index.html`, `/INDEX.HTML`, `/index.htm`
+  and another `.html` file are 404; broken template and missing build carry no nonce; no nonce in
+  the log; nonce only in `style-src`; malformed nonces refused. Browser (`web/e2e`): the shell's
+  header and `meta.nonce` agree, the attribute reads as empty, a reload gets a new nonce, injected
+  styles and `style` attributes stay blocked (`spa.spec.ts`); the Fluent check (`fluent.spec.ts`).
+- **Fluent check** (`web/e2e/fluent-check/`): a sampler page with an in-page self-check that shows
+  PASS or FAIL in any browser: the nonce on the page and on every style element, the attribute
+  hidden, theme and component styles applied (computed values), keyframes running (a
+  `CSSAnimation` and its `@keyframes` rule), Fluent's icon font loaded through `@font-face`, the
+  theme switched after mount, menu/popover/dialog/drawer/toast portals styled and positioned, a
+  portal in a nested dark theme, a portal into a custom mount node, mirrored right-to-left rules,
+  zero violations during normal use, then positive controls: an injected style, an empty unnonced
+  style, a wrong-nonce style, a `style` attribute and a Trusted Types policy are all blocked, and a
+  style carrying the page nonce is applied. `fluent.spec.ts` adds focus trapping and focus return
+  (dialog, drawer), menu keyboard navigation, tooltip, combobox and grid sorting, and requires the
+  final violation list to be exactly the controls'. In CI the real server sends the real shell
+  (its HTML, nonce and headers) and only the shell's script is swapped for the sampler's; that is a
+  regression check, not delivery qualification. With `GOLDMARK_FLUENT_CHECK_DIRECT=1` the base URL
+  is a real server whose web root is the sampler build.
+- **Codex review findings fixed** before the gate: late violations could pass (now exact); keyframes
+  were not proved (now a running animation and its rule); focus trapping was claimed, not tested;
+  "every way" became "representative ways"; fonts, theme change after mount, nested-theme and
+  custom-mount portals, right-to-left and Drawer added.
+- **Qualification with the real server sending the sampler page (2A), 2026-10-20.** The API's Release
+  build (Production environment) with the sampler build as its web root, on the owner's WSL machine;
+  Edge and Firefox opened it from Windows by hand after the owner checked the certificate's SHA-256
+  fingerprint (`4C:6C:AA:7F:…:FD:DC:D8:F2`). All three pass, so the gate is passed (2026-10-20):
+
+  | Browser | Version | Result |
+  |---|---|---|
+  | Google Chrome (Linux, headless, Playwright) | 155.0.8059.84 | **Pass**: 12/12 self-checks, keyboard and pointer checks, exact violation list, new nonce on reload |
+  | Microsoft Edge (Windows, 64-bit) | 155.0.4283.62 | **Pass**: 12/12 self-checks; exactly the five control violations |
+  | Mozilla Firefox (Windows, 64-bit) | 158.0.1 | **Pass**: 12/12 self-checks; exactly the five control violations, so Trusted Types are enforced too |
+
+- **Not covered:** Tabster's focus-outline feature writes a `<style>` with text and no nonce
+  (`tabster` `Outline.js`); Fluent does not use it, and it would be blocked, visibly. Container
+  queries (not adopted), web fonts other than Fluent's icon font, the Reporting API, and keyboard
+  behaviour outside Chrome. The product app does not render Fluent yet; screens use
+  `createStyleRenderer()` once the design handoff is approved.
+
+## DEC-038 Slice 3: authentication decisions
+
+- **Decision (owner, 2026-10-20, asked one at a time; options and examples in the session).**
+  1. **Audit records now (1A).** Every slice-3 mutation and sign-in event writes a row to
+     `cmdb.AuditLog` and is tested for it (HANDOFF rule 7): setup completed, sign-in succeeded or
+     failed, account locked, TOTP or recovery-code failure, recovery code used, sign-out,
+     invitation created, redeemed or revoked, roles changed, account locked, unlocked, disabled or
+     enabled. Slice 4 adds the audit screen, filters, CSV export and the retention path.
+  2. **New users get an invitation link plus a separate code (2A; hardened after a side agent noted
+     that a link alone works like a password).** An admin creates the user; Goldmark shows, once, a
+     link and a short code. The admin sends the link (chat, email) and tells the person the code
+     another way (phone, in person). The link's token is random (at least 128 bits), carried in the
+     URL fragment so it never reaches a server log or a referrer, stored only as a SHA-256 hash,
+     single use, and expires after **24 hours** (a setting). The page asks for the code first; 5 wrong
+     codes invalidate the link (audited). Only then does the person set their own password, enrol
+     TOTP and get recovery codes; the admin never knows the password. **Invitations offer Editor,
+     Viewer or Auditor only**: Admin is added on screen 17 after the person has signed in (audited),
+     so a leaked invitation can never yield an Admin account. Unused links can be revoked. Goldmark
+     sends no email.
+  3. **QR code: `Net.Codecrete.QrCodeGenerator` 3.2.1 (3A, revised).** MIT, no dependencies, published
+     2026-09-07, a .NET port of Project Nayuki's QR generator. QRCoder was the first choice but failed
+     the owner's condition: on .NET 6 and later it depends on `System.Drawing.Common` 6.0.0. The server
+     renders the QR code as SVG, served only to the user being enrolled, `Cache-Control: no-store`;
+     the CSP forbids `data:` images. New NuGet dependency, approved by the owner.
+  4. **Dapper now, with the NFR-SEC-3 build gate (4B).** Moved from slice 5: the user, role, session
+     and audit queries use Dapper, and a build rule fails on string interpolation or concatenation
+     inside Dapper calls, with a test proving the rule fails. Dapper is in the PRD (A1); its version is
+     the newest that is at least 7 days old.
+  5. **Key ring as files (5A).** ASP.NET Core Data Protection keys (cookies, antiforgery, encrypted
+     TOTP secrets) live in a directory from settings. In Docker that is a volume only the app mounts,
+     with `0700`/`0600` forced like the credential files (DEC-034); no certificate wrapping, because on
+     Linux its key would sit beside them. The Windows service (4b) uses DPAPI. Backups (24) must
+     include it: losing it signs everyone out and invalidates TOTP secrets; recovery codes, stored
+     hashed, still sign users in to enrol again.
+  6. **Defaults (6A), all settings.** Passwords 12–128 characters with no composition rules (NIST SP
+     800-63B), checked against a bundled list of common passwords (ASVS L2; the list's source and
+     licence are recorded when it is added); lockout after 5 failures for 15 minutes (US-03); sessions
+     end after 30 minutes idle and 12 hours at most.
+  7. **The setup token is logged, as the one exception (7A).** While no admin exists, each start
+     generates a new random token (at least 128 bits), logs it once at Warning under its own event ID,
+     and keeps only its hash in memory. It works once and is useless after setup completes or the
+     process restarts. It is the only secret Goldmark ever logs; tests assert it is logged exactly
+     once and that `TestSecrets` still never appear.
+  8. **Admins can reset a user's two-factor (owner, A).** For a user who lost both the authenticator and
+     the recovery codes: a confirmed, audited action on screen 17 clears their TOTP secret and recovery
+     codes, signs them out everywhere, and issues a link and code exactly like an invitation's (same
+     24-hour expiry, 5-try limit, revocable) to set up again; their password is kept. Nobody can reset
+     their own two-factor this way.
+  9. **Self-service two-factor page (owner, A; small scope addition).** From the account menu, a signed-in
+     user can generate new recovery codes or move to a new authenticator, each confirmed with their
+     password and a current code. Audited.
+  10. **Collector is never given to a person (owner, A).** Screen 17 offers Admin, Editor, Viewer and
+     Auditor; the API refuses Collector on user accounts. Collector belongs to service identities with
+     API tokens (slices 8 and 13).
+- **Scope change (4B, 9):** HANDOFF §1 moves Dapper and the NFR-SEC-3 gate from slice 5 to slice 3, and
+  adds the self-service two-factor page to slice 3.
+
+## DEC-039 Design system approved
+
+- **Decision (owner, 2026-10-20, "approve as is").** The design-system canvas
+  (https://claude.ai/artifact/7xy5Ar6Ag7yKpAHYnXMdxg; files in `docs/design/system/`) is the base for
+  every screen handoff. It answers the design-system handoff (HANDOFF rule 4).
+- **What it fixes:** Fluent's `createLightTheme` / `createDarkTheme` with one muted-gold brand ramp
+  (`BrandVariants` 10–160, shade 80 `#8a5a00`) and Fluent's own token mapping; Fluent neutrals; status
+  as `Badge appearance="tint"` with icon and word: danger (Down), **severe, dark orange (Degraded:
+  yellow warning reads as the brand)**, success (OK), informative (Not seen); MessageBar with the
+  `colorStatus*` tokens; Fluent's type ramp, spacing, radii and per-component shadows; a Compact
+  density preference (Fluent size `small`); the app shell (NavDrawer inline at 1100 px and wider,
+  icon rail and overlay below; top bar with search, an As-of slot for slice 7, theme toggle, account
+  menu; skip link; Breadcrumb + h1 + Toolbar); the table, form, panel, dialog, feedback, state,
+  secret, badge and sign-in patterns; the accessibility rules.
+- **Measured:** every token value and contrast ratio was read from the installed themes and Fluent's
+  component source (a side agent caught that the first draft used remembered values). Lowest text
+  pair 4.8:1 (dark brand text and links). Slice 3 adds a unit test that recomputes the ratios from
+  the themes and fails below 4.5:1 for text and 3:1 for UI parts.
+- **Mockups:** where `docs/design/screens/` differs (colours, dark primary buttons, focus ring),
+  this system wins; each screen is redrawn in its slice's handoff.
+
+## DEC-040 Slice 3: sign-in on Identity's plug-in points, screens approved, password list
+
+- **Decision (owner, 2026-10-20, asked after "approved" for the backend; options and examples in the
+  session).**
+  1. **Identity, with its gaps patched at its plug-in points (A).** ASP.NET Core Identity's own source
+     (release/10.0) showed three gaps against ASVS L2: its authenticator provider accepts two time steps
+     either side and the same code again; `SignInManager.SignOutAsync` only clears cookies; a wrong
+     recovery code is not counted toward lockout. Goldmark keeps Identity's user manager, password
+     hasher, lockout counter and security stamps on its own Dapper tables, replaces the authenticator
+     token provider, keeps sessions on the server through the cookie handler's session store, and
+     writes the two sign-in steps itself (`SignInManager` is not used).
+  2. **The slice-3 screens canvas is approved as is (A):** version 29 of
+     https://claude.ai/artifact/Fmq9Gc7pAKZ1XMHc2zVy8k, copied to `docs/design/screens/slice-3/` after
+     checking every file against the published canvas. The UI must match it.
+  3. **Revoking an unused invitation removes the account it created (A):** the user name is free again;
+     the audit log keeps the invitation and its revocation.
+  4. **After a two-factor reset, the right password points to the link (A):** "Two-factor was reset for
+     this account. Open the link your administrator gave you." A wrong password still gets the generic
+     answer.
+  5. **The common-password list is Pwdb-Public's top 1M, 12 to 128 characters (A)** (DEC-038 item 6):
+     ignis-sec/Pwdb-Public at commit `9b53917431ed5cd57cd6cbec8c3a19cf9a5cd8dd`,
+     `wordlists/ignis-1M.txt` (SHA-256 `e9a88f67…a18c9fc8`), MIT, © 2020 Ata Hakçıl; 29,946 entries after
+     lower-casing and dropping lines that are not valid UTF-8 (ASVS 5.0 6.2.4 asks for at least the
+     3,000 most common passwords the policy allows; the 3,000th such entry is at rank 190,708). The list
+     was compiled from leaked passwords; the licence covers the compilation. Rebuilt reproducibly by
+     `tools/common-passwords/build-common-passwords.mjs`; the licence ships beside the app
+     (`common-passwords.LICENSE.txt`). Alternatives offered: the top 10M (702k entries), xato's list
+     (licence conflicted), NCSC's top 100k (1,212 entries, too few).
+  6. **The UI step is approved** (owner, "APPROVED, start the UI", after the backend's verification).
+  7. **Slice 3 routes with a small in-repo router, no new package (B).** React Router does not conflict
+     with the host (the SPA fallback hands every non-file GET path to the shell; `/api` and `/health`
+     stay server-side), but its 8.4+ releases depend on `@remix-run/route-pattern`, which the npm policy
+     bans by the `@remix-run/` prefix; 8.5.0 is also under the 7-day age until 2026-10-26. Offered: 8.4.0
+     with an exact exception to the ban, the in-repo router, or 8.3.1. Slice 5 decides React Router
+     when it needs the deep links (US-53). Client routes must not end in a segment with a dot (the
+     fallback is `:nonfile`).
+  8. **Automated axe checks: `@axe-core/playwright` 4.13.0 (A)** (owner; NFR-A11Y-3): published
+     2026-08-11, MPL-2.0, its only dependency axe-core 4.13.x, no install scripts; dev-only (the smoke
+     test's Playwright run), never in the bundle or the image. `web/e2e/auth.spec.ts` signs in as the
+     smoke test's administrator and checks sign-in, setup, an invalid link, the dashboard, Users &
+     roles, the add-user panel and the two-factor page in light and dark: no serious or critical axe
+     violation, no CSP or Trusted Types violation. The theme contrast test (DEC-039's promise) is
+     `web/tests/contrast.test.mjs`: 51 checks of the pairs the screens use, recomputed from the brand
+     ramp with Fluent's own theme functions; it caught failed-rule text in the password checklist
+     using a danger token at 4.16:1 in dark, now the palette red the boards use (5.20:1).
+  9. **Forgotten passwords: deferred, recorded (A)** (owner, 2026-10-20, review of PR #24: "A. Defer,
+     record it"). Slice 3 has no password recovery: a two-factor reset keeps the password, and the
+     PRD asks for none. Issue #25 holds both mechanisms (an administrator's reset through the link and
+     separate code; an operator-only container command for when the only administrator is locked out);
+     the owner places it in the plan. Until then the README advises keeping two administrators.
+- **How the backend implements DEC-038 and the above** (reading PRD §8.1 "ASP.NET Core Identity"):
+  - **NFR-SEC-3 gate without a new package.** Every Dapper call goes through `Data/DbSession.cs`, whose
+    SQL arguments are `[ConstantExpected]`; the SDK's CA1857 is an error under warnings-as-errors, so
+    interpolated, concatenated or variable SQL fails to build (constants, including constant
+    interpolation, pass). `SqlGateTests` keep Dapper out of every other file and CA1857 unsuppressed;
+    `tests/sql-gate/check-sql-gate.sh` (CI, .NET job) builds a fixture against the real `DbSession` and
+    expects CA1857 on exactly its five marked violations.
+  - **Passwords and lockout:** Identity's hasher (PBKDF2-HMAC-SHA512, 128-bit salt, 100,000 iterations:
+    its v3 defaults, read from its source); 12 to 128 characters, no composition rules, the bundled
+    list. Lockout after 5 failures for 15 minutes (settings), counting wrong passwords, codes and
+    recovery codes. `GoldmarkUserManager` overrides `AccessFailedAsync` and `ResetAccessFailedCountAsync`
+    with one SQL statement each (Codex, PR #24): Identity's own read the row, changed the count and wrote
+    it back under the concurrency stamp, so of concurrent failures only one was counted. A failure never
+    moves a lockout earlier, so an administrator's lock made meanwhile stands. Unknown, disabled and
+    not-yet-set-up accounts fail exactly like a wrong password, including the lockout: their failures
+    are counted in memory, keyed by a hash of the normalized name (what someone typed may be a password,
+    so it is never stored or logged), with a dummy hash computed so the time taken matches. Like an
+    account's count, they have no idle expiry (the cache runs on the app's clock); a restart, or a full
+    cache (10,000 names), can forget them, which is accepted. An automatic lockout does not end existing
+    sessions (anyone can cause one); an administrator's lock does.
+  - **Codes:** `TotpTokenProvider` (Identity's `AuthenticatorTokenProvider` slot): RFC 6238, HMAC-SHA1
+    (what authenticator apps require; CA5350 is suppressed on that one method with this reason), the
+    current step or one either side, and a step is never accepted twice (`LastTotpTimeStep`, reset to
+    the verified step when a new key is installed). Recovery codes: Identity's generator
+    (`XXXXX-XXXXX`, no look-alike characters), ten, stored as PBKDF2 hashes, each works once.
+  - **Sessions:** `SessionTicketStore` (the cookie handler's `ITicketStore`) over `cmdb.UserSession`:
+    the cookie holds a 256-bit key, the row its SHA-256 hash and the ticket encrypted with Data
+    Protection; 30 minutes idle and 12 hours at most, enforced on the server. Each request re-checks
+    the person (exists, enabled, not locked by an administrator, two-factor set up, same security stamp)
+    and reads roles fresh. Each sign-in gets a new session key and ends the one the browser presented
+    (ASVS 5.0 V7.2.4; it also defeats session fixation): the cookie handler would otherwise renew the
+    presented key, so the two endpoints that sign in (`StartsNewSession`) never continue it. A new
+    authenticator keeps the current session and ends the others (V7.4.3). The cookie handler always
+    calls the store's overloads that pass the request; they use the request's `DbSession`, so a session
+    row is written or deleted in the endpoint's transaction (Codex, PR #24): a sign-in's session commits
+    with the redeemed recovery code, the completed setup or link and their audit rows, and sign-out's
+    audit row only with the deleted session.
+  - **First-run setup:** a 160-bit token, logged once per start at Warning (event 3001, "Setup token")
+    while setup is not complete, held only as a hash; the steps are carried in the encrypted enrolment
+    cookie and nothing is written until the authenticator is proven, then one transaction creates the
+    administrator, the role, the recovery codes and the `cmdb.Installation` row. The runtime login
+    cannot change or delete that row (`DENY`, checked by `migrate`), so setup can never run again; a
+    second browser finishing at the same time gets 409.
+  - **Links (invitation, two-factor reset):** a 256-bit token in the URL fragment, stored as SHA-256; a
+    6-character code from the same 26-character alphabet, stored as SHA-256 of token and code, so it
+    cannot be tried without the token; 5 wrong codes revoke the link; 24 hours; one open link per
+    person. Both limits are settings (`LinkCodeAttempts`, `LinkExpiryHours`): an issued link carries
+    them, and the screens state the configured values (Codex, PR #24).
+  - **Deny by default:** the fallback policy's requirement (`DenyUnclassifiedEndpoints`) refuses every
+    application endpoint without a policy and lets a request that matched none through to its 404 (or
+    routing's 405). The pipeline calls `UseRouting`, `UseRateLimiter`, `UseAuthentication` and
+    `UseAuthorization` explicitly, after the security headers and static files.
+  - **Anti-forgery:** ASP.NET Core antiforgery on every state-changing `/api/v1` request (header
+    `X-Goldmark-Antiforgery`), tokens bound to the session's principal or to no one. Because signing in
+    ends the presented session, a token issued for it is refused once there; the SPA refetches the
+    token and retries once.
+  - **Rate limit:** 30 requests per minute per client address on the endpoints that take a credential
+    (`Goldmark:Auth:RequestsPerMinute`). The address is the TCP peer: forwarded headers are not
+    trusted, so behind a reverse proxy every client shares the proxy's budget (raise the setting
+    there; trusting a proxy's headers is a later, explicit setting).
+  - **Data Protection keys** (DEC-038 item 5): `PrivateKeyRingRepository` at `Goldmark:DataProtection:
+    KeyDirectory` (`/var/lib/goldmark/keys`, the `goldmark-keys` volume only the app mounts), directory
+    0700, files 0600, written atomically. Keys are not encrypted at rest, by DEC-038 5A, so Data
+    Protection logs "No XML encryptor configured" at Warning when it creates a key (every 90 days); that
+    warning is expected. An authenticator key the ring can no longer decrypt (lost, or restored without
+    the database's matching volume) makes a code fail like a wrong one, with Warning event 3003; a
+    sign-in with a recovery code then starts setting up a new authenticator at once, so one recovery
+    code is enough (Codex, PR #24). Back up and restore `goldmark-keys` together with the database.
+  - **Audit actions:** `setup.completed`, `setup.token-rejected`, `auth.sign-in.succeeded`,
+    `auth.sign-in.failed` (with the reason), `auth.account.locked-out`, `auth.recovery-code.used`,
+    `auth.signed-out`, `user.invitation.created`/`reissued`/`revoked`/`redeemed`, `user.link.code-failed`,
+    `user.link.invalidated`, `user.roles.changed` (before and after), `user.locked`/`unlocked`/
+    `disabled`/`enabled`, `user.two-factor.reset`/`reset-completed`, `account.confirmation.failed`,
+    `account.recovery-codes.regenerated`, `account.authenticator.changed`. Each is written in the same
+    transaction as the change; none holds a secret.
+  - **API answers** are Problem Details with a stable `code` the SPA maps to the boards' messages.
+- **Dependencies:** Dapper 2.1.89 (published 2026-09-23, no dependencies on net10.0) and
+  Net.Codecrete.QrCodeGenerator 3.2.1, both in DEC-038. The integration tests now also reference
+  `Microsoft.AspNetCore.Mvc.Testing`, already pinned for the in-process tests. No other package.
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -1127,3 +1425,34 @@ checks, all passing.
 | 11 | #19: the owner's effective CONTROL SERVER, honouring DENY | **Met** | DEC-035; integration: role grant + direct DENY refused, then accepted after REVOKE; nested-role owner still accepted |
 | 12 | Rule 7 (audit records, `/api/v1` parity, endpoint policies) | **Not applicable** | No application mutation, UI function or endpoint was added |
 | 13 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 3 acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine: 336 in-process tests, 178
+integration tests (SQL Server 2025), Compose smoke 94 unique checks with Playwright 7/7 inside
+(Chrome), web 48 policy tests and 56 dist and contrast tests, plus lint, typecheck and format.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | Fluent UI v9 verified under the served CSP and Trusted Types first (HANDOFF §1) | **Met** | DEC-037: per-response style nonce; real-server qualification in Chrome, Edge and Firefox; `fluent.spec.ts` in every smoke run |
+| 2 | Design-system and screen handoffs before UI code (rules 3, 4) | **Met** | DEC-039 (design system), DEC-040 (screens approved, `docs/design/screens/slice-3/`) |
+| 3 | US-02: one-time setup page protected by a setup token printed to the container log | **Met** | Event 3001 logged once per start while setup is not complete; integration `Setup_creates_the_first_administrator…`, `The_setup_token_is_logged_exactly_once…`; smoke: `docker compose logs app \| grep "Setup token"`, setup through the API |
+| 4 | US-02: the setup page is disabled permanently after use | **Met** | `cmdb.Installation` row with `DENY UPDATE, DELETE` for the runtime login (checked by `migrate`); integration: 409 after setup and after a restart, no new token; smoke: 409, no token after the app is re-created |
+| 5 | US-02: the admin enrols TOTP before reaching any other page | **Met** | Nothing is written until the authenticator code is verified; integration: no account row before verification |
+| 6 | US-03: sign-in with username, password and TOTP | **Met** | Integration `Sign_in_needs_the_password_and_then_a_code_that_works_once`; Playwright signs in with a TOTP code |
+| 7 | US-03: Identity's default hasher (PBKDF2) | **Met** | `UserManager` with Identity's `PasswordHasher` (v3: PBKDF2-HMAC-SHA512, 100,000 iterations, read from its source); integration: no password, code or key stored in clear |
+| 8 | US-03: lockout after 5 failures for 15 minutes, configurable | **Met** | `Goldmark:Auth:LockoutThreshold`, `LockoutMinutes`; integration `Five_failures_lock_an_account_and_an_unknown_name_alike` (passwords, codes and recovery codes; unknown names alike) |
+| 9 | US-03: recovery codes issued once and stored hashed | **Met** | Ten codes, PBKDF2 hashes, each works once; integration (setup, sign-in, regenerate) |
+| 10 | US-04: roles Admin, Editor, Viewer, Collector (service-only), Auditor | **Met** | `cmdb.Role`; Collector refused by the API and by a CHECK constraint; integration `Invitations_never_grant_Admin_or_Collector…` |
+| 11 | US-04 / M6: every endpoint declares a policy, endpoints without one fail closed, an automated test enumerates them | **Met** | `RequireAccess` / `AllowAnonymousByDesign`; fallback `DenyUnclassifiedEndpoints`; `EndpointInventoryTests` (inventory, 401 without credentials, 400 without anti-forgery, fallback denies everyone); `AccountAndAccessTests` (403 for a Viewer on every Admin endpoint, 401 for a password-only sign-in, 400 without the token) |
+| 12 | DEC-038: audit rows for every slice-3 mutation and sign-in event | **Met** | `AuditTrail` in the same transaction; integration asserts each action and that no row holds a secret |
+| 13 | DEC-038: invitation links with a separate code, 24 h, 5 tries, revocable, never Admin | **Met** | `UsersAndLinksTests` (code first, tries left, revoked after five, expiry, reissue, revoke removes the account) |
+| 14 | DEC-038: admin two-factor reset; self-service two-factor page | **Met** | `Locking_disabling_and_resetting_two_factor_end_the_persons_sessions`; `AccountAndAccessTests` (new codes, new authenticator keeps this session and ends the others) |
+| 15 | DEC-038: Dapper and the NFR-SEC-3 build gate | **Met** | `DbSession` with `[ConstantExpected]` (CA1857); `SqlGateTests`; `tests/sql-gate/check-sql-gate.sh` in CI |
+| 16 | DEC-038: Data Protection keys at a settings path, 0700/0600 | **Met** | `PrivateKeyRingRepository`; unit test; smoke: modes, another uid cannot read, only the app mounts `goldmark-keys` |
+| 17 | DEC-038: QR code as SVG, no-store, only to the person enrolling | **Met** | `QrCodeImage` (Net.Codecrete.QrCodeGenerator 3.2.1); unit and integration tests |
+| 18 | Server-side sessions: sign-out ends them, idle 30 min, 12 h, new key at every sign-in (owner, DEC-040) | **Met** | `SessionTicketStore`; integration: copied cookie refused after sign-out, idle and absolute expiry, planted session key ended at sign-in; smoke: copied cookie refused |
+| 19 | NFR-SEC-2: anti-forgery on cookie-authenticated mutations; SameSite; CSP | **Met** | `__Host-` cookies SameSite=Strict; `ApiAntiforgery`; M6 tests; smoke: POST without the header is 400 |
+| 20 | Rule 7: every UI function is available through `/api/v1` | **Met** | The SPA calls only `/api/v1` (`web/src/api.ts`); `docs/security/endpoint-access.md` lists every endpoint |
+| 21 | NFR-A11Y-1/3: WCAG 2.2 AA, axe checks in Playwright | **Met for slice 3's screens** | `web/e2e/auth.spec.ts`: sign-in, setup, invalid link, dashboard, Users & roles, add-user panel, two-factor page, light and dark; `web/tests/contrast.test.mjs` (51 pairs) |
+| 22 | CI green | **Not executed** | Runs on the PR |

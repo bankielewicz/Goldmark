@@ -32,6 +32,10 @@ public sealed class RuntimePermissionTests(SqlServerFixture sql)
         "TRUNCATE TABLE cmdb.AuditLog;",
         "MERGE cmdb.AuditLog AS t USING (SELECT 1 AS x) AS s ON 1 = 1 WHEN MATCHED THEN DELETE;",
         "SET IDENTITY_INSERT cmdb.AuditLog ON;",
+        // First-run setup stays done (US-02): the setup-complete row cannot change or go
+        "UPDATE cmdb.Installation SET SetupCompletedAt = SYSUTCDATETIME();",
+        "DELETE FROM cmdb.Installation;",
+        "TRUNCATE TABLE cmdb.Installation;",
         // The migration journal is read-only
         "UPDATE dbo.SchemaVersions SET ScriptName = ScriptName;",
         "INSERT INTO dbo.SchemaVersions (ScriptName, Applied) VALUES (N'Goldmark.Migrations.9999_probe.sql', SYSUTCDATETIME());",
@@ -134,7 +138,7 @@ internal static class SchemaChecks
                 ':', (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'cmdb.AuditLog') AND name = N'Probe'),
                 ':', (SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'tampered'));
             """);
-        const string expected = "9:2:0:0:0:0:0:0";
+        const string expected = "16:2:0:0:0:0:0:0";
         return state == expected ? Baseline : state;
     }
 }

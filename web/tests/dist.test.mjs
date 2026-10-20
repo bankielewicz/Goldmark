@@ -31,6 +31,12 @@ describe('production build', { skip: !existsSync(indexPath) && 'dist/ not built;
     assert.doesNotMatch(html, /data:/i, 'data: URL');
   });
 
+  it('leaves exactly one style-nonce placeholder for the server (DEC-037)', () => {
+    const metas = [...html.matchAll(/<meta property="csp-nonce" nonce="__GOLDMARK_STYLE_NONCE__"\s*\/?>/g)];
+    assert.equal(metas.length, 1, 'expected one <meta property="csp-nonce" nonce="__GOLDMARK_STYLE_NONCE__">');
+    assert.equal(html.split('__GOLDMARK_STYLE_NONCE__').length, 2, 'the placeholder appears more than once');
+  });
+
   it('emits hashed assets only under /assets', () => {
     const assets = readdirSync(join(dist, 'assets'));
     assert.ok(

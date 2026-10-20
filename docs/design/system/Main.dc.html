@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark tokens: colour</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#8a5a00}a:hover{color:#7d5200}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1560px; box-sizing: border-box; padding: 48px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 32px">
+
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Foundations</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Tokens · colour</h1>
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242; max-width: 980px">Fluent UI v9 <b>webLightTheme</b> and <b>webDarkTheme</b>, built with <code style="font-family: Consolas, 'Courier New', monospace">createLightTheme(goldmarkBrand)</code> / <code style="font-family: Consolas, 'Courier New', monospace">createDarkTheme(goldmarkBrand)</code>. The 16-shade brand ramp is the only brand input; neutrals and status colours are Fluent's own tokens. Every value on this board was read from the installed themes (@fluentui/react-components 9.74.9: createLightTheme / createDarkTheme with this ramp) and every ratio computed with the WCAG 2.x formula. Slice 3 adds a unit test that recomputes them from the themes in code and fails below 4.5:1 for text and 3:1 for UI parts.</p>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600">Brand ramp · <span style="font-family: Consolas, 'Courier New', monospace; font-size: 16px; font-weight: 400">BrandVariants</span> 10–160 (muted gold)</h2>
+    <div style="display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px">
+      <div style="height: 72px; background: #1c1200; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">10<br>#1c1200</div>
+      <div style="height: 72px; background: #2c1d00; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">20<br>#2c1d00</div>
+      <div style="height: 72px; background: #3d2800; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">30<br>#3d2800</div>
+      <div style="height: 72px; background: #4e3300; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">40<br>#4e3300</div>
+      <div style="height: 72px; background: #5f3f00; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">50<br>#5f3f00</div>
+      <div style="height: 72px; background: #704a00; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">60<br>#704a00</div>
+      <div style="height: 72px; background: #7d5200; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px; outline: 2px solid #242424; outline-offset: 2px">70<br>#7d5200</div>
+      <div style="height: 72px; background: #8a5a00; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px; outline: 2px solid #242424; outline-offset: 2px">80<br>#8a5a00</div>
+      <div style="height: 72px; background: #a06c08; color: #ffffff; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">90<br>#a06c08</div>
+      <div style="height: 72px; background: #c28a2a; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px; outline: 2px solid #242424; outline-offset: 2px">100<br>#c28a2a</div>
+      <div style="height: 72px; background: #d39c3e; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">110<br>#d39c3e</div>
+      <div style="height: 72px; background: #e6b450; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">120<br>#e6b450</div>
+      <div style="height: 72px; background: #edc26e; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">130<br>#edc26e</div>
+      <div style="height: 72px; background: #f3d08f; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">140<br>#f3d08f</div>
+      <div style="height: 72px; background: #f8dfb2; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px">150<br>#f8dfb2</div>
+      <div style="height: 72px; background: #fcefd8; color: #242424; padding: 8px; box-sizing: border-box; font-size: 12px; line-height: 16px; border-radius: 4px; border: 1px solid #e0e0e0">160<br>#fcefd8</div>
+    </div>
+    <p style="margin: 0; font-size: 12px; line-height: 16px; color: #616161">Outlined: the shades the themes use for text and controls. Shade 80 is the mockups' light accent (#8a5a00); shade 120 is the mockups' dark accent (#e6b450), now used only for large decorative brand areas, because Fluent's dark mapping takes text from shades 100–110.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600">Brand tokens in use (Fluent's default mapping, unchanged)</h2>
+    <table style="border-collapse: collapse; font-size: 14px; line-height: 20px; background: #ffffff; border: 1px solid #e0e0e0">
+      <thead>
+        <tr style="text-align: left; background: #f5f5f5">
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Token</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Light</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Dark</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Used for</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Contrast (light / dark)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandBackground</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">80 · #8a5a00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">70 · #7d5200</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Primary button, progress</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">white text 5.9:1 / 6.8:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandBackgroundHover</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">70 · #7d5200</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">80 · #8a5a00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Primary hover</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">white text 6.8:1 / 5.9:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandBackgroundPressed</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">40 · #4e3300</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">40 · #4e3300</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Primary pressed</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">white text 11.7:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandForeground1</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">80 · #8a5a00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">100 · #c28a2a</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Selected tab text, brand icons</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">on bg1 5.9:1 / 4.8:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandForeground2</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">70 · #7d5200</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">110 · #d39c3e</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Brand text on hover</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">on bg1 6.8:1 / 5.9:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandForegroundLink</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">70 · #7d5200</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">100 · #c28a2a</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Links (also underlined)</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">on bg1 6.8:1 / 4.8:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorCompoundBrandStroke</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">80 · #8a5a00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">100 · #c28a2a</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Selected tab underline, focused input underline, nav selection bar</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">UI component 5.9:1 / 4.8:1 (≥ 3:1)</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorCompoundBrandBackground</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">80 · #8a5a00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">100 · #c28a2a</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Checked checkbox, switch on (checkmark: colorNeutralForegroundInverted)</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">vs bg1 5.9:1 / 4.8:1 · checkmark 5.9:1 / 5.2:1</td></tr>
+        <tr><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0; font-family: Consolas, 'Courier New', monospace">colorBrandBackground2</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">160 · #fcefd8</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">20 · #2c1d00</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">Subtle selected background (nav item, selected row)</td><td style="padding: 8px 12px; border-bottom: 1px solid #f0f0f0">brand text on it 5.2:1 / 5.4:1</td></tr>
+        <tr><td style="padding: 8px 12px; font-family: Consolas, 'Courier New', monospace">colorStrokeFocus2 / Focus1</td><td style="padding: 8px 12px">#000000 / #ffffff</td><td style="padding: 8px 12px">#ffffff / #000000</td><td style="padding: 8px 12px">Focus ring: never brand-coloured, so it shows on gold buttons</td><td style="padding: 8px 12px">against bg1 21:1 / 14.6:1; against a primary button 3.5:1 / 6.8:1</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600">Status · always icon + text, never colour alone</h2>
+    <table style="border-collapse: collapse; font-size: 14px; line-height: 20px; background: #ffffff; border: 1px solid #e0e0e0">
+      <thead>
+        <tr style="text-align: left; background: #f5f5f5">
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1; width: 150px">Status</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1">Fluent Badge and the tokens it renders with (measured)</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1; width: 200px">Light</th>
+          <th scope="col" style="padding: 10px 12px; font-weight: 600; border-bottom: 1px solid #d1d1d1; width: 200px; background: #292929; color: #ffffff">Dark</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">Down</td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" color="danger"</span><br><span style="font-family: Consolas, 'Courier New', monospace">colorPaletteRed Foreground1 · Background1 · Border1, icon ErrorCircle</span><br><span style="color: #616161">Light #bc2f32 on #fdf6f6: 5.5:1 · Dark #e37d80 on #3f1011: 5.8:1 (5.2:1 on the dark page)</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #f1bbbc; background: #fdf6f6; color: #bc2f32; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>Down</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #3d3d3d; background: #292929"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #d13438; background: #3f1011; color: #e37d80; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>Down</span></td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">Degraded</td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" color="severe"</span><br><span style="font-family: Consolas, 'Courier New', monospace">colorPaletteDarkOrange Foreground1 · Background1 · Border1, icon Warning</span><br><span style="color: #616161">Light #c43501 on #fdf6f3: 5.1:1 · Dark #e9835e on #411200: 6.0:1. Not color="warning": Fluent's warning badge is yellow (#817400, 4.7:1) and reads as the gold brand; marigold text (#d39300) is only 2.6:1.</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #f4bfab; background: #fdf6f3; color: #c43501; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.8L14.6 13.5H1.4Z"></path><path d="M8 6v3.5M8 11.3v.2"></path></svg>Degraded</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #3d3d3d; background: #292929"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #da3b01; background: #411200; color: #e9835e; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.8L14.6 13.5H1.4Z"></path><path d="M8 6v3.5M8 11.3v.2"></path></svg>Degraded</span></td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; font-weight: 600">OK / Active</td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" color="success"</span><br><span style="font-family: Consolas, 'Courier New', monospace">colorPaletteGreen Foreground1 · Background1 · Border1, icon CheckmarkCircle</span><br><span style="color: #616161">Light #0e700e on #f1faf1: 5.9:1 · Dark #54b054 on #052505: 6.1:1</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #f0f0f0; "><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #9fd89f; background: #f1faf1; color: #0e700e; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>Healthy</span></td>
+          <td style="padding: 12px; border-bottom: 1px solid #3d3d3d; background: #292929"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #107c10; background: #052505; color: #54b054; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>Healthy</span></td>
+        </tr>
+        <tr>
+          <td style="padding: 12px; font-weight: 600">Not seen / Unknown / Stale</td>
+          <td style="padding: 12px; "><span style="font-family: Consolas, 'Courier New', monospace">Badge appearance="tint" color="informative"</span><br><span style="font-family: Consolas, 'Courier New', monospace">colorNeutralForeground3 · colorNeutralBackground4 · colorNeutralStroke2, icons Clock / QuestionCircle</span><br><span style="color: #616161">Light #616161 on #f0f0f0: 5.4:1 · Dark #adadad on #0a0a0a: 8.8:1</span></td>
+          <td style="padding: 12px; "><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #e0e0e0; background: #f0f0f0; color: #616161; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>Not seen</span></td>
+          <td style="padding: 12px; background: #292929"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid #525252; background: #0a0a0a; color: #adadad; font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>Not seen</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <p style="margin: 0; font-size: 12px; line-height: 16px; color: #616161">MessageBar uses the colorStatus* tokens instead: neutral text on the status background (14:1 or more) and a status-coloured icon (colorStatusDangerForeground1, colorStatusWarningForeground3, colorStatusSuccessForeground1; 4.9:1 or more on their backgrounds). colorStatusDangerForeground1 on the plain dark page is only 4.2:1, so it is never used for text outside a MessageBar. Field validation text uses colorPaletteRedForeground1 (5.9:1 / 5.2:1 on the page).</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 26px; font-weight: 600">Neutrals · Fluent defaults, no custom greys</h2>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+      <div style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; font-size: 13px; line-height: 18px">
+        <div style="grid-column: span 2; font-weight: 600; font-size: 14px">Light</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #ffffff; border: 1px solid #d1d1d1; margin-right: 6px"></span>Background1 #ffffff · page, cards</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #242424; margin-right: 6px"></span>Foreground1 #242424 · 15.5:1</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #fafafa; border: 1px solid #d1d1d1; margin-right: 6px"></span>Background2 #fafafa · nav, top bar</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #424242; margin-right: 6px"></span>Foreground2 #424242 · 10.1:1</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #f5f5f5; border: 1px solid #d1d1d1; margin-right: 6px"></span>Background3 #f5f5f5 · app ground</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #616161; margin-right: 6px"></span>Foreground3 #616161 · 6.2:1 (meta text)</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #d1d1d1; margin-right: 6px"></span>Stroke1 #d1d1d1 · dividers only (1.5:1)</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #616161; margin-right: 6px"></span>StrokeAccessible #616161 · input underline 6.2:1</div>
+      </div>
+      <div style="background: #292929; color: #ffffff; border: 1px solid #525252; border-radius: 6px; padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; font-size: 13px; line-height: 18px">
+        <div style="grid-column: span 2; font-weight: 600; font-size: 14px">Dark</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #292929; border: 1px solid #666666; margin-right: 6px"></span>Background1 #292929 · page, cards</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #ffffff; margin-right: 6px"></span>Foreground1 #ffffff · 14.6:1</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #1f1f1f; border: 1px solid #666666; margin-right: 6px"></span>Background2 #1f1f1f · nav, top bar</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #d6d6d6; margin-right: 6px"></span>Foreground2 #d6d6d6 · 10.0:1</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #141414; border: 1px solid #666666; margin-right: 6px"></span>Background3 #141414 · app ground</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #adadad; margin-right: 6px"></span>Foreground3 #adadad · 6.5:1 (meta text)</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #666666; margin-right: 6px"></span>Stroke1 #666666 · dividers only (2.5:1)</div>
+        <div><span style="display: inline-block; width: 14px; height: 14px; vertical-align: -2px; background: #adadad; margin-right: 6px"></span>StrokeAccessible #adadad · input underline 6.5:1</div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

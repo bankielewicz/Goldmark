@@ -12,8 +12,6 @@ public sealed class SecurityHeadersTests(GoldmarkFactory factory) : IClassFixtur
 {
     public static TheoryData<string> Paths => new()
     {
-        "/",
-        "/ci/0190a7b2-0000-7000-8000-000000000000",
         "/assets/index-abc12345.js",
         "/health/live",
         "/health/ready",
@@ -39,6 +37,44 @@ public sealed class SecurityHeadersTests(GoldmarkFactory factory) : IClassFixtur
         Assert.Equal(SecurityHeadersMiddleware.PermissionsPolicy, Single(headers, "Permissions-Policy"));
         Assert.False(headers.Contains("Server"));
     }
+
+    [Theory]
+    [InlineData("/")]
+    [InlineData("/ci/0190a7b2-0000-7000-8000-000000000000")]
+    public async Task The_SPA_shell_carries_the_same_headers_with_its_style_nonce(string path)
+    {
+        using var client = factory.CreateClient();
+
+        using var response = await client.GetAsync(new Uri(path, UriKind.Relative), TestContext.Current.CancellationToken);
+
+        SpaHostingTests.HeaderNonce(response);
+        Assert.Equal("nosniff", Single(response.Headers, "X-Content-Type-Options"));
+        Assert.Equal("DENY", Single(response.Headers, "X-Frame-Options"));
+        Assert.Equal(SecurityHeadersMiddleware.PermissionsPolicy, Single(response.Headers, "Permissions-Policy"));
+    }
+
+    [Fact]
+    public void The_style_nonce_is_added_to_style_src_only()
+    {
+        const string nonce = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        var directives = SecurityHeadersMiddleware.ContentSecurityPolicyWithStyleNonce(nonce).Split("; ");
+        var unchanged = SecurityHeadersMiddleware.ContentSecurityPolicy.Split("; ");
+
+        Assert.Equal(unchanged.Length, directives.Length);
+        for (var i = 0; i < directives.Length; i++)
+        {
+            Assert.Equal(unchanged[i].StartsWith("style-src ", StringComparison.Ordinal) ? $"style-src 'self' 'nonce-{nonce}'" : unchanged[i], directives[i]);
+        }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("tooShort123")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAA'; script-src *")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAA AAAA")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAA\r\nSet-Cookie: x")]
+    public void A_malformed_nonce_is_refused(string nonce) =>
+        Assert.Throws<ArgumentException>(() => SecurityHeadersMiddleware.ContentSecurityPolicyWithStyleNonce(nonce));
 
     [Fact]
     public void Content_security_policy_meets_NFR_SEC_2()

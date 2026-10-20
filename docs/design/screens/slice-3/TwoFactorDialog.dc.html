@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark two-factor dialog</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div role="dialog" aria-modal="true" aria-labelledby="tfd-title-{{uid}}" style="width: 100%; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+    <h2 id="tfd-title-{{uid}}" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">{{title}}</h2>
+
+    <sc-if value="{{locked}}" hint-placeholder-val="{{false}}">
+      <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span>Too many wrong tries. Your account is locked for 15 minutes; you stay signed in.</span></div>
+    </sc-if>
+
+    <sc-if value="{{isConfirm}}" hint-placeholder-val="{{true}}">
+      <p style="margin: 0">{{confirmText}}</p>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="tfd-pw-{{uid}}" style="font-weight: 600">Password</label>
+        <input id="tfd-pw-{{uid}}" type="password" autocomplete="current-password" value="sample-password" readonly="{{locked}}" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="tfd-code-{{uid}}" style="font-weight: 600">Current 6-digit code</label>
+        <input id="tfd-code-{{uid}}" inputmode="numeric" autocomplete="one-time-code" maxlength="6" value="{{codeValue}}" aria-invalid="{{codeInvalid}}" readonly="{{locked}}" style="{{codeStyle}}">
+        <sc-if value="{{codeInvalid}}" hint-placeholder-val="{{false}}"><span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>That code didn't work, or the password is wrong.</span></sc-if>
+        <sc-if value="{{allowRecovery}}" hint-placeholder-val="{{false}}"><a href="#" style="color: var(--blink); font-size: 12px; line-height: 16px">Lost the old phone? Use a recovery code instead</a></sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isCodes}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span><b>Shown only once.</b> Your old codes no longer work.</span></div>
+      <ul aria-label="Recovery codes" style="margin: 0; padding: 12px 16px; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 24px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px; font-family: Consolas, 'Courier New', monospace; font-size: 16px; line-height: 22px; font-weight: 600; letter-spacing: 0.04em">
+        <sc-for list="{{codes}}" as="c" hint-placeholder-count="10"><li>{{c}}</li></sc-for>
+      </ul>
+      <div style="display: flex; gap: 8px"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Copy all</button><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Download .txt</button></div>
+      <label style="display: flex; align-items: center; gap: 8px"><input type="checkbox" style="width: 16px; height: 16px; accent-color: var(--cbrand)">I have stored these codes safely</label>
+    </sc-if>
+
+    <sc-if value="{{isNewAuth}}" hint-placeholder-val="{{false}}">
+      <p style="margin: 0">Scan with the new app, or enter the key. The old authenticator stops working once you verify.</p>
+      <div style="display: flex; gap: 16px; align-items: flex-start">
+        <svg role="img" aria-label="QR code for your new authenticator (sample, not a real key)" width="184" height="184" viewBox="-2 -2 29 29" style="flex: none; background: #ffffff; border: 1px solid var(--st2); border-radius: 4px"><path d="{{qrFinders}}" fill="#000000" fill-rule="evenodd"></path><path d="{{qrModules}}" fill="#000000"></path></svg>
+        <div style="display: flex; flex-direction: column; gap: 8px"><span style="font-weight: 600">Key</span><span style="font-family: Consolas, 'Courier New', monospace; font-size: 15px; line-height: 22px; letter-spacing: 0.06em">SAMP LENE WKEY 2PHN XQ4T</span><button type="button" style="align-self: flex-start; height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Copy key</button></div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="tfd-new-{{uid}}" style="font-weight: 600">6-digit code from the new app</label>
+        <input id="tfd-new-{{uid}}" inputmode="numeric" autocomplete="one-time-code" maxlength="6" style="width: 160px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font-family: Consolas, 'Courier New', monospace; font-size: 16px; letter-spacing: 0.1em">
+      </div>
+    </sc-if>
+
+    <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px">
+      <sc-if value="{{showCancel}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button></sc-if>
+      <button type="button" disabled="{{primaryDisabled}}" style="{{primaryStyle}}">{{primaryLabel}}</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"kind":{"editor":"enum","options":["confirmCodes","newCodes","confirmAuth","newAuth"],"default":"confirmCodes"},"state":{"editor":"enum","options":["none","wrongCode","locked"],"default":"none"},"$preview":{"width":480,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--blink:#7d5200;--cbrand:#8a5a00;--rdfg:#bc2f32;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--blink:#c28a2a;--cbrand:#c28a2a;--rdfg:#e37d80;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    const kind = this.props.kind ?? 'confirmCodes';
+    const state = this.props.state ?? 'none';
+    const locked = state === 'locked';
+    const bad = state === 'wrongCode';
+    const confirm = kind === 'confirmCodes' || kind === 'confirmAuth';
+    const N = 25;
+    let seed = 4242;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const finder = (x, y) => 'M' + x + ' ' + y + 'h7v7h-7zM' + (x + 1) + ' ' + (y + 1) + 'v5h5v-5zM' + (x + 2) + ' ' + (y + 2) + 'h3v3h-3z';
+    let modules = '';
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const inFinder = (x < 8 && y < 8) || (x >= N - 8 && y < 8) || (x < 8 && y >= N - 8);
+      if (!inFinder && rnd() < 0.48) modules += 'M' + x + ' ' + y + 'h1v1h-1z';
+    }
+    const primary = 'height: 32px; padding: 0 16px; border-radius: 4px; font: inherit; font-weight: 600; ';
+    const off = kind === 'newCodes' || locked;
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: 480px; box-sizing: border-box; color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      uid: (dark ? 'd' : 'l') + kind + state,
+      title: { confirmCodes: 'Generate new recovery codes', newCodes: 'Your new recovery codes', confirmAuth: 'Set up a new authenticator', newAuth: 'Scan with your new authenticator' }[kind],
+      locked,
+      isConfirm: confirm,
+      confirmText: kind === 'confirmCodes' ? 'Confirm it’s you. Your 7 remaining codes stop working.' : 'Confirm it’s you with your password and a code from your current app.',
+      allowRecovery: kind === 'confirmAuth',
+      codeValue: bad ? '102938' : '',
+      codeInvalid: bad,
+      codeStyle: 'width: 160px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font-family: Consolas, \'Courier New\', monospace; font-size: 16px; letter-spacing: 0.1em; border-bottom: ' + (bad ? '2px solid var(--rdfg)' : '1px solid var(--stacc)'),
+      isCodes: kind === 'newCodes',
+      codes: ['H3KD-7QPW', 'M8XT-2RLC', 'V5NB-9GZF', 'C2WJ-6TYK', 'Q7RS-4MDB', 'Z9FH-3XCN', 'K4PV-8JWT', 'F6LQ-1BRS', 'T2GM-5ZHX', 'W8CD-7NKP'],
+      isNewAuth: kind === 'newAuth',
+      qrFinders: finder(0, 0) + finder(N - 7, 0) + finder(0, N - 7),
+      qrModules: modules,
+      showCancel: kind !== 'newCodes',
+      primaryLabel: { confirmCodes: 'Generate', newCodes: 'Done', confirmAuth: 'Continue', newAuth: 'Verify' }[kind],
+      primaryDisabled: off,
+      primaryStyle: primary + (off ? 'border: 1px solid var(--st2); background: var(--bg2); color: var(--fgdis)' : 'border: none; background: var(--brand); color: #ffffff')
+    };
+  }
+}
+</script>
+</body>
+</html>

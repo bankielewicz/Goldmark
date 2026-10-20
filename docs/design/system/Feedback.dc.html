@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark pattern: feedback</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#7d5200}a:hover{color:#704a00}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1100px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap">
+    <div style="display: flex; flex-direction: column; gap: 6px; flex: 1">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark design system · Pattern</div>
+      <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Feedback</h1>
+      <p style="margin: 0; font-size: 14px; line-height: 20px; color: #424242">MessageBar for page-level conditions; Toast for completed actions; inline text next to the control for small saves. Errors never show stack traces; each carries a copyable reference ID (the request's trace ID).</p>
+    </div>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap; font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 16px">
+      <span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">MessageBar</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">MessageBarActions</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Toaster bottom-end</span><span style="padding: 2px 6px; border-radius: 4px; background: #e6f2f2; color: #05555a; border: 1px solid #9fcfd1">Toast</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; flex: 1; min-height: 0">
+    <sc-for list="{{themes}}" as="t" hint-placeholder-count="2">
+      <section aria-label="{{t.name}}" style="{{t.vars}} position: relative; background: var(--bg3); color: var(--fg1); border-radius: 8px; padding: 20px 24px; display: flex; flex-direction: column; gap: 14px; font-size: 14px; line-height: 20px">
+        <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{t.name}}</div>
+        <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 7.2v4M8 4.8v.2"></path></svg>
+            <span style="flex: 1">Viewing the quickstart sample data. Import a CSV to replace it.</span>
+            <button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Import CSV</button>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4Z"></path><path d="M8 6v3.5M8 11.3v.2"></path></svg>
+            <span style="flex: 1"><b>vCenter vc02 is stale.</b> Its last run finished 3 days ago; values from it may be out of date.</span>
+            <button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">View source</button>
+          </div>
+          <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span><b>Couldn't save your changes.</b> The server didn't answer in time; nothing was changed.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">0af7651916cd43dd8448eb211c80319c</span> <button type="button" style="height: 24px; padding: 0 6px; border: none; border-radius: 4px; background: transparent; color: var(--blink); font: inherit; font-size: 12px; text-decoration: underline">Copy</button></span></div>
+            <button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button>
+          </div>
+          <div role="status" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbok); border: 1px solid var(--mbokbd); border-radius: 4px">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>
+            <span style="flex: 1"><b>Import finished.</b> 1,204 CIs created, 37 updated, 3 sent to the review queue.</span>
+          </div>
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Neutral text on the status background; only the icon takes the status colour.</span>
+        </div>
+
+        <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Inline success, next to the control</div>
+          <div style="display: flex; align-items: center; gap: 12px">
+            <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Save owner</button>
+            <span role="status" style="display: inline-flex; align-items: center; gap: 4px; color: var(--gnfg)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>Saved at 14:02</span>
+          </div>
+          <div style="font-size: 12px; line-height: 16px; color: var(--fg3)">Live regions (polite): "Search finished, 42 results" · "Import finished" · "Saved". Errors use role="alert" and move focus to the MessageBar.</div>
+        </div>
+
+        <div style="flex: 1"></div>
+        <div style="align-self: flex-end; display: flex; flex-direction: column; gap: 8px; width: 340px">
+          <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Toaster · bottom-end · polite</div>
+          <div role="status" style="background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); padding: 12px; display: flex; gap: 10px; align-items: flex-start">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>
+            <div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b>User added</b><span style="color: var(--fg2)">Sam Rivera was added as an Editor.</span></div>
+            <button type="button" aria-label="Dismiss" style="width: 24px; height: 24px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)">✕</button>
+          </div>
+          <div role="status" style="background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); padding: 12px; display: flex; gap: 10px; align-items: center">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none"><circle cx="8" cy="8" r="6.5"></circle><path d="M5 8.2l2 2 4-4.4"></path></svg>
+            <b style="flex: 1">Copied to clipboard</b>
+          </div>
+        </div>
+      </section>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg3:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--brand:#8a5a00;--blink:#7d5200;--gnfg:#0e700e;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbok:#f1faf1;--mbokbd:#9fd89f;--mboki:#0e700e;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--bg3:#141414;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--brand:#7d5200;--blink:#c28a2a;--gnfg:#54b054;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbok:#052505;--mbokbd:#107c10;--mboki:#54b054;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);';
+    return {
+      themes: [
+        { name: 'Light', vars: LIGHT },
+        { name: 'Dark', vars: DARK }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
