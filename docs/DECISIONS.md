@@ -49,6 +49,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-034 | Generated database credentials; `sa` disabled; tested recovery | Database |
 | DEC-035 | Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER | Database |
 | DEC-036 | Windows service distribution placed as slice 4b | Process |
+| DEC-037 | Fluent UI under the CSP: a per-response style nonce | Security |
 
 ---
 
@@ -395,6 +396,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   and `trusted-types 'none'` before adoption, as the first step of slice 3.
   If it needs a nonce or `unsafe-inline`, that comes back for a decision, not
   a silent change.
+- **Resolved in slice 3 (DEC-037):** Fluent UI fails under `style-src 'self'` (every
+  runtime `<style>` element is blocked); the owner chose a per-response style nonce.
+  The shell's `style-src` is now `'self' 'nonce-…'`; every other response keeps the
+  policy above.
 
 ## DEC-018 CI design, and CodeQL / dependency review availability
 
@@ -1021,6 +1026,90 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   `rotate-db-credentials` command (DEC-034, 3A); a Windows CI job. Its "done when" is set by
   the owner when the slice starts.
 - **Not in it:** availability groups and #20, still for the owner to place (DEC-030).
+
+## DEC-037 Fluent UI under the CSP: a per-response style nonce
+
+- **Measured first (slice 3, before any screen).** A production build of a Fluent UI v9
+  sampler (`@fluentui/react-components` 9.74.9, Griffel 1.21.4), served by the real API under
+  the slice-1 policy, renders unstyled in Chrome 155: Griffel and FluentProvider create 22 empty
+  `<style>` elements and fill them through `CSSStyleSheet.insertRule`, and `style-src 'self'`
+  blocks creating them (22 `style-src-elem` violations, no sheets). Griffel then drops every rule
+  silently (`createIsomorphicStyleSheet` falls back to an SSR buffer when `sheet` is null), so the
+  check asserts computed styles, not only the absence of violations. Trusted Types caused nothing.
+  The same result with the server sending the sampler itself and with the test swapping it in.
+- **Decision (owner, 2026-10-20: 1B, 2A, after a Codex review).** Options measured:
+  - **A** the hash of the empty string in `style-src`: works, but authorises *every* empty
+    `<style>` element on the page, not only Fluent's; rejected by the owner as a known broadening
+    when a narrower supported mechanism exists;
+  - **B** a per-response nonce through Griffel's supported renderer option: **chosen**;
+  - **C** `'unsafe-inline'`: breaks NFR-SEC-2; **D** replacing Fluent: changes PRD §8.1;
+  - **E** Griffel build-time extraction plus a static theme without FluentProvider: not pursued
+    and `@griffel/vite-plugin` not added (owner). It would not remove FluentProvider's runtime
+    theme element anyway.
+- **How it works** (`Hosting/SpaShell.cs`, `Security/SecurityHeadersMiddleware.cs`, `web/src/styleNonce.ts`):
+  - every shell response (GET or HEAD on any client route) gets 256 bits from the OS CSPRNG,
+    base64url-encoded, used once;
+  - the nonce goes in `style-src` only (`style-src 'self' 'nonce-…'`); `script-src` stays `'self'`,
+    and every other response, including error pages, keeps the slice-1 policy. The middleware adds
+    it only to a 200 response that set it, and refuses anything but base64url of at least 128 bits;
+  - the shell template is the built `index.html` with `<meta property="csp-nonce"
+    nonce="__GOLDMARK_STYLE_NONCE__">`, read once; the server writes the nonce into that one
+    attribute (a template without exactly one placeholder is a 500 without a nonce; no build is a 404);
+  - the app reads it through the element's `nonce` property, never `content`; browsers hide the
+    attribute value from the DOM, so CSS selectors cannot read it. `createStyleRenderer()` passes it
+    to Griffel's `createDOMRenderer(document, { styleElementAttributes: { nonce } })` through
+    `RendererProvider`; FluentProvider stamps its theme element from the same attributes;
+  - the shell is `Cache-Control: no-store`, with no `ETag`, `Last-Modified` or `Accept-Ranges`, and
+    every conditional or range request gets a complete 200, so a body and a policy from different
+    responses can never be combined. Fingerprinted assets stay `immutable`;
+  - HTML is never served as a static file (every HTML type is removed from the static file
+    middleware's content types), so `/index.html`, case variants and Windows aliases such as 8.3
+    names cannot return the template without a nonce;
+  - the nonce is never logged or persisted: request logs carry method, path and status only, and
+    `StyleNonceFeature` is not a record, so formatting it prints no value.
+- **Tests:** in-process (`SpaHostingTests`, `SecurityHeadersTests`): a distinct nonce on 50
+  consecutive responses, header and body equal, at least 128 bits; conditional and range requests
+  (`If-None-Match`, `If-Modified-Since`, `If-Match`, `If-Unmodified-Since`, `Range` + `If-Range`)
+  get a complete matching 200 with no validators; HEAD; `/index.html`, `/INDEX.HTML`, `/index.htm`
+  and another `.html` file are 404; broken template and missing build carry no nonce; no nonce in
+  the log; nonce only in `style-src`; malformed nonces refused. Browser (`web/e2e`): the shell's
+  header and `meta.nonce` agree, the attribute reads as empty, a reload gets a new nonce, injected
+  styles and `style` attributes stay blocked (`spa.spec.ts`); the Fluent check (`fluent.spec.ts`).
+- **Fluent check** (`web/e2e/fluent-check/`): a sampler page with an in-page self-check that shows
+  PASS or FAIL in any browser: the nonce on the page and on every style element, the attribute
+  hidden, theme and component styles applied (computed values), keyframes running (a
+  `CSSAnimation` and its `@keyframes` rule), Fluent's icon font loaded through `@font-face`, the
+  theme switched after mount, menu/popover/dialog/drawer/toast portals styled and positioned, a
+  portal in a nested dark theme, a portal into a custom mount node, mirrored right-to-left rules,
+  zero violations during normal use, then positive controls: an injected style, an empty unnonced
+  style, a wrong-nonce style, a `style` attribute and a Trusted Types policy are all blocked, and a
+  style carrying the page nonce is applied. `fluent.spec.ts` adds focus trapping and focus return
+  (dialog, drawer), menu keyboard navigation, tooltip, combobox and grid sorting, and requires the
+  final violation list to be exactly the controls'. In CI the real server sends the real shell
+  (its HTML, nonce and headers) and only the shell's script is swapped for the sampler's; that is a
+  regression check, not delivery qualification. With `GOLDMARK_FLUENT_CHECK_DIRECT=1` the base URL
+  is a real server whose web root is the sampler build.
+- **Codex review findings fixed** before the gate: late violations could pass (now exact); keyframes
+  were not proved (now a running animation and its rule); focus trapping was claimed, not tested;
+  "every way" became "representative ways"; fonts, theme change after mount, nested-theme and
+  custom-mount portals, right-to-left and Drawer added.
+- **Qualification with the real server sending the sampler page (2A), 2026-10-20.** The API's Release
+  build (Production environment) with the sampler build as its web root, on the owner's WSL machine;
+  Edge and Firefox opened it from Windows by hand after the owner checked the certificate's SHA-256
+  fingerprint (`4C:6C:AA:7F:…:FD:DC:D8:F2`). All three pass. The gate is recorded as passed once
+  Firefox's exact version (Help → About Firefox) replaces the user-agent value below:
+
+  | Browser | Version | Result |
+  |---|---|---|
+  | Google Chrome (Linux, headless, Playwright) | 155.0.8059.84 | **Pass**: 12/12 self-checks, keyboard and pointer checks, exact violation list, new nonce on reload |
+  | Microsoft Edge (Windows, 64-bit) | 155.0.4283.62 | **Pass**: 12/12 self-checks; exactly the five control violations |
+  | Mozilla Firefox (Windows, 64-bit) | 158.0 per its user agent; exact version pending from the owner | **Pass**: 12/12 self-checks; exactly the five control violations, so Trusted Types are enforced too |
+
+- **Not covered:** Tabster's focus-outline feature writes a `<style>` with text and no nonce
+  (`tabster` `Outline.js`); Fluent does not use it, and it would be blocked, visibly. Container
+  queries (not adopted), web fonts other than Fluent's icon font, the Reporting API, and keyboard
+  behaviour outside Chrome. The product app does not render Fluent yet; screens use
+  `createStyleRenderer()` once the design handoff is approved.
 
 ---
 

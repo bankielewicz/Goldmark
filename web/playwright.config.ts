@@ -12,6 +12,8 @@ if (!baseURL || !spki) {
 
 export default defineConfig({
   testDir: 'e2e',
+  // Builds the Fluent UI sampler for fluent.spec.ts (never part of web/dist).
+  globalSetup: './e2e/fluent-check/build.ts',
   forbidOnly: true,
   retries: 0,
   workers: 1,

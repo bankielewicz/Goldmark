@@ -5,9 +5,10 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
-are merged, with the handoff and docs PRs #11, #13, #16 and #21. Next: **slice 3**
-(Fluent UI check first, then auth); notes in §3. The owner placed the Windows
+**As of 2026-10-20:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
+are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23. **Slice 3** is in
+progress: Fluent UI failed under the CSP and the owner chose a per-response style nonce
+(DEC-037); notes in §3. The owner placed the Windows
 service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
 the first distribution, not the target deployment (DEC-030, rule 8).
 
@@ -24,7 +25,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
-| 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
+| 3 | **in progress** | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
@@ -103,7 +104,10 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    - ask before adding a dependency the PRD didn't anticipate, or changing scope;
    - if blocked (install failure, missing credential, network block), stop and
      say exactly what is needed;
-   - keep chat updates short; details go in PR descriptions and `DECISIONS.md`.
+   - keep chat updates short; details go in PR descriptions and `DECISIONS.md`;
+   - when asking the owner for a decision, explain it in plain terms with a
+     concrete example, and give lettered options with a recommendation (owner,
+     2026-10-20).
 7. **Every slice, in addition to its own criteria** (from Codex on PR #11):
    - every new mutation writes audit records and tests them (US-07; slice 4
      builds the log itself);
@@ -119,10 +123,18 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-The next slice is **3** (`slice/03-auth`). Its first step is the Fluent UI v9
-verification under the served CSP and Trusted Types (DEC-017, DEC-021); if it fails,
-stop and bring options. Then the design-system handoff (rule 4) and the slice's
-screen handoff (rule 3) before any UI code.
+Slice **3** (`slice/03-auth`) is in progress. The Fluent UI v9 verification failed under
+`style-src 'self'`; the owner chose a per-response style nonce (DEC-037, options 1B and 2A),
+which is built and tested, and passes with a real server in Chrome 155.0.8059.84, Edge
+155.0.4283.62 and Firefox 158 (DEC-037). **The Fluent gate is recorded as passed once Firefox's
+exact version is in DEC-037** (the user agent shows only 158.0). Then the design-system handoff
+(rule 4) and the slice's screen handoff (rule 3) before any UI code. Screens create Fluent's
+renderer with `createStyleRenderer()` (`web/src/styleNonce.ts`) inside `RendererProvider`.
+
+Running the qualification page: build the sampler as a web root
+(`pnpm exec vite build --config vite.config.ts --outDir <dir> --emptyOutDir e2e/fluent-check/app`
+in `web/`), start the API with `ASPNETCORE_WEBROOT=<dir>`, open it in the browser and read the
+"Self-check" result; in Playwright, `GOLDMARK_FLUENT_CHECK_DIRECT=1` runs `fluent.spec.ts` against it.
 
 Slices 3 and 4 come before the Windows service (slice 4b, DEC-036), which ports what
 they store. Keep it cheap (rule 8): sign-in keys (ASP.NET Core Data Protection,
@@ -158,7 +170,7 @@ And for slice 24:
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
 | Availability groups (and #20) | owner: place in the plan (DEC-030, DEC-036) |
-| Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
+| Fluent UI v9 under the CSP: per-response style nonce, passing in Chrome, Edge and Firefox; Firefox's exact version outstanding (DEC-037) | 3 |
 | #5 renew the generated TLS certificate without a restart | 24 |
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
@@ -336,6 +348,16 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   disabled (DEC-027). SQL Server is ready in about 10 s.
 - Analyzer CA1711 rejects type names ending in `Collection` (xUnit collection
   definitions are named `…Tests`).
+- **The SPA shell is a template** (DEC-037): `SpaShell` reads `wwwroot/index.html` once, at the
+  first shell request. After replacing the web root (a rebuilt `web/dist`, a qualification build),
+  restart the app, or it keeps sending the old page. HTML is never a static file, so
+  `/index.html` is a 404.
+- **Griffel picks right-to-left classes where `useStyles()` runs**, not where the class is used:
+  a component inside `<FluentProvider dir="rtl">` must call the hook itself.
+- **Playwright's `route.fetch()` does not use the browser's SPKI pin** (it fails with
+  "self-signed certificate"); capture headers from a browser navigation instead.
+- **`pnpm add` in `/mnt/c/...` is slow** (Fluent UI's 88 packages took 12 minutes, with no output
+  through a pipe); run it in the background.
 
 ### 5.5 The agent's sandbox (local verification)
 
@@ -386,7 +408,7 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-035, the slice-1, slice-2, slice-2b and
+- `docs/DECISIONS.md`: DEC-001…DEC-037, the slice-1, slice-2, slice-2b and
   slice-2c acceptance mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/ops/external-sql-server.md` (existing SQL Server, Mode Existing, every

@@ -36,6 +36,7 @@ internal static class GoldmarkApplication
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();
         builder.Services.AddProblemDetails();
 

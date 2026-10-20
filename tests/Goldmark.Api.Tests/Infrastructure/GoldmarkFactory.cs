@@ -32,7 +32,8 @@ public class GoldmarkFactory : WebApplicationFactory<Program>
         WebRoot = Path.Combine(_root, "wwwroot");
         Directory.CreateDirectory(Path.Combine(WebRoot, "assets"));
         File.WriteAllText(Path.Combine(WebRoot, "index.html"),
-            "<!doctype html><html lang=\"en\"><head><script type=\"module\" src=\"/assets/index-abc12345.js\"></script></head>" +
+            "<!doctype html><html lang=\"en\"><head><meta property=\"csp-nonce\" nonce=\"__GOLDMARK_STYLE_NONCE__\" />" +
+            "<script type=\"module\" src=\"/assets/index-abc12345.js\"></script></head>" +
             "<body><div id=\"root\"></div></body></html>");
         File.WriteAllText(Path.Combine(WebRoot, "assets", "index-abc12345.js"), "console.log('goldmark');");
         File.WriteAllText(Path.Combine(WebRoot, "favicon.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"/>");

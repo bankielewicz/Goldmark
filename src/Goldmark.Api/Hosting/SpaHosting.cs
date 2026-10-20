@@ -1,4 +1,5 @@
 using Goldmark.Api.Security;
+using Microsoft.AspNetCore.StaticFiles;
 
 namespace Goldmark.Api.Hosting;
 
@@ -8,13 +9,27 @@ internal static class SpaHosting
     private const string ImmutableAssets = "public, max-age=31536000, immutable";
     private const string Revalidate = "no-cache";
 
-    /// <summary>Static assets. Vite fingerprints everything under /assets, so those are immutable.</summary>
-    public static IApplicationBuilder UseGoldmarkStaticFiles(this IApplicationBuilder app) =>
-        app.UseStaticFiles(new StaticFileOptions
+    /// <summary>
+    /// Static assets. Vite fingerprints everything under /assets, so those are immutable.
+    /// HTML is never served as a static file: the shell needs a fresh style nonce per response
+    /// (<see cref="SpaShell"/>), and a request for <c>/index.html</c> (or a Windows alias of it,
+    /// such as an 8.3 name) must not return the template without one.
+    /// </summary>
+    public static IApplicationBuilder UseGoldmarkStaticFiles(this IApplicationBuilder app)
+    {
+        var contentTypes = new FileExtensionContentTypeProvider();
+        foreach (var extension in contentTypes.Mappings.Where(m => m.Value.Contains("html", StringComparison.OrdinalIgnoreCase)).Select(m => m.Key).ToList())
         {
+            contentTypes.Mappings.Remove(extension);
+        }
+
+        return app.UseStaticFiles(new StaticFileOptions
+        {
+            ContentTypeProvider = contentTypes,
             OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl =
                 ctx.Context.Request.Path.StartsWithSegments("/assets") ? ImmutableAssets : Revalidate,
         });
+    }
 
     public static IEndpointRouteBuilder MapGoldmarkSpa(this IEndpointRouteBuilder endpoints)
     {
@@ -25,10 +40,7 @@ internal static class SpaHosting
 
         // Client-side routes (e.g. /ci/{id}, /search) return the SPA shell. Paths that look
         // like files (have an extension) are not matched, so missing assets stay 404.
-        endpoints.MapFallbackToFile("{**path:nonfile}", "index.html", new StaticFileOptions
-        {
-            OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = Revalidate,
-        })
+        endpoints.MapFallback("{**path:nonfile}", (HttpContext context, SpaShell shell) => shell.WriteAsync(context))
             .WithMetadata(new HttpMethodMetadata([HttpMethods.Get, HttpMethods.Head]))
             .AllowAnonymousByDesign("SPA shell must load before sign-in; static HTML with no data.")
             .WithDisplayName("SPA: shell");
