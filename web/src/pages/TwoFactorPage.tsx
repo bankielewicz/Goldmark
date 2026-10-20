@@ -228,7 +228,15 @@ function TwoFactorDialog({
             '/api/v1/account/two-factor/authenticator',
             useRecovery ? { password, recoveryCode } : { password, code },
           );
-          const { data } = await api<{ key: string }>('POST', '/api/v1/enrolment/authenticator', {});
+          const { data } = await api<{ key: string }>(
+            'POST',
+            '/api/v1/enrolment/authenticator',
+            {},
+            {
+              // An expired enrolment is this dialog's problem, not the end of the session.
+              signedIn: false,
+            },
+          );
           setCode('');
           onChange({ kind: 'new-authenticator', key: data.key, version: Date.now() });
         });
