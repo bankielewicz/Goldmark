@@ -1,2 +1,3 @@
 e9f217e6127dc67188c9642097742d2fa592e1f8e8b8cd10a50a14c2311b24b5  db/migrations/0001_baseline.sql
 fbc7d033e4bbfebee390f31a1caebf159d85bcea3a25f8be15a4818520da264e  db/migrations/0002_runtime_role.sql
+d3703154a9c505b3185e1553a3e6b35dc4f32fedf3ab2c4d8ada12ca12381a7e  db/migrations/0003_authentication.sql
