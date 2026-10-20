@@ -134,13 +134,13 @@ internal static class AccountEndpoints
 
             await SessionTicketStore.EndOthersAsync(db, user.Id, session);
             await audit.WriteAsync(AuditActions.AuthenticatorChanged, "User", user.Id);
+            // The new security stamp goes into this session's stored ticket in the same transaction, so it stays valid.
+            await context.SignInAsync(AuthSchemes.Session, AuthSetup.StoredSessionPrincipal(user),
+                new AuthenticationProperties { IsPersistent = false, AllowRefresh = false });
             return true;
         });
 
         await EnrolmentState.EndAsync(context);
-        // The new security stamp goes into this session's stored ticket, so it stays valid.
-        await context.SignInAsync(AuthSchemes.Session, AuthSetup.StoredSessionPrincipal(user),
-            new AuthenticationProperties { IsPersistent = false, AllowRefresh = false });
         return Results.Ok(new { user = AuthEndpoints.Describe(AuthSetup.SessionPrincipal(user, await users.GetRolesAsync(user))) });
     }
 

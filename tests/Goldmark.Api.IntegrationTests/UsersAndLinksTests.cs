@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using Goldmark.Api.IntegrationTests.Infrastructure;
 
 namespace Goldmark.Api.IntegrationTests;
@@ -10,6 +11,8 @@ namespace Goldmark.Api.IntegrationTests;
 [Collection(SqlServerTests.Name)]
 public sealed class UsersAndLinksTests(SqlServerFixture sql)
 {
+    private static readonly string[] ViewerOnly = ["Viewer"];
+
     [Fact]
     public async Task An_invitation_needs_its_separate_code_and_lets_the_person_choose_a_password_and_set_up_two_factor()
     {
@@ -226,4 +229,32 @@ public sealed class UsersAndLinksTests(SqlServerFixture sql)
     private static string[] RoleList(params string[] roles) => roles;
 
     private static string WrongCode(string code) => code.StartsWith('2') ? "3" + code[1..] : "2" + code[1..];
+
+    [Fact]
+    public async Task Links_carry_the_configured_expiry_and_code_attempts()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql, new Dictionary<string, string?>
+        {
+            ["Goldmark:Auth:LinkExpiryHours"] = "2",
+            ["Goldmark:Auth:LinkCodeAttempts"] = "3",
+        });
+        var (admin, _) = await scenario.SetUpAsync();
+
+        // Codex, PR #24: the screen states the limits the server applies, not the defaults.
+        var created = await admin.PostAsync("/api/v1/users", new { displayName = "Sam Rivera", userName = "sam.rivera", roles = ViewerOnly });
+        Assert.Equal(HttpStatusCode.Created, created.Status);
+        AssertLimits(created.Body.GetProperty("link"));
+        var id = created.Body.GetProperty("user").GetProperty("id").GetGuid();
+        AssertLimits(AuthScenario.Ok(await admin.PostAsync($"/api/v1/users/{id:D}/invitation")).Body.GetProperty("link"));
+
+        var (_, lee) = await scenario.InviteAndAcceptAsync(admin, "lee.chen", "Viewer");
+        AssertLimits(AuthScenario.Ok(await admin.PostAsync($"/api/v1/users/{lee.Id:D}/two-factor-reset")).Body.GetProperty("link"));
+
+        static void AssertLimits(JsonElement link)
+        {
+            Assert.Equal(2, link.GetProperty("expiryHours").GetInt32());
+            Assert.Equal(3, link.GetProperty("codeAttempts").GetInt32());
+            Assert.InRange(link.GetProperty("expiresAt").GetDateTimeOffset() - DateTimeOffset.UtcNow, TimeSpan.FromMinutes(115), TimeSpan.FromMinutes(121));
+        }
+    }
 }

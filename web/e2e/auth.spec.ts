@@ -151,6 +151,27 @@ test.describe('slice 3 screens', () => {
     await expect(page.getByText('Two-factor authentication is on')).toBeVisible();
     await expectAccessible(page, 'two-factor page');
 
+    // Sent here after a lost key ring (DEC-038 item 5; the server side has its own test): a transient
+    // failure keeps the way to set up the authenticator again, with Retry (Codex, PR #24).
+    const enrolKey = '**/api/v1/enrolment/authenticator';
+    const enrolQr = '**/api/v1/enrolment/authenticator.svg*';
+    await page.route(enrolKey, (route) => route.abort());
+    await page.goto('/account/two-factor?authenticator=new');
+    await expect(page.getByText(/couldn’t start setting up your authenticator app again/)).toBeVisible();
+    await page.unroute(enrolKey);
+    await page.route(enrolKey, (route) => route.fulfill({ json: { key: 'JBSWY3DPEHPK3PXP' } }));
+    await page.route(enrolQr, (route) =>
+      route.fulfill({
+        contentType: 'image/svg+xml',
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+      }),
+    );
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.getByText(/can no longer check codes from your authenticator app/)).toBeVisible();
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.unroute(enrolKey);
+    await page.unroute(enrolQr);
+
     // A sign-out that never reaches the server leaves the session alive, so it must not say "signed
     // out" (Codex, PR #24): the person stays signed in, sees why, and can retry.
     await page.route('**/api/v1/auth/sign-out', (route) => route.abort());

@@ -24,6 +24,9 @@ Where the backend settled a detail the boards show as a sample, the backend wins
 recovery codes are Identity's format `XXXXX-XXXXX` (the boards show `7KQ2-M9XD`); revoking an unused
 invitation removes the account it created; after a two-factor reset, sign-in with the right password
 says "Two-factor was reset for this account. Open the link your administrator gave you."
+The link's lifetime and wrong-code limit are settings: the shown-once panel states the configured
+values (the boards' "24 hours" and "five" are the defaults), and the copy shown before a link exists
+gives no number.
 
 Where the built UI differs from the boards, and why:
 

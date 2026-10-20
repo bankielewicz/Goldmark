@@ -534,8 +534,7 @@ function TerminalState({ terminal }: { terminal: Terminal }) {
                 : 'This link is no longer valid. Ask your administrator for a new one.'}
           </Notice>
           <Text as="p">
-            Links work once and expire after 24 hours. Your administrator can create a new link and code on the Users
-            &amp; roles page.
+            Links work once and expire. Your administrator can create a new link and code on the Users &amp; roles page.
           </Text>
         </>
       );

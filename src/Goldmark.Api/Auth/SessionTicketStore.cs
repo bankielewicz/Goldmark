@@ -18,6 +18,10 @@ namespace Goldmark.Api.Auth;
 /// administrator's lock, disable or two-factor reset ends every session of that person at once.
 /// A session ends after <see cref="AuthOptions.SessionIdle"/> without a request, or
 /// <see cref="AuthOptions.SessionLifetime"/> after sign-in (DEC-038 item 6).
+/// The cookie handler always calls the overloads that pass the request; they use the request's
+/// <see cref="DbSession"/>, so a session row is written or deleted in the endpoint's transaction,
+/// together with its audit row and whatever else the sign-in or sign-out changes (Codex, PR #24).
+/// The overloads without a request, which the interface requires, use a connection of their own.
 /// </summary>
 internal sealed class SessionTicketStore(SqlConnectionFactory connections, IDataProtectionProvider protection,
     IOptions<AuthOptions> options, TimeProvider time) : ITicketStore
@@ -33,6 +37,15 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket, CancellationToken cancellationToken)
     {
+        await using var db = new DbSession(connections);
+        return await StoreAsync(db, ticket, cancellationToken);
+    }
+
+    public Task<string> StoreAsync(AuthenticationTicket ticket, HttpContext httpContext, CancellationToken cancellationToken) =>
+        StoreAsync(RequestDb(httpContext), ticket, cancellationToken);
+
+    private async Task<string> StoreAsync(DbSession db, AuthenticationTicket ticket, CancellationToken cancellationToken)
+    {
         var userId = UserOf(ticket);
         var key = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(32));
         Mark(ticket, key);
@@ -41,7 +54,6 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
         var expires = Min(now + options.Value.SessionIdle, absolute);
         ticket.Properties.ExpiresUtc = new DateTimeOffset(expires, TimeSpan.Zero);
 
-        await using var db = new DbSession(connections);
         await db.ExecuteAsync("""
             DELETE TOP (100) FROM cmdb.UserSession WHERE ExpiresAt < @now OR AbsoluteExpiresAt < @now;
             INSERT INTO cmdb.UserSession (Id, UserId, Ticket, CreatedAt, LastSeenAt, ExpiresAt, AbsoluteExpiresAt)
@@ -60,8 +72,16 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
     /// </summary>
     public async Task RenewAsync(string key, AuthenticationTicket ticket, CancellationToken cancellationToken)
     {
-        Mark(ticket, key);
         await using var db = new DbSession(connections);
+        await RenewAsync(db, key, ticket, cancellationToken);
+    }
+
+    public Task RenewAsync(string key, AuthenticationTicket ticket, HttpContext httpContext, CancellationToken cancellationToken) =>
+        RenewAsync(RequestDb(httpContext), key, ticket, cancellationToken);
+
+    private async Task RenewAsync(DbSession db, string key, AuthenticationTicket ticket, CancellationToken cancellationToken)
+    {
+        Mark(ticket, key);
         await db.ExecuteAsync("UPDATE cmdb.UserSession SET Ticket = @ticket WHERE Id = @id AND UserId = @userId;",
             new { id = Hash(key), userId = UserOf(ticket), ticket = Protect(ticket) }, cancellationToken);
     }
@@ -76,13 +96,14 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
     /// </summary>
     public async Task<AuthenticationTicket?> RetrieveAsync(string key, HttpContext httpContext, CancellationToken cancellationToken)
     {
+        var db = RequestDb(httpContext);
         if (httpContext.GetEndpoint()?.Metadata.GetMetadata<StartsNewSession>() is not null)
         {
-            await RemoveAsync(key, cancellationToken);
+            await RemoveAsync(db, key, cancellationToken);
             return null;
         }
 
-        return await RetrieveAsync(key, cancellationToken);
+        return await RetrieveAsync(db, key, cancellationToken);
     }
 
     /// <summary>
@@ -91,9 +112,14 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
     /// </summary>
     public async Task<AuthenticationTicket?> RetrieveAsync(string key, CancellationToken cancellationToken)
     {
+        await using var db = new DbSession(connections);
+        return await RetrieveAsync(db, key, cancellationToken);
+    }
+
+    private async Task<AuthenticationTicket?> RetrieveAsync(DbSession db, string key, CancellationToken cancellationToken)
+    {
         var id = Hash(key);
         var now = time.GetUtcNow().UtcDateTime;
-        await using var db = new DbSession(connections);
         var row = await db.QuerySingleOrDefaultAsync<SessionRow>(
             "SELECT Ticket, LastSeenAt, ExpiresAt, AbsoluteExpiresAt FROM cmdb.UserSession WHERE Id = @id;", new { id }, cancellationToken);
         if (row is null)
@@ -129,8 +155,14 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
     public async Task RemoveAsync(string key, CancellationToken cancellationToken)
     {
         await using var db = new DbSession(connections);
-        await db.ExecuteAsync("DELETE FROM cmdb.UserSession WHERE Id = @id;", new { id = Hash(key) }, cancellationToken);
+        await RemoveAsync(db, key, cancellationToken);
     }
+
+    public Task RemoveAsync(string key, HttpContext httpContext, CancellationToken cancellationToken) =>
+        RemoveAsync(RequestDb(httpContext), key, cancellationToken);
+
+    private static async Task RemoveAsync(DbSession db, string key, CancellationToken cancellationToken) =>
+        await db.ExecuteAsync("DELETE FROM cmdb.UserSession WHERE Id = @id;", new { id = Hash(key) }, cancellationToken);
 
     /// <summary>Ends every session of a person, inside the caller's transaction (with its audit row).</summary>
     public static Task<int> EndAllAsync(DbSession db, Guid userId, CancellationToken cancellationToken = default) =>
@@ -143,6 +175,9 @@ internal sealed class SessionTicketStore(SqlConnectionFactory connections, IData
     public static Task<int> EndOthersAsync(DbSession db, Guid userId, string sessionId, CancellationToken cancellationToken = default) =>
         db.ExecuteAsync("DELETE FROM cmdb.UserSession WHERE UserId = @userId AND Id <> @current;",
             new { userId, current = Convert.FromHexString(sessionId) }, cancellationToken);
+
+    /// <summary>The request's own database session (owned by the request scope: never disposed here).</summary>
+    private static DbSession RequestDb(HttpContext httpContext) => httpContext.RequestServices.GetRequiredService<DbSession>();
 
     private static Guid UserOf(AuthenticationTicket ticket) =>
         Guid.Parse(ticket.Principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? throw new InvalidOperationException("A session needs a user."));

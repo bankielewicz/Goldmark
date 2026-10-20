@@ -1272,7 +1272,11 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     and reads roles fresh. Each sign-in gets a new session key and ends the one the browser presented
     (ASVS 5.0 V7.2.4; it also defeats session fixation): the cookie handler would otherwise renew the
     presented key, so the two endpoints that sign in (`StartsNewSession`) never continue it. A new
-    authenticator keeps the current session and ends the others (V7.4.3).
+    authenticator keeps the current session and ends the others (V7.4.3). The cookie handler always
+    calls the store's overloads that pass the request; they use the request's `DbSession`, so a session
+    row is written or deleted in the endpoint's transaction (Codex, PR #24): a sign-in's session commits
+    with the redeemed recovery code, the completed setup or link and their audit rows, and sign-out's
+    audit row only with the deleted session.
   - **First-run setup:** a 160-bit token, logged once per start at Warning (event 3001, "Setup token")
     while setup is not complete, held only as a hash; the steps are carried in the encrypted enrolment
     cookie and nothing is written until the authenticator is proven, then one transaction creates the
@@ -1282,7 +1286,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   - **Links (invitation, two-factor reset):** a 256-bit token in the URL fragment, stored as SHA-256; a
     6-character code from the same 26-character alphabet, stored as SHA-256 of token and code, so it
     cannot be tried without the token; 5 wrong codes revoke the link; 24 hours; one open link per
-    person.
+    person. Both limits are settings (`LinkCodeAttempts`, `LinkExpiryHours`): an issued link carries
+    them, and the screens state the configured values (Codex, PR #24).
   - **Deny by default:** the fallback policy's requirement (`DenyUnclassifiedEndpoints`) refuses every
     application endpoint without a policy and lets a request that matched none through to its 404 (or
     routing's 405). The pipeline calls `UseRouting`, `UseRateLimiter`, `UseAuthentication` and

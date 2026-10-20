@@ -179,6 +179,9 @@ interface IssuedLink {
   token: string;
   code: string;
   expiresAt: string;
+  /** The configured limits (Goldmark:Auth:LinkExpiryHours, LinkCodeAttempts). */
+  expiryHours: number;
+  codeAttempts: number;
 }
 
 type Panel =
@@ -676,7 +679,7 @@ function confirmText(confirm: Confirm): { title: string; body: string; button: s
     case 'reset':
       return {
         title: `Reset two-factor for ${name}?`,
-        body: `This signs ${first} out everywhere and removes their authenticator and recovery codes. Their password and roles stay. Next you get a link and a code. ${first} needs both to set up two-factor again within 24 hours.`,
+        body: `This signs ${first} out everywhere and removes their authenticator and recovery codes. Their password and roles stay. Next you get a link and a code. ${first} needs both to set up two-factor again before the link expires.`,
         button: 'Reset two-factor',
         destructive: true,
       };
@@ -1116,7 +1119,10 @@ function ShownOnce({ panel, onDone }: { panel: Extract<Panel, { kind: 'secret' }
             look-alike characters (0/O, 1/I/L).
           </Text>
         </section>
-        <Text>Expires in 24 hours, at {expires} UTC. Five wrong codes end the link.</Text>
+        <Text>
+          Expires in {panel.link.expiryHours} {panel.link.expiryHours === 1 ? 'hour' : 'hours'}, at {expires} UTC.{' '}
+          {panel.link.codeAttempts} wrong {panel.link.codeAttempts === 1 ? 'code ends' : 'codes end'} the link.
+        </Text>
         <Checkbox
           label="I sent the link and told them the code by phone or in person"
           checked={sent}

@@ -99,7 +99,8 @@ public sealed class AuthScenario : IAsyncDisposable
             SELECT STRING_AGG(CONCAT(TargetId, '|', ActorType, '|', ActorId, '|', CAST(Details AS nvarchar(max))), CHAR(10)) WITHIN GROUP (ORDER BY Id)
             FROM cmdb.AuditLog WHERE Action = '{action}';
             """);
-        return rows is null ? [] : rows.Split('\n');
+        // No rows: STRING_AGG gives NULL, which the scalar read returns as "" (not a row).
+        return string.IsNullOrEmpty(rows) ? [] : rows.Split('\n');
     }
 
     public Task<string?> AuditTextAsync() =>

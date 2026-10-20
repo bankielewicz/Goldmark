@@ -147,6 +147,7 @@ internal static class AuthEndpoints
         }
 
         var usesRecoveryCode = string.IsNullOrEmpty(request.Code) && !string.IsNullOrEmpty(request.RecoveryCode);
+        SessionUser? signedIn = null;
         var outcome = await db.InTransactionAsync<IResult?>(async () =>
         {
             var accepted = usesRecoveryCode
@@ -171,6 +172,9 @@ internal static class AuthEndpoints
 
             await audit.WriteAsync(AuditActions.SignInSucceeded, AuditActor.User(user.Id), "User", user.Id,
                 new { method = usesRecoveryCode ? "recovery-code" : "authenticator" });
+            // The session row commits with the redeemed code and the audit rows: if it cannot be
+            // written, the recovery code is not spent either (Codex, PR #24).
+            signedIn = await StartSessionAsync(context, users, user);
             return null;
         });
         if (outcome is not null)
@@ -179,7 +183,6 @@ internal static class AuthEndpoints
         }
 
         await context.SignOutAsync(AuthSchemes.TwoFactor);
-        var signedIn = await StartSessionAsync(context, users, user);
         if (usesRecoveryCode && await users.IsAuthenticatorUnreadableAsync(user))
         {
             // The key ring lost the authenticator's key (DEC-038 item 5): the password and recovery code
@@ -193,14 +196,22 @@ internal static class AuthEndpoints
         return Results.Ok(new { user = signedIn });
     }
 
-    private static async Task<IResult> SignOutAsync(HttpContext context, AuditTrail audit)
+    private static async Task<IResult> SignOutAsync(HttpContext context, DbSession db, AuditTrail audit)
     {
-        await audit.WriteAsync(AuditActions.SignedOut);
-        await context.SignOutAsync(AuthSchemes.Session);
+        // One transaction: the audit log says "signed out" only if the session row is gone (Codex, PR #24).
+        await db.InTransactionAsync(async () =>
+        {
+            await audit.WriteAsync(AuditActions.SignedOut);
+            await context.SignOutAsync(AuthSchemes.Session);
+            return true;
+        });
         return Results.NoContent();
     }
 
-    /// <summary>Signs the person in (a new server-side session), records the time, and returns who they are.</summary>
+    /// <summary>
+    /// Signs the person in (a new server-side session), records the time, and returns who they are.
+    /// Call it inside the transaction of the change that signs them in, so the session row commits with it.
+    /// </summary>
     internal static async Task<SessionUser> StartSessionAsync(HttpContext context, GoldmarkUserManager users, GoldmarkUser user)
     {
         await users.RecordSignInAsync(user);

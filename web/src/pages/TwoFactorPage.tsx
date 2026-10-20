@@ -85,6 +85,7 @@ export function TwoFactorPage() {
   const { search } = useLocation();
   const lostKey = search.get('authenticator') === 'new';
   const lostKeyStarted = useRef(false);
+  const [lostKeyFailure, setLostKeyFailure] = useState<ApiError | null>(null);
 
   const load = useCallback(async () => {
     setFailure(null);
@@ -100,20 +101,29 @@ export function TwoFactorPage() {
   }, [load]);
 
   // Sent here by sign-in: the recovery code that signed in has already started a new authenticator,
-  // because Goldmark can no longer check the old one (DEC-038 item 5).
+  // because Goldmark can no longer check the old one (DEC-038 item 5). The marker stays in the address
+  // until the setup starts, so a reload tries again; a failure a retry can fix offers Retry (Codex, PR #24).
+  const startLostKey = useCallback(async () => {
+    setLostKeyFailure(null);
+    try {
+      const { data } = await api<{ key: string }>('POST', '/api/v1/enrolment/authenticator', {}, { signedIn: false });
+      navigate('/account/two-factor', { replace: true });
+      setDialog({ kind: 'new-authenticator', key: data.key, version: Date.now(), lostKey: true });
+    } catch (error) {
+      if (error instanceof ApiError && error.isUnavailable) {
+        setLostKeyFailure(error);
+      } else {
+        // The step expired (30 minutes): the page's own button starts again.
+        navigate('/account/two-factor', { replace: true });
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (!lostKey || lostKeyStarted.current) return;
     lostKeyStarted.current = true;
-    navigate('/account/two-factor', { replace: true });
-    void (async () => {
-      try {
-        const { data } = await api<{ key: string }>('POST', '/api/v1/enrolment/authenticator', {}, { signedIn: false });
-        setDialog({ kind: 'new-authenticator', key: data.key, version: Date.now(), lostKey: true });
-      } catch {
-        // The step expired: the page's own button starts again.
-      }
-    })();
-  }, [lostKey]);
+    void startLostKey();
+  }, [lostKey, startLostKey]);
 
   const toast = (text: string) =>
     dispatchToast(
@@ -131,6 +141,13 @@ export function TwoFactorPage() {
         title="Two-factor authentication"
       />
       {failure ? <ErrorBar error={failure} onRetry={() => void load()} /> : null}
+      {lostKeyFailure ? (
+        <ErrorBar
+          error={lostKeyFailure}
+          message="Goldmark couldn’t start setting up your authenticator app again. Try again."
+          onRetry={() => void startLostKey()}
+        />
+      ) : null}
       {!status && !failure ? (
         <Skeleton aria-label="Loading">
           <SkeletonItem size={48} />

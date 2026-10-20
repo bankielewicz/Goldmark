@@ -175,6 +175,53 @@ public sealed class SetupAndSignInTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task A_recovery_code_is_not_spent_when_the_session_cannot_be_stored()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (_, admin) = await scenario.SetUpAsync();
+        var database = scenario.Installation.Database;
+        const string Unused = "SELECT COUNT(*) FROM cmdb.RecoveryCode WHERE UsedAt IS NULL;";
+        var client = scenario.App.Client();
+        AuthScenario.Ok(await client.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
+        var signIns = (await scenario.AuditAsync("auth.sign-in.succeeded")).Count;
+
+        // Codex, PR #24: the session row is written in the transaction that redeems the code.
+        await sql.AsAdminAsync(database, "DENY INSERT ON OBJECT::cmdb.UserSession TO goldmark_runtime;");
+        var failed = await client.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0] });
+        Assert.Equal(HttpStatusCode.InternalServerError, failed.Status);
+        Assert.Equal(10, await sql.AdminScalarAsync<int>(database, Unused));
+        Assert.Empty(await scenario.AuditAsync("auth.recovery-code.used"));
+        Assert.Equal(signIns, (await scenario.AuditAsync("auth.sign-in.succeeded")).Count);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>(database, "SELECT AccessFailedCount FROM cmdb.UserAccount;"));
+
+        // The same code still works once the session can be stored: it was never spent.
+        await sql.AsAdminAsync(database, "REVOKE INSERT ON OBJECT::cmdb.UserSession FROM goldmark_runtime;");
+        AuthScenario.Ok(await client.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0] }));
+        AuthScenario.Ok(await client.GetAsync("/api/v1/users"));
+        Assert.Equal(9, await sql.AdminScalarAsync<int>(database, Unused));
+    }
+
+    [Fact]
+    public async Task Signing_out_and_its_audit_row_commit_together()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (client, _) = await scenario.SetUpAsync();
+        var database = scenario.Installation.Database;
+
+        // Codex, PR #24: if the session row cannot be deleted, nothing says the person signed out,
+        // and the session (cookie and row) is still theirs.
+        await sql.AsAdminAsync(database, "DENY DELETE ON OBJECT::cmdb.UserSession TO goldmark_runtime;");
+        Assert.Equal(HttpStatusCode.InternalServerError, (await client.PostAsync("/api/v1/auth/sign-out")).Status);
+        AuthScenario.Ok(await client.GetAsync("/api/v1/users"));
+        Assert.Empty(await scenario.AuditAsync("auth.signed-out"));
+
+        await sql.AsAdminAsync(database, "REVOKE DELETE ON OBJECT::cmdb.UserSession FROM goldmark_runtime;");
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync("/api/v1/auth/sign-out")).Status);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/v1/users")).Status);
+        Assert.Single(await scenario.AuditAsync("auth.signed-out"));
+    }
+
+    [Fact]
     public async Task Sessions_end_when_idle_and_at_their_absolute_limit()
     {
         await using var scenario = await AuthScenario.StartAsync(sql);
@@ -283,6 +330,7 @@ public sealed class SetupAndSignInTests(SqlServerFixture sql)
         }
 
         // Through the API: five wrong passwords at once lock the account, audited once.
+        await sql.AsAdminAsync(database, "UPDATE cmdb.UserAccount SET LockoutEnd = NULL, AccessFailedCount = 0;");
         await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
             scenario.App.Client().PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = $"wrong guess {i} here" })));
         Assert.Equal("locked", (await scenario.App.Client().PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password })).Code);

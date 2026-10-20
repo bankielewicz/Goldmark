@@ -16,8 +16,11 @@ internal sealed record LinkRow(
     public bool IsOpen => RedeemedAt is null && RevokedAt is null;
 }
 
-/// <summary>A link as shown once to the administrator: the token goes in the URL fragment, the code is said aloud.</summary>
-internal sealed record IssuedLink(string Token, string Code, DateTime ExpiresAt);
+/// <summary>
+/// A link as shown once to the administrator: the token goes in the URL fragment, the code is said
+/// aloud. Carries the configured limits, so the screen states them as they are (Codex, PR #24).
+/// </summary>
+internal sealed record IssuedLink(string Token, string Code, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
 
 /// <summary>
 /// Invitation and two-factor reset links (DEC-038 items 2 and 8): issued, checked, failed codes
@@ -72,7 +75,7 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
                 createdBy,
                 expires,
             });
-        return new IssuedLink(token, code, expires);
+        return new IssuedLink(token, code, expires, options.Value.LinkExpiryHours, options.Value.LinkCodeAttempts);
     }
 
     /// <summary>

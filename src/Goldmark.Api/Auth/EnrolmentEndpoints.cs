@@ -342,11 +342,18 @@ internal static class EnrolmentEndpoints
         }
 
         IReadOnlyList<string> codes;
+        AuthEndpoints.SessionUser signedIn;
         try
         {
-            (user, codes) = await db.InTransactionAsync(() => state.Kind == EnrolmentKind.Setup
-                ? CompleteSetupAsync(state, key, step, users, audit)
-                : CompleteLinkAsync(state, user!, key, step, users, links, audit));
+            (signedIn, codes) = await db.InTransactionAsync(async () =>
+            {
+                var (person, recoveryCodes) = state.Kind == EnrolmentKind.Setup
+                    ? await CompleteSetupAsync(state, key, step, users, audit)
+                    : await CompleteLinkAsync(state, user!, key, step, users, links, audit);
+                // The session row commits with the account: if it cannot be written, nothing is, and
+                // the step can be tried again (the recovery codes were never shown).
+                return (await AuthEndpoints.StartSessionAsync(context, users, person), recoveryCodes);
+            });
         }
         catch (LinkClosedException)
         {
@@ -367,7 +374,6 @@ internal static class EnrolmentEndpoints
         }
 
         await EnrolmentEndAsync(context);
-        var signedIn = await AuthEndpoints.StartSessionAsync(context, users, user);
         return Results.Ok(new { user = signedIn, recoveryCodes = codes });
     }
 
