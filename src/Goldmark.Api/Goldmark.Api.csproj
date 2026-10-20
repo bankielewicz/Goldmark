@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" />
     <PackageReference Include="dbup-sqlserver" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
     <PackageReference Include="Serilog.AspNetCore" />
     <!--
       Security pin: Microsoft.Data.SqlClient 7.1.1 depends on
@@ -31,6 +33,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Goldmark.Api.Tests" />
     <InternalsVisibleTo Include="Goldmark.Api.IntegrationTests" />
+    <!-- tests/sql-gate: proves a non-constant SQL argument to DbSession fails the build (NFR-SEC-3). -->
+    <InternalsVisibleTo Include="Goldmark.SqlGate.Fixture" />
   </ItemGroup>
 
 </Project>
