@@ -133,7 +133,11 @@ internal static class MigrateCommand
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
-            errors = Validate(db, migration, bootstrap);
+            errors = ApplyCredentialFiles(db, migration);
+            if (errors.Count == 0)
+            {
+                errors = Validate(db, migration, bootstrap);
+            }
         }
 
         if (errors.Count > 0)
@@ -259,6 +263,25 @@ internal static class MigrateCommand
             await error.WriteLineAsync($"{Name}: SQL Server did not accept connections within {bootstrap.WaitSeconds} s.");
             return 1;
         }
+    }
+
+    /// <summary>Both logins come from their credential files when those are configured (bootstrap-db writes them, DEC-034).</summary>
+    internal static List<string> ApplyCredentialFiles(DatabaseOptions db, MigrationOptions migration)
+    {
+        var errors = new List<string>();
+        if (CredentialFile.Resolve(DatabaseOptions.SectionName, db.CredentialFile, db.User, db.Password, out var runtime) is { } runtimeProblem)
+        {
+            errors.Add(runtimeProblem);
+        }
+
+        if (CredentialFile.Resolve(MigrationOptions.SectionName, migration.CredentialFile, migration.User, migration.Password, out var migrator) is { } migrationProblem)
+        {
+            errors.Add(migrationProblem);
+        }
+
+        (db.User, db.Password) = (runtime.User, runtime.Password);
+        (migration.User, migration.Password) = (migrator.User, migrator.Password);
+        return errors;
     }
 
     internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)

@@ -29,6 +29,14 @@ namespace Goldmark.Api.Commands;
 /// login. Both logins, both users, the markers and the <c>db_owner</c> membership are created in
 /// one transaction.
 /// </para>
+/// <para>
+/// Credential files (DEC-034): with a login's <c>CredentialFile</c> configured and no name or
+/// password in its settings, the login is generated (Mode Create), kept in that file, and found
+/// again by its marker when the file is lost. With
+/// <see cref="BootstrapOptions.AdminCredentialFile"/> (the bundled SQL Server), the first run signs
+/// in as <c>sa</c>, creates Goldmark's own administrator and disables <c>sa</c>; later runs sign in
+/// with that file only.
+/// </para>
 /// </summary>
 internal static class BootstrapDatabaseCommand
 {
@@ -37,8 +45,12 @@ internal static class BootstrapDatabaseCommand
     public const string RuntimeMarkerValue = "runtime-login";
     public const string MigrationMarkerValue = "migration-login";
     public const string RuntimeRole = "goldmark_runtime";
-    private const int MaxPasswordLength = 128; // QUOTENAME input limit; longer input would yield NULL.
+    public const string AdminMarker = "goldmark:admin-login";
+    public const string RecoveryDocument = "docs/ops/database-recovery.md";
+    private const int MaxPasswordLength = CredentialFile.MaximumPasswordLength;
     private const int Refused = 3;
+    private const int LoginFailed = 18456;
+    private const int LoginDisabled = 18470;
 
     // Read-only. Run in master. Login existence, type and whether the password already matches.
     private const string LoginStateSql = """
@@ -80,11 +92,83 @@ internal static class BootstrapDatabaseCommand
     // because DDL statements cannot take parameters directly.
     // AUTO_CLOSE (on by default for new databases on Express) would close the database whenever
     // its last connection ends, so each readiness probe and each audit pass would reopen it.
+    // With a generated administrator, the database is owned by sa (disabled), never by the
+    // generated login: a recovery may replace that login, which would orphan the owner.
     private const string CreateDatabaseSql = """
         DECLARE @sql nvarchar(max) = N'CREATE DATABASE ' + QUOTENAME(@db) + N';';
         EXEC sys.sp_executesql @sql;
         SET @sql = N'ALTER DATABASE ' + QUOTENAME(@db) + N' SET AUTO_CLOSE OFF;';
         EXEC sys.sp_executesql @sql;
+        IF @owner_sa = 1
+        BEGIN
+            SET @sql = N'ALTER AUTHORIZATION ON DATABASE::' + QUOTENAME(@db) + N' TO ' + QUOTENAME(SUSER_SNAME(0x01)) + N';';
+            EXEC sys.sp_executesql @sql;
+        END;
+        """;
+
+    // Read-only. Run in the Goldmark database: the users carrying Goldmark's marker for one
+    // purpose. Used when a login's credential file is missing (an upgrade from settings, or a lost
+    // volume): the login keeps its name and gets a new generated password (DEC-034).
+    private const string ManagedUsersSql = """
+        SET NOCOUNT ON;
+        SELECT u.name FROM sys.database_principals AS u
+        JOIN sys.extended_properties AS e ON e.class = 4 AND e.major_id = u.principal_id AND e.name = N'goldmark:managed'
+        WHERE u.type = 'S' AND CAST(e.value AS nvarchar(64)) = @marker;
+        """;
+
+    // Run in master as sa, the initial administrator, after everything else succeeded. The marker
+    // on the Goldmark database names the administrator an earlier run created. It is only a hint
+    // (db_owner can change it): that login is reused, with a new password, only if it is a SQL
+    // login with the generated prefix that already holds sysadmin; otherwise a new one is created.
+    // sysadmin is never added to a login that exists already.
+    private const string EnsureAdminSql = """
+        SET NOCOUNT ON;
+        SET XACT_ABORT ON;
+        DECLARE @sql nvarchar(max), @name sysname, @sid varbinary(85), @hint sysname;
+        SET @sql = N'SELECT @sid = CAST(value AS varbinary(85)) FROM ' + QUOTENAME(@db)
+            + N'.sys.extended_properties WHERE class = 0 AND name = N''goldmark:admin-login'';';
+        EXEC sys.sp_executesql @sql, N'@sid varbinary(85) OUTPUT', @sid = @sid OUTPUT;
+        SET @hint = SUSER_SNAME(@sid);
+        SELECT @name = p.name FROM sys.server_principals AS p
+        WHERE p.sid = @sid AND p.type = 'S' AND p.name LIKE N'goldmark[_]admin[_]%' AND IS_SRVROLEMEMBER(N'sysadmin', p.name) = 1;
+        BEGIN TRANSACTION;
+        IF @name IS NOT NULL
+        BEGIN
+            SET @sql = N'ALTER LOGIN ' + QUOTENAME(@name) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
+                + N', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF; ALTER LOGIN ' + QUOTENAME(@name) + N' ENABLE;';
+            EXEC sys.sp_executesql @sql;
+            SELECT @name, N'reset', CAST(NULL AS sysname);
+        END
+        ELSE
+        BEGIN
+            SET @name = @login;
+            SET @sql = N'CREATE LOGIN ' + QUOTENAME(@name) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
+                + N', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER ' + QUOTENAME(@name) + N';';
+            EXEC sys.sp_executesql @sql;
+            SET @sid = SUSER_SID(@name);
+            SET @sql = N'USE ' + QUOTENAME(@db) + N';
+                IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 0 AND name = N''goldmark:admin-login'')
+                    EXEC sys.sp_updateextendedproperty @name = N''goldmark:admin-login'', @value = @sid;
+                ELSE
+                    EXEC sys.sp_addextendedproperty @name = N''goldmark:admin-login'', @value = @sid;';
+            EXEC sys.sp_executesql @sql, N'@sid varbinary(85)', @sid = @sid;
+            SELECT @name, N'created', @hint;
+        END;
+        COMMIT TRANSACTION;
+        """;
+
+    // Run as the generated administrator: sa stays disabled (CIS; DEC-032). Idempotent, so it
+    // also undoes a recovery that re-enabled sa.
+    private const string DisableSaSql = """
+        SET NOCOUNT ON;
+        IF EXISTS (SELECT 1 FROM sys.server_principals WHERE sid = 0x01 AND is_disabled = 0)
+        BEGIN
+            DECLARE @sql nvarchar(max) = N'ALTER LOGIN ' + QUOTENAME(SUSER_SNAME(0x01)) + N' DISABLE;';
+            EXEC sys.sp_executesql @sql;
+            SELECT 1;
+        END
+        ELSE
+            SELECT 0;
         """;
 
     // Validates the password against SQL Server's policy without keeping anything, so a
@@ -202,10 +286,23 @@ internal static class BootstrapDatabaseCommand
         SELECT N'missing database role', N'db_owner' WHERE ISNULL(IS_ROLEMEMBER(N'db_owner'), 0) <> 1;
         """;
 
+    /// <summary>Where a login's name and password came from (DEC-034).</summary>
+    private enum CredentialSource
+    {
+        /// <summary>Configured settings (they are written to the credential file, if one is configured).</summary>
+        Settings,
+
+        /// <summary>The credential file an earlier run wrote.</summary>
+        File,
+
+        /// <summary>Generated by this run: the file was missing and no settings were given.</summary>
+        Generated,
+    }
+
     /// <summary>A login Goldmark manages, with the settings and marker that identify it.</summary>
     private sealed record Principal(
         string Purpose, string Login, string Password, string MarkerValue, bool DbOwner, string ExpectedRole,
-        string UserVariable, string PasswordVariable);
+        string UserVariable, string PasswordVariable, string? CredentialFile, CredentialSource Source);
 
     private readonly record struct LoginState(string Type, bool PasswordMatches);
 
@@ -217,12 +314,18 @@ internal static class BootstrapDatabaseCommand
         var db = new DatabaseOptions();
         var migration = new MigrationOptions();
         var bootstrap = new BootstrapOptions();
+        var sources = (Runtime: CredentialSource.Settings, Migration: CredentialSource.Settings);
+        LoginCredential? generatedAdmin = null;
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
-            errors = Validate(db, migration, bootstrap);
+            errors = PlanCredentials(db, migration, bootstrap, out sources, out generatedAdmin);
+            if (errors.Count == 0)
+            {
+                errors = Validate(db, migration, bootstrap);
+            }
         }
 
         if (errors.Count > 0)
@@ -239,24 +342,34 @@ internal static class BootstrapDatabaseCommand
         var existing = bootstrap.Mode == BootstrapOptions.ExistingMode;
         Principal[] principals =
         [
-            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, RuntimeRole, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD"),
+            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, RuntimeRole, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD",
+                db.CredentialFile, sources.Runtime),
             new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true, "db_owner",
-                "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD"),
+                "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD", migration.CredentialFile, sources.Migration),
         ];
         var policy = FindingPolicy.Parse(bootstrap.AcceptedFindings);
 
-        var admin = SqlConnectionFactory.Build(db, bootstrap.AdminUser, bootstrap.AdminPassword, database: "master");
+        // With a generated administrator (the bundled SQL Server), its credential file is used
+        // whenever it exists, and sa never is; sa signs in only to create that administrator.
+        var adminFile = string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile) ? null : bootstrap.AdminCredentialFile;
+        var admin = SqlConnectionFactory.Build(db, generatedAdmin?.User ?? bootstrap.AdminUser, generatedAdmin?.Password ?? bootstrap.AdminPassword, database: "master");
         admin.Pooling = false;
+        var adminConnected = false;
         try
         {
             await using var connection = await CommandSql.OpenWithRetryAsync(
                 admin.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds), output, Name);
+            adminConnected = true;
+            if (generatedAdmin is not null)
+            {
+                await output.WriteLineAsync($"{Name}: signed in as the generated administrator '{generatedAdmin.User}' ({adminFile})");
+            }
 
             // 1. Read-only: decide everything, for both logins, before changing anything.
             if (await ScalarAsync(connection, AdminRightsSql, db) != 1)
             {
                 return await RefuseAsync(error,
-                    $"the administrator login '{bootstrap.AdminUser}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
+                    $"the administrator login '{generatedAdmin?.User ?? bootstrap.AdminUser}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
                     "Goldmark's logins. Nothing was changed.");
             }
 
@@ -273,6 +386,36 @@ internal static class BootstrapDatabaseCommand
                     $"Mode {BootstrapOptions.ExistingMode}: the database '{db.Name}' does not exist, and this mode creates nothing. " +
                     $"Create it first (CREATE DATABASE [{db.Name}];), or use Mode {BootstrapOptions.CreateMode}. Nothing was changed.");
             }
+
+            // A credential file is missing but Goldmark's login for that purpose exists (an upgrade
+            // from passwords in settings, or a lost volume): it keeps its name and gets the newly
+            // generated password (DEC-034, owner decision 1A).
+            for (var i = 0; i < principals.Length && databaseExists; i++)
+            {
+                if (principals[i].Source != CredentialSource.Generated)
+                {
+                    continue;
+                }
+
+                await connection.ChangeDatabaseAsync(db.Name);
+                var managed = await ManagedUsersAsync(connection, db, principals[i]);
+                await connection.ChangeDatabaseAsync("master");
+                if (managed.Count > 1)
+                {
+                    return await RefuseAsync(error,
+                        $"the database '{db.Name}' has {managed.Count} users marked as Goldmark's {principals[i].Purpose} login ({string.Join(", ", managed)}); " +
+                        "only one may be. Nothing was changed.");
+                }
+
+                if (managed.Count == 1)
+                {
+                    principals[i] = principals[i] with { Login = managed[0] };
+                    Report(output, principals[i], $"its credential file is missing: keeping the existing login '{managed[0]}' with a new generated password");
+                }
+            }
+
+            db.User = principals[0].Login;
+            migration.User = principals[1].Login;
 
             var states = new List<(Principal Principal, LoginState? Login, UserState User)>();
             foreach (var principal in principals)
@@ -329,6 +472,13 @@ internal static class BootstrapDatabaseCommand
                 }
             }
 
+            // Credential files are written before the logins change: if the run stops in between,
+            // the next one applies the file (DEC-034).
+            foreach (var principal in principals)
+            {
+                WriteCredentialFile(output, principal);
+            }
+
             await connection.ChangeDatabaseAsync(db.Name);
             await using (var transaction = (SqlTransaction)await connection.BeginTransactionAsync())
             {
@@ -375,11 +525,20 @@ internal static class BootstrapDatabaseCommand
             await output.WriteLineAsync($"{Name}: verified migration login '{migration.User}' is db_owner of '{db.Name}' with no server roles or permissions beyond CONNECT.");
             policy.ReportUnmatched(output, Name);
             await output.WriteLineAsync($"{Name}: principal audit passed for both logins and the instance.");
-            return 0;
+            return adminFile is null ? 0 : await GeneratedAdministratorAsync(connection, db, adminFile, generatedAdmin, output, error);
         }
         catch (SqlException ex)
         {
             await error.WriteLineAsync($"{Name}: SQL Server error {ex.Number}: {ex.Message}");
+            if (!adminConnected && adminFile is not null && ex.Number is LoginFailed or LoginDisabled)
+            {
+                await error.WriteLineAsync(generatedAdmin is not null
+                    ? $"{Name}: the generated administrator in {adminFile} cannot sign in, and sa is never tried while that file exists. " +
+                        $"To recover, follow {RecoveryDocument}: remove the volume that holds this file, re-enable sa with mssql-conf, and run db-init again."
+                    : $"{Name}: sa cannot sign in, and the generated administrator's credential file {adminFile} does not exist. " +
+                        $"If sa is disabled (the file was lost), follow {RecoveryDocument}: re-enable sa with mssql-conf, and run db-init again.");
+            }
+
             return 1;
         }
         catch (OperationCanceledException)
@@ -387,6 +546,171 @@ internal static class BootstrapDatabaseCommand
             await error.WriteLineAsync($"{Name}: SQL Server did not accept connections within {bootstrap.WaitSeconds} s.");
             return 1;
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // Writing a credential file failed (for example a read-only or foreign-owned directory).
+            await error.WriteLineAsync($"{Name}: could not write a credential file ({ex.GetType().Name}). " +
+                "Its directory must be writable by this process; the changes listed above were made, run again once it is.");
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Resolves where each login's name and password come from (DEC-034), before anything else
+    /// is validated: settings when given (they are written to the credential file); otherwise the
+    /// credential file; otherwise, in Mode Create, newly generated ones. The generated
+    /// administrator's file is read here too, if it exists.
+    /// </summary>
+    private static List<string> PlanCredentials(
+        DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap,
+        out (CredentialSource Runtime, CredentialSource Migration) sources, out LoginCredential? generatedAdmin)
+    {
+        var errors = new List<string>();
+        var existing = bootstrap.Mode == BootstrapOptions.ExistingMode;
+        var runtime = Plan(errors, DatabaseOptions.SectionName, "app", db.CredentialFile, db.User, db.Password, existing);
+        var migrator = Plan(errors, MigrationOptions.SectionName, "migrator", migration.CredentialFile, migration.User, migration.Password, existing);
+        (db.User, db.Password) = (runtime.Credential.User, runtime.Credential.Password);
+        (migration.User, migration.Password) = (migrator.Credential.User, migrator.Credential.Password);
+        sources = (runtime.Source, migrator.Source);
+
+        generatedAdmin = null;
+        if (!string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile) && CredentialFile.Exists(bootstrap.AdminCredentialFile))
+        {
+            if (CredentialFile.TryRead(bootstrap.AdminCredentialFile, out var admin, out var problem))
+            {
+                generatedAdmin = admin;
+            }
+            else
+            {
+                errors.Add($"{BootstrapOptions.SectionName}:AdminCredentialFile {problem}.");
+            }
+        }
+
+        return errors;
+    }
+
+    private static (LoginCredential Credential, CredentialSource Source) Plan(
+        List<string> errors, string section, string purpose, string? file, string user, string password, bool existing)
+    {
+        (user, password) = (user ?? "", password ?? ""); // the binder sets null for a present but empty setting
+        var given = new LoginCredential(user, password);
+        if (string.IsNullOrWhiteSpace(file) || password.Length > 0)
+        {
+            // Without a file, the settings are validated as before; with one, they win and are written to it.
+            return (given, CredentialSource.Settings);
+        }
+
+        if (user.Length > 0)
+        {
+            errors.Add($"{section}:User is set without {section}:Password. Set both, or neither and let bootstrap-db generate them into {section}:CredentialFile.");
+            return (given, CredentialSource.Settings);
+        }
+
+        if (CredentialFile.Exists(file))
+        {
+            if (CredentialFile.TryRead(file, out var stored, out var problem))
+            {
+                return (stored, CredentialSource.File);
+            }
+
+            errors.Add($"{section}:CredentialFile {problem}.");
+            return (given, CredentialSource.File);
+        }
+
+        if (existing)
+        {
+            errors.Add($"{section}:User and Password are required in Mode {BootstrapOptions.ExistingMode} (the login a DBA created): " +
+                $"this mode generates nothing, and {section}:CredentialFile does not exist yet.");
+            return (given, CredentialSource.Settings);
+        }
+
+        return (new LoginCredential(CredentialFile.GenerateName(purpose), CredentialFile.GeneratePassword()), CredentialSource.Generated);
+    }
+
+    /// <summary>Writes the principal's credential file if one is configured and it does not already hold this login.</summary>
+    private static void WriteCredentialFile(TextWriter output, Principal principal)
+    {
+        if (string.IsNullOrWhiteSpace(principal.CredentialFile))
+        {
+            return;
+        }
+
+        var credential = new LoginCredential(principal.Login, principal.Password);
+        if (CredentialFile.TryRead(principal.CredentialFile, out var stored, out _) && stored == credential)
+        {
+            return;
+        }
+
+        CredentialFile.Write(principal.CredentialFile, credential);
+        Report(output, principal, $"wrote its credential file {principal.CredentialFile}");
+    }
+
+    /// <summary>
+    /// The bundled SQL Server's own administrator (DEC-034). Signed in as sa: create it (or reset
+    /// the one an earlier run created), SQL first and then its file, so a failure in between is
+    /// repaired by the next run, which still finds sa enabled. Then, signed in as it, disable sa.
+    /// </summary>
+    private static async Task<int> GeneratedAdministratorAsync(
+        SqlConnection connection, DatabaseOptions db, string adminFile, LoginCredential? signedIn, TextWriter output, TextWriter error)
+    {
+        var credential = signedIn;
+        if (credential is null)
+        {
+            var password = CredentialFile.GeneratePassword();
+            await using var command = connection.CreateCommand();
+            command.CommandText = EnsureAdminSql;
+            command.CommandTimeout = 60;
+            command.Parameters.Add(new SqlParameter("@db", System.Data.SqlDbType.NVarChar, 128) { Value = db.Name });
+            command.Parameters.Add(new SqlParameter("@login", System.Data.SqlDbType.NVarChar, 128) { Value = CredentialFile.GenerateName("admin") });
+            command.Parameters.Add(new SqlParameter("@password", System.Data.SqlDbType.NVarChar, 128) { Value = password });
+            string name, action;
+            string? ignored;
+            await using (var reader = await command.ExecuteReaderAsync())
+            {
+                await reader.ReadAsync();
+                (name, action, ignored) = (reader.GetString(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetString(2));
+            }
+
+            if (ignored is not null)
+            {
+                await output.WriteLineAsync($"{Name}: the login '{ignored}' named by the {AdminMarker} marker is not a sysadmin SQL login with Goldmark's prefix; it was left as it is.");
+            }
+
+            credential = new LoginCredential(name, password);
+            CredentialFile.Write(adminFile, credential);
+            await output.WriteLineAsync(action == "reset"
+                ? $"{Name}: reset the password of the generated administrator '{name}' and wrote its credential file {adminFile}"
+                : $"{Name}: created the generated administrator '{name}' (sysadmin) and wrote its credential file {adminFile}");
+        }
+
+        var builder = SqlConnectionFactory.Build(db, credential.User, credential.Password, database: "master");
+        builder.Pooling = false;
+        await using var asAdmin = new SqlConnection(builder.ConnectionString);
+        await asAdmin.OpenAsync();
+        if (await ScalarAsync(asAdmin, AdminRightsSql, db) != 1)
+        {
+            return await RefuseAsync(error, $"the generated administrator '{credential.User}' does not hold CONTROL SERVER; sa was left as it is.");
+        }
+
+        if (await ScalarAsync(asAdmin, DisableSaSql, db) == 1)
+        {
+            await output.WriteLineAsync($"{Name}: disabled sa; db-init signs in as the generated administrator from now on");
+        }
+
+        return 0;
+    }
+
+    private static async Task<List<string>> ManagedUsersAsync(SqlConnection connection, DatabaseOptions db, Principal principal)
+    {
+        await using var command = Command(connection, ManagedUsersSql, db, principal);
+        await using var reader = await command.ExecuteReaderAsync();
+        var names = new List<string>();
+        while (await reader.ReadAsync())
+        {
+            names.Add(reader.GetString(0));
+        }
+
+        return names;
     }
 
     private static async Task<List<AuditFinding>> AdminAuditAsync(
@@ -512,6 +836,7 @@ internal static class BootstrapDatabaseCommand
         command.Parameters.Add(new SqlParameter("@db_owner", System.Data.SqlDbType.Bit) { Value = principal.DbOwner });
         command.Parameters.Add(new SqlParameter("@adopt_user", System.Data.SqlDbType.Bit) { Value = bootstrap?.AdoptExistingLogin ?? false });
         command.Parameters.Add(new SqlParameter("@create", System.Data.SqlDbType.Bit) { Value = bootstrap?.Mode != BootstrapOptions.ExistingMode });
+        command.Parameters.Add(new SqlParameter("@owner_sa", System.Data.SqlDbType.Bit) { Value = !string.IsNullOrWhiteSpace(bootstrap?.AdminCredentialFile) });
         return command;
     }
 
@@ -621,11 +946,20 @@ internal static class BootstrapDatabaseCommand
         }
         else
         {
-            if (string.Equals(bootstrap.AdminUser, "sa", StringComparison.OrdinalIgnoreCase) && !bootstrap.AllowSaAdmin)
+            var isSa = string.Equals(bootstrap.AdminUser, "sa", StringComparison.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile))
             {
-                // A well-known name with every right is what attackers try first (DEC-032).
-                errors.Add($"{admin}:AdminUser must not be 'sa': use a dedicated administrator login with CONTROL SERVER. " +
-                    $"Only the bundled SQL Server deployment allows 'sa' ({admin}:AllowSaAdmin), until Goldmark generates its own administrator login.");
+                if (isSa)
+                {
+                    // A well-known name with every right is what attackers try first (DEC-032).
+                    errors.Add($"{admin}:AdminUser must not be 'sa': use a dedicated administrator login with CONTROL SERVER. " +
+                        $"Only with {admin}:AdminCredentialFile (the bundled SQL Server) does sa sign in, once, to create Goldmark's own administrator, and it is then disabled.");
+                }
+            }
+            else if (!isSa)
+            {
+                errors.Add($"{admin}:AdminUser must be 'sa' with {admin}:AdminCredentialFile: sa creates the generated administrator and is then disabled. " +
+                    $"With an administrator of your own, leave {admin}:AdminCredentialFile unset.");
             }
 
             // The app container would hold a credential that also authenticates as the administrator.

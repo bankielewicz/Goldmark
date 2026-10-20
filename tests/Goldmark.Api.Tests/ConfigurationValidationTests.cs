@@ -218,11 +218,12 @@ public sealed class BootstrapValidationTests
     public void Valid_settings_pass() => Assert.Empty(Validate(ValidDatabase(), ValidBootstrap()));
 
     [Fact]
-    public void The_migration_login_defaults_to_goldmark_migrator_with_no_password()
+    public void The_migration_login_has_no_default_name_or_password() // DEC-034: generated when neither is set
     {
         var defaults = new MigrationOptions();
-        Assert.Equal("goldmark_migrator", defaults.User);
+        Assert.Equal("", defaults.User);
         Assert.Equal("", defaults.Password);
+        Assert.Null(defaults.CredentialFile);
         Assert.Contains(Validate(ValidDatabase(), ValidBootstrap(), defaults), e => e.Contains("Goldmark:Migration:Password must be 12", StringComparison.Ordinal));
     }
 
@@ -413,14 +414,22 @@ public sealed class BootstrapValidationTests
     [Theory]
     [InlineData("sa")]
     [InlineData("SA")]
-    public void Sa_is_refused_as_the_admin_login_unless_the_bundled_deployment_allows_it(string admin) // DEC-032
+    public void Sa_is_refused_as_the_admin_login_unless_it_creates_the_generated_administrator(string admin) // DEC-032, DEC-034
     {
         var bootstrap = ValidBootstrap();
         bootstrap.AdminUser = admin;
         Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("Goldmark:Bootstrap:AdminUser must not be 'sa'", StringComparison.Ordinal));
 
-        bootstrap.AllowSaAdmin = true;
+        bootstrap.AdminCredentialFile = "/var/lib/goldmark/db-admin/admin.json";
         Assert.Empty(Validate(ValidDatabase(), bootstrap));
+    }
+
+    [Fact]
+    public void A_generated_administrator_is_created_by_sa_only() // DEC-034
+    {
+        var bootstrap = ValidBootstrap();
+        bootstrap.AdminCredentialFile = "/var/lib/goldmark/db-admin/admin.json";
+        Assert.Contains(Validate(ValidDatabase(), bootstrap), e => e.Contains("Goldmark:Bootstrap:AdminUser must be 'sa' with Goldmark:Bootstrap:AdminCredentialFile", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -523,6 +532,7 @@ public sealed class AuditFindingTests
     [InlineData("database-unreadable", true)]
     [InlineData("goldmark-grant", false)]
     [InlineData("goldmark-database-option", false)]
+    [InlineData("goldmark-public-owner", false)]
     [InlineData("login-disabled", false)]
     [InlineData("server-role", false)]
     [InlineData("database-access", false)]
@@ -538,7 +548,7 @@ public sealed class AuditFindingTests
         [
             "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
             "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
-            "goldmark-database-principal", "runtime-role-grant", "login-disabled", "login-policy-off",
+            "goldmark-database-principal", "goldmark-public-owner", "runtime-role-grant", "login-disabled", "login-policy-off",
             "login-expiration-on", "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential",
             "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
             "database-grant", "database-connect-denied", "server-securable", "database-securable",
@@ -549,6 +559,17 @@ public sealed class AuditFindingTests
             var description = new AuditFinding(kind, ["a", "b", "c", "d"]).Description;
             Assert.False(description.StartsWith($"{kind}:", StringComparison.Ordinal), kind);
         }
+    }
+
+    [Theory]
+    [InlineData("schema", "cmdb", "Fix: USE [Goldmark]; ALTER AUTHORIZATION ON SCHEMA::[cmdb] TO dbo;")]
+    [InlineData("database principal", "goldmark_runtime", "Fix: USE [Goldmark]; ALTER AUTHORIZATION ON ROLE::[goldmark_runtime] TO dbo;")]
+    [InlineData("schema", "x]; DROP USER y; --", "ALTER AUTHORIZATION ON SCHEMA::[x]]; DROP USER y; --] TO dbo;")]
+    public void A_securable_owned_by_public_names_a_quoted_fix(string kind, string name, string expected) // #18
+    {
+        var finding = new AuditFinding("goldmark-public-owner", ["Goldmark", kind, name]);
+        Assert.Contains(expected, finding.Description, StringComparison.Ordinal);
+        Assert.False(finding.Acceptable);
     }
 
     [Fact]

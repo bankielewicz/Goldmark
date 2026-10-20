@@ -39,7 +39,7 @@ COPY src/ src/
 # Schema migrations are embedded in the API assembly; the migrate command applies them.
 COPY db/migrations/ db/migrations/
 RUN dotnet publish src/Goldmark.Api/Goldmark.Api.csproj -c Release --no-restore -o /app/publish -p:UseAppHost=false \
- && mkdir -p /layout/var/lib/goldmark/tls
+ && mkdir -p /layout/var/lib/goldmark/tls /layout/var/lib/goldmark/db-runtime /layout/var/lib/goldmark/db-admin
 
 # ---------------------------------------------------------------------------
 FROM ${RUNTIME_IMAGE} AS runtime
@@ -52,8 +52,10 @@ ENV ASPNETCORE_HTTP_PORTS= \
 WORKDIR /app
 COPY --from=api-build /app/publish ./
 COPY --from=web-build /src/web/dist ./wwwroot/
-# Mount point for the per-installation TLS certificate volume, owned by the app user.
-COPY --from=api-build --chown=1654:1654 --chmod=700 /layout/var/lib/goldmark/tls /var/lib/goldmark/tls
+# Mount points for the per-installation TLS certificate volume and the database credential
+# volumes (DEC-034), owned by the app user. A new named volume takes this ownership; the app and
+# bootstrap-db force 0700 themselves, because COPY --chmod is not applied to every directory.
+COPY --from=api-build --chown=1654:1654 --chmod=700 /layout/var/lib/goldmark/ /var/lib/goldmark/
 USER 1654
 EXPOSE 8443
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \

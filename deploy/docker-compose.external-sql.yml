@@ -1,4 +1,4 @@
-# Goldmark with an existing SQL Server 2025 instance (US-01, slice 2b; DEC-033).
+# Goldmark with an existing SQL Server 2025 instance (US-01, slices 2b-2c; DEC-033, DEC-034).
 #
 #   cp deploy/.env.example deploy/.env    # fill in the "Existing SQL Server" section
 #   docker compose -f deploy/docker-compose.external-sql.yml up -d --build --wait
@@ -11,9 +11,12 @@ name: goldmark
 
 services:
   # One-shot, idempotent. bootstrap-db (as the administrator login, CONTROL SERVER) audits the
-  # instance and Goldmark's two logins, then creates what is missing (Mode Create) or nothing at
-  # all (Mode Existing); migrate (as the migration login) applies the schema migrations. Only
-  # this container receives the administrator and migration passwords; the app never does.
+  # instance and Goldmark's two logins, then creates what is missing (Mode Create, with generated
+  # names and passwords unless they are set in .env) or nothing at all (Mode Existing), and writes
+  # both logins to credential files (DEC-034); migrate (as the migration login) applies the schema
+  # migrations. Only this container receives the administrator password and mounts
+  # goldmark-db-admin (the migration login); the app reads the runtime login from
+  # goldmark-db-runtime, read-only.
   db-init:
     image: goldmark:${GOLDMARK_IMAGE_TAG:-local}
     pull_policy: never
@@ -27,10 +30,13 @@ services:
       # otherwise the certificate must chain to a CA the container trusts.
       Goldmark__Database__ServerCertificatePath: ${GOLDMARK_SQL_SERVER_CERT_FILE:+/run/goldmark/sql-tls/server.crt}
       Goldmark__Database__HostNameInCertificate: ${GOLDMARK_DB_HOST_NAME_IN_CERTIFICATE:-}
-      Goldmark__Database__User: ${GOLDMARK_DB_USER:-goldmark_app}
-      Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:?Set GOLDMARK_DB_PASSWORD in deploy/.env}
-      Goldmark__Migration__User: ${GOLDMARK_DB_MIGRATION_USER:-goldmark_migrator}
-      Goldmark__Migration__Password: ${GOLDMARK_DB_MIGRATION_PASSWORD:?Set GOLDMARK_DB_MIGRATION_PASSWORD in deploy/.env}
+      # Empty in Mode Create (generated); the DBA's logins in Mode Existing.
+      Goldmark__Database__User: ${GOLDMARK_DB_USER:-}
+      Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:-}
+      Goldmark__Database__CredentialFile: /var/lib/goldmark/db-runtime/credential.json
+      Goldmark__Migration__User: ${GOLDMARK_DB_MIGRATION_USER:-}
+      Goldmark__Migration__Password: ${GOLDMARK_DB_MIGRATION_PASSWORD:-}
+      Goldmark__Migration__CredentialFile: /var/lib/goldmark/db-admin/migration.json
       Goldmark__Bootstrap__AdminUser: ${GOLDMARK_DB_ADMIN_USER:?Set GOLDMARK_DB_ADMIN_USER in deploy/.env (a login with CONTROL SERVER; not sa)}
       Goldmark__Bootstrap__AdminPassword: ${GOLDMARK_DB_ADMIN_PASSWORD:?Set GOLDMARK_DB_ADMIN_PASSWORD in deploy/.env}
       Goldmark__Bootstrap__Mode: ${GOLDMARK_DB_BOOTSTRAP_MODE:-Create}
@@ -40,6 +46,8 @@ services:
     volumes:
       # With no certificate configured, /dev/null is mounted and ignored (no pin is set).
       - ${GOLDMARK_SQL_SERVER_CERT_FILE:-/dev/null}:/run/goldmark/sql-tls/server.crt:ro
+      - goldmark-db-runtime:/var/lib/goldmark/db-runtime
+      - goldmark-db-admin:/var/lib/goldmark/db-admin
     healthcheck:
       disable: true
     read_only: true
@@ -60,8 +68,8 @@ services:
       Goldmark__Database__Encrypt: ${GOLDMARK_DB_ENCRYPT:-Strict}
       Goldmark__Database__ServerCertificatePath: ${GOLDMARK_SQL_SERVER_CERT_FILE:+/run/goldmark/sql-tls/server.crt}
       Goldmark__Database__HostNameInCertificate: ${GOLDMARK_DB_HOST_NAME_IN_CERTIFICATE:-}
-      Goldmark__Database__User: ${GOLDMARK_DB_USER:-goldmark_app}
-      Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:?Set GOLDMARK_DB_PASSWORD in deploy/.env}
+      # The runtime login, written by db-init (DEC-034).
+      Goldmark__Database__CredentialFile: /var/lib/goldmark/db-runtime/credential.json
       Goldmark__Https__Hostnames: ${GOLDMARK_TLS_HOSTNAMES:-localhost}
       Goldmark__Https__CertificatePath: ${GOLDMARK_TLS_CERT_FILE:-}
       Goldmark__Https__KeyPath: ${GOLDMARK_TLS_KEY_FILE:-}
@@ -73,6 +81,7 @@ services:
     volumes:
       - goldmark-tls:/var/lib/goldmark/tls
       - ${GOLDMARK_SQL_SERVER_CERT_FILE:-/dev/null}:/run/goldmark/sql-tls/server.crt:ro
+      - goldmark-db-runtime:/var/lib/goldmark/db-runtime:ro
     depends_on:
       db-init:
         condition: service_completed_successfully
@@ -84,3 +93,5 @@ services:
 
 volumes:
   goldmark-tls: {}
+  goldmark-db-runtime: {}
+  goldmark-db-admin: {}

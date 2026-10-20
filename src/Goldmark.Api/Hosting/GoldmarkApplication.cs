@@ -16,7 +16,14 @@ internal static class GoldmarkApplication
         builder.AddGoldmarkLogging();
 
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
-        builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart();
+        builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart()
+            .PostConfigure<IHostEnvironment>((db, environment) =>
+            {
+                // The runtime login's name and password come from bootstrap-db's credential file
+                // when one is configured (DEC-034); read once, at startup.
+                db.CredentialFile = Rooted(db.CredentialFile, environment.ContentRootPath);
+                DatabaseOptionsValidator.ApplyCredentialFile(db);
+            });
         builder.Services.AddSingleton<IValidateOptions<HttpsOptions>, HttpsOptionsValidator>();
         builder.Services.AddOptions<HttpsOptions>().BindConfiguration(HttpsOptions.SectionName).ValidateOnStart()
             .PostConfigure<IHostEnvironment>((https, environment) =>

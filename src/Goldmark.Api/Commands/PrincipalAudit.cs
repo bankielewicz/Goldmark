@@ -40,7 +40,7 @@ internal static class PrincipalAudit
     {
         "guest-connect", "database-unreadable", "linked-login-all-logins", "remote-login-all-logins", "public-server-grant",
         "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
-        "goldmark-database-principal", "runtime-role-grant", "login-disabled", "login-policy-off", "login-expiration-on",
+        "goldmark-database-principal", "goldmark-public-owner", "runtime-role-grant", "login-disabled", "login-policy-off", "login-expiration-on",
         "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential", "server-role",
         "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
         "database-grant", "database-connect-denied", "server-securable", "database-securable",
@@ -264,26 +264,40 @@ internal static class PrincipalAudit
     // (Codex security review on #17), and any other user or application role that holds a role,
     // a permission beyond CONNECT, or owns something. Goldmark's two users and the built-in
     // principals are expected.
+    // Run in master as the administrator. The Goldmark database's owner (its dbo) must hold
+    // CONTROL SERVER effectively (#19): sa, or a login whose own token has it, through any role
+    // or group and honouring a DENY, checked by impersonating it. An owner that is not a login, or
+    // that cannot be impersonated, is a finding too. The impersonation runs in master, which every
+    // login can enter, and ends with its sp_executesql batch.
+    private const string DatabaseOwnerSql = $"""
+        SET NOCOUNT ON;
+        {FindingsTable}
+        DECLARE @owner varbinary(85) = (SELECT owner_sid FROM sys.databases WHERE name = @db);
+        DECLARE @name sysname = SUSER_SNAME(@owner), @controls int = 0;
+        IF @owner = 0x01
+            SET @controls = 1;
+        ELSE IF @name IS NOT NULL
+        BEGIN
+            BEGIN TRY
+                EXEC sys.sp_executesql
+                    N'EXECUTE AS LOGIN = @name; SET @controls = ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, N''CONTROL SERVER''), 0); REVERT;',
+                    N'@name sysname, @controls int OUTPUT', @name = @name, @controls = @controls OUTPUT;
+            END TRY
+            BEGIN CATCH
+                SET @controls = 0;
+            END CATCH;
+        END;
+        IF @controls = 0
+            INSERT @f VALUES (N'goldmark-database-owner', @db, ISNULL(@name, N'#unknown'), NULL, NULL);
+        SELECT Kind, A, B, C, D FROM @f;
+        """;
+
     private const string GoldmarkDatabaseSql = $"""
         SET NOCOUNT ON;
         {FindingsTable}
-        -- The owner must hold CONTROL SERVER: sa, sysadmin, or CONTROL SERVER granted to it or to a
-        -- server role it belongs to, at any depth (Codex on #17).
-        DECLARE @owner varbinary(85) = (SELECT owner_sid FROM sys.databases WHERE database_id = DB_ID());
-        DECLARE @owner_id int = (SELECT principal_id FROM sys.server_principals WHERE sid = @owner);
-        DECLARE @controls bit = 0;
-        WITH chain AS (
-            SELECT @owner_id AS id
-            UNION ALL
-            SELECT m.role_principal_id FROM sys.server_role_members AS m JOIN chain AS c ON m.member_principal_id = c.id)
-        SELECT @controls = CASE WHEN @owner = 0x01
-            OR EXISTS (SELECT 1 FROM chain WHERE id = SUSER_ID(N'sysadmin'))
-            OR EXISTS (SELECT 1 FROM sys.server_permissions AS p JOIN chain AS c ON p.grantee_principal_id = c.id
-                WHERE p.class = 100 AND p.permission_name = N'CONTROL SERVER' AND p.state IN ('G', 'W'))
-            THEN 1 ELSE 0 END
-        OPTION (MAXRECURSION 32);
-        IF @controls = 0
-            INSERT @f VALUES (N'goldmark-database-owner', DB_NAME(), ISNULL(SUSER_SNAME(@owner), N'#unknown'), NULL, NULL);
+        -- Securables owned by public (#18): every user in the database would hold every right on them.
+        INSERT @f SELECT N'goldmark-public-owner', DB_NAME(), o.kind, o.name, NULL
+        FROM ({OwnedSecurables}) AS o WHERE o.owner = 0;
 
         -- Any other user or application role that holds a role, a permission beyond a plain
         -- CONNECT, or owns anything (a role it owns can be altered to give it Goldmark's rights).
@@ -535,10 +549,12 @@ internal static class PrincipalAudit
             return [];
         }
 
+        var findings = await QueryAsync(admin, DatabaseOwnerSql, ("@db", database));
         await admin.ChangeDatabaseAsync(database);
         try
         {
-            return await QueryAsync(admin, GoldmarkDatabaseSql, ("@login1", login1), ("@login2", login2));
+            findings.AddRange(await QueryAsync(admin, GoldmarkDatabaseSql, ("@login1", login1), ("@login2", login2)));
+            return findings;
         }
         finally
         {
@@ -667,8 +683,10 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
         "cross-db-chaining" => "the server option 'cross db ownership chaining' is on. Fix: EXEC sp_configure 'cross db ownership chaining', 0; RECONFIGURE;",
         "goldmark-grant" => $"{P(1)} holds {P(2)} on {Target(P(3), P(4))} in the Goldmark database '{P(0)}'. Fix: USE {Q(P(0))}; REVOKE {Revocable(P(2))} {On(P(3), P(4))}FROM {Q(P(1))}{Cascade(P(2))};",
         "goldmark-database-option" => $"the Goldmark database '{P(0)}' has {P(1)} on. Fix: ALTER DATABASE {Q(P(0))} SET {P(1)} OFF;",
-        "goldmark-database-owner" => $"the Goldmark database '{P(0)}' is owned by '{P(1)}', which does not hold CONTROL SERVER, so that login controls everything in it. " +
+        "goldmark-database-owner" => $"the Goldmark database '{P(0)}' is owned by '{P(1)}', which does not hold CONTROL SERVER (effectively, honouring DENY), so that login controls everything in it. " +
             $"Fix: ALTER AUTHORIZATION ON DATABASE::{Q(P(0))} TO <a login with CONTROL SERVER>; (or drop the database if Goldmark did not create it)",
+        "goldmark-public-owner" => $"public owns {P(1)} '{P(2)}' in the Goldmark database '{P(0)}', so every user there holds every right on it. " +
+            $"Fix: USE {Q(P(0))}; {PublicOwnerFix(P(1), P(2))}",
         "runtime-role-grant" => $"the role goldmark_runtime holds {P(1)} on {Target(P(2), P(3))} in '{P(0)}', which Goldmark's migrations do not grant. " +
             $"Fix: USE {Q(P(0))}; REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM [goldmark_runtime]{Cascade(P(1))};",
         "goldmark-database-principal" => $"'{P(1)}' in the Goldmark database '{P(0)}' holds a role or a permission, or owns something; only Goldmark's two users may. " +
@@ -695,6 +713,14 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
         "server-securable" => $"login '{P(0)}' holds {P(3)} on {P(1)} '{P(2)}'. Fix: REVOKE {P(3)} ON {P(1)}::{Q(P(2))} FROM {Q(P(0))}; (or from the role or group that grants it)",
         "database-securable" => $"login '{P(0)}' holds {P(3)} on {P(1)} '{P(2)}' in the Goldmark database. Fix: revoke it from the user, role or group that grants it.",
         _ => $"{Kind}: {string.Join(", ", Parts)}",
+    };
+
+    // Schemas and roles have simple names to quote; for anything else the class and name are named.
+    private static string PublicOwnerFix(string kind, string name) => kind switch
+    {
+        "schema" => $"ALTER AUTHORIZATION ON SCHEMA::{Q(name)} TO dbo;",
+        "database principal" => $"ALTER AUTHORIZATION ON ROLE::{Q(name)} TO dbo; (APPLICATION ROLE:: for an application role)",
+        _ => $"transfer the {kind} to dbo (ALTER AUTHORIZATION ON <class>::<name> TO dbo).",
     };
 
     private static string Target(string @class, string name) =>

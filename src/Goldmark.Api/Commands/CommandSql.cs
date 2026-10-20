@@ -5,6 +5,9 @@ namespace Goldmark.Api.Commands;
 /// <summary>SQL plumbing shared by the one-shot database commands.</summary>
 internal static class CommandSql
 {
+    // A disabled login stays disabled: waiting for it would only delay the error.
+    private const int LoginDisabled = 18470;
+
     /// <summary>
     /// Retries until SQL Server accepts the connection. The whole wait, including each
     /// connection attempt, is bounded by <paramref name="wait"/> plus one connect timeout.
@@ -22,7 +25,7 @@ internal static class CommandSql
                 await connection.OpenAsync(overall.Token);
                 return connection;
             }
-            catch (SqlException ex) when (DateTime.UtcNow < deadline)
+            catch (SqlException ex) when (DateTime.UtcNow < deadline && ex.Number != LoginDisabled)
             {
                 await connection.DisposeAsync();
                 await output.WriteLineAsync($"{command}: SQL Server not ready yet (error {ex.Number}); retrying");

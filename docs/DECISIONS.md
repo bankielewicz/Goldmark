@@ -4,7 +4,7 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-19):** slices 1, 2 and 2b are merged (PRs #1, #14, #17); slice 2c is next. The owner approved
+**Approval state (2026-10-19):** slices 1, 2 and 2b are merged (PRs #1, #14, #17); slice 2c is in review (DEC-034, DEC-035). The owner approved
 the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b, 2c
 and 5b, in order, one PR each. Docker Compose is the first distribution, not the
 target deployment (DEC-030). The PRD text stays a draft (DEC-001); the build
@@ -46,6 +46,8 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-031 | Principal audit of Goldmark's logins and the shared instance | Database |
 | DEC-032 | `bootstrap-db`: administrator login, Mode Create/Existing, user names | Database |
 | DEC-033 | `docker-compose.external-sql.yml` | Deployment |
+| DEC-034 | Generated database credentials; `sa` disabled; tested recovery | Database |
+| DEC-035 | Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER | Database |
 
 ---
 
@@ -424,7 +426,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | Migration login, DML grants, readiness schema check; `bootstrap-db` port and reserved-name validation (#7) | 2 (done: DEC-022…DEC-029) |
 | Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b (done: DEC-031) |
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b (done: DEC-032, DEC-033) |
-| Generated administrator, migration and runtime credentials; `sa` disabled in the bundled deployment | 2c (DEC-032) |
+| Generated administrator, migration and runtime credentials; `sa` disabled in the bundled deployment | 2c (done: DEC-034) |
 | Windows service distribution, installer wizard, Windows authentication, availability groups | owner to place (DEC-030) |
 | Generated certificate renewal without a restart (#5, DEC-006) | 24 |
 | Owner-only ACL for the generated key on Windows dev hosts (#6, DEC-006) | 24 |
@@ -832,7 +834,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   - **`sa` is refused** (exit 2) unless `Goldmark:Bootstrap:AllowSaAdmin` is set.
     Only the bundled Compose file sets it, until slice 2c. Reason: `sa` is a
     well-known name with every right, which attackers try first; the CIS
-    benchmark recommends disabling it.
+    benchmark recommends disabling it. *(Slice 2c: `AllowSaAdmin` is gone; `sa` is
+    accepted only as the initial administrator with `AdminCredentialFile`, DEC-034.)*
   - The administrator needs **CONTROL SERVER** (checked first, exit 3), because
     the audit reads every catalog and `PWDCOMPARE` reads password hashes.
   - It stays in `deploy/.env` and is used on every `db-init` run (owner: option
@@ -863,7 +866,7 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   databases close whenever their last connection ends. Without this, every
   unpooled readiness probe (DEC-008) and every audit pass would reopen the
   database. Mode `Existing` leaves the DBA's database as it is (the DBA script sets it).
-- **Slice 2c (owner, 2026-10-19), next after 2b:** generated administrator,
+- **Done in slice 2c (DEC-034).** *Slice-2b text, kept for the record:* **Slice 2c (owner, 2026-10-19), next after 2b:** generated administrator,
   migration and runtime credentials (random names with a recognisable prefix,
   random passwords), stored in volumes; the app reads its password from a file; a
   dedicated login for the SQL container's healthcheck; `sa` disabled.
@@ -898,6 +901,103 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   - the app ready on its own port, with no administrator or migration credential
     in its environment;
   - a `guest-connect` finding refused, then accepted by its ID.
+
+## DEC-034 Generated database credentials; `sa` disabled; tested recovery
+
+- **Decision (owner, 2026-10-19; slice 2c, planned in DEC-032).** Goldmark
+  generates its own logins instead of taking passwords from `deploy/.env`. Owner choices:
+  **1A** upgrade in place, **2A** name format, **3A** no automatic rotation, **4A** the SQL
+  container creates its healthcheck login, **5A** Mode Existing writes the files from
+  settings. Operator docs: `docs/ops/database-credentials.md`, `docs/ops/database-recovery.md`.
+- **Measured first (pinned SQL Server 2025 image, before `sa` was disabled anywhere):**
+  - a disabled `sa` stays disabled across restarts; a changed `MSSQL_SA_PASSWORD` is
+    ignored after the first start (the password hash does not change);
+  - with SQL Server stopped, `mssql-conf -n set-sa-password` (a one-off container on the
+    same data volume) sets the password **and re-enables `sa`** (`is_disabled` 1 → 0, sign-in
+    works). It runs `sqlservr --setup --reset-sa-password`;
+  - `sqlservr --force-setup` rebuilds master and model (every login lost; run directly it
+    does not exit but keeps serving). The user databases' files survive and attach again
+    (`FOR ATTACH`) with their data, their users orphaned. Documented as a last resort only.
+- **Credential files** (`src/Goldmark.Api/Configuration/CredentialFile.cs`): one JSON file
+  per login, `{"user", "password"}`, `0600` in a `0700` directory (forced on every write),
+  written atomically; contents never appear in messages. Paths are settings
+  (`Goldmark:Database:CredentialFile`, `Goldmark:Migration:CredentialFile`,
+  `Goldmark:Bootstrap:AdminCredentialFile`), so the Windows service can point them at a
+  DPAPI store (rule 8). Names: `goldmark_<purpose>_` + 10 random `[a-z0-9]`; passwords: 32
+  random letters and digits with every class.
+- **Where a login comes from** (`bootstrap-db`, per login): settings, when a password is
+  given (written to the file; a name without a password is exit 2) → else the file → else,
+  in Mode Create, generated. When the file is missing but a user carrying the purpose's
+  marker exists (upgrade from settings, lost volume), that login keeps its name and gets the
+  generated password (two such users: exit 3). Files are written after the pre-change audit
+  and **before** the logins change, so an interrupted run is finished by the next one.
+  `migrate` and the app read the file; settings given as well must match it (exit 2).
+- **Generated administrator** (bundled SQL Server only): with `AdminCredentialFile`,
+  `AdminUser` must be `sa`; `sa` without it is exit 2 (`AllowSaAdmin` removed).
+  - While `admin.json` is missing, `bootstrap-db` signs in as `sa`, does its work, then
+    creates `goldmark_admin_<suffix>` (sysadmin) — SQL first, file second, so a failure in
+    between is repaired by the next run, which still finds `sa` enabled — signs in with it,
+    checks CONTROL SERVER, and disables `sa`.
+  - While `admin.json` exists, `sa` is never tried; every run disables `sa` again if it was
+    re-enabled. A login failure with the file present, or `sa` disabled (18470) without it,
+    is exit 1 with the recovery steps; 18470 is not retried.
+  - The administrator's SID is recorded on the Goldmark database (`goldmark:admin-login`). It
+    is a hint only (the migration login is `db_owner` and can change it): it is reused, with a
+    new password, only if it is a SQL login with the `goldmark_admin_` prefix that already holds
+    sysadmin; otherwise a new administrator is created. sysadmin is never added to an existing
+    login (tested with a tampered marker).
+  - A database this mode creates is owned by `sa` (disabled), not by the generated login, so a
+    recovery cannot orphan the owner.
+- **Healthcheck login (4A):** `deploy/sqlserver/health-login.sh`, started in the background by
+  the SQL entrypoint, creates or repairs `goldmark_health_<suffix>` (CONNECT SQL only) as `sa`
+  while its credential (`sql-tls-private/healthcheck.credential`) is missing or does not sign
+  in. `healthcheck.sh` uses only that login, so the container is not healthy, and `db-init`
+  cannot run and disable `sa`, before it exists. With the file lost and `sa` disabled it stays
+  unhealthy and logs the recovery. Passwords reach `sqlcmd` through the environment, not argv.
+- **Compose.** Bundled: `goldmark-db-runtime` (db-init read-write, app read-only) and
+  `goldmark-db-admin` (db-init only; migration and administrator). `deploy/.env` holds only
+  `SQLSERVER_ACCEPT_EULA` and `SQLSERVER_SA_PASSWORD`, which the image needs on every start.
+  External file: the same two volumes; Mode Create generates unless the four login settings
+  are set; Mode Existing (5A) requires them and writes them to the files; the operator's
+  administrator stays in `.env`. The image creates both mount points owned by uid 1654.
+- **Upgrade (1A).** A pre-2c bundled stack: the first run finds `goldmark_app` and
+  `goldmark_migrator` by marker, keeps the names, generates passwords, creates the
+  administrator and disables `sa`. External installations: the passwords in `.env` seed the
+  files. Tested in both integration collections.
+- **Rotation (3A):** none automatic (`docker compose up` reruns `db-init`; the app reads its
+  file only at start). A password changes when a file is lost, or when settings give one
+  (`db-init` rotates the login and rewrites the file). A rotate command is later work.
+- **Recovery (tested):** stop the stack; if `admin.json` exists but fails, remove the
+  `goldmark-db-admin` volume; `docker compose run --rm --no-deps --entrypoint
+  /opt/mssql/bin/mssql-conf sqlserver -n set-sa-password` with SQL Server stopped; start.
+  The smoke test runs it end to end; integration tests cover each `bootstrap-db` path.
+- **Not covered:** Windows authentication, DPAPI and the installer (DEC-030); availability
+  groups (#20). Anyone with access to the Docker volumes can read the credentials, as they can
+  read the database files.
+
+## DEC-035 Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER
+
+- **Decision (owner: deferred from PR #17 to slice 2c; closes #18 and #19).**
+- **#18, new must-fix kind `goldmark-public-owner:<db>:<kind>:<name>`:** any securable in the
+  Goldmark database owned by `public` (every class in the ownership catalogs). Measured on
+  SQL Server 2025:
+  - `ALTER AUTHORIZATION ON SCHEMA::… TO [public]` and `ON ROLE::… TO [public]` work
+    (`public` must be bracketed: it is a keyword);
+  - ownership by `public` gives every user CONTROL: a CONNECT-only user deleted rows in a
+    `public`-owned schema and joined a `public`-owned role; ownership by a role gives its
+    members CONTROL;
+  - a fresh database has no securable owned by `public`, so no built-in exception was needed
+    (the issue allowed one for the built-in schemas).
+- **#19, `goldmark-database-owner` honours DENY:** the owner's CONTROL SERVER is checked by
+  impersonating it (`EXECUTE AS LOGIN` + `HAS_PERMS_BY_NAME`, in one `sp_executesql` batch run
+  in master, which every login can enter). `sa` (0x01) is accepted without impersonation, so
+  a disabled `sa` owner is fine; an owner that is not a login, or cannot be impersonated, is a
+  finding. Measured: with CONTROL SERVER through a server role and a direct `DENY CONTROL
+  SERVER`, impersonating the login fails (error 916, no access to master) and is reported;
+  without the DENY it returns 1; a disabled login can still be impersonated.
+- **Tests:** both `ALTER AUTHORIZATION … TO [public]` cases refused; the measurement itself;
+  the role-plus-DENY owner refused, then accepted after `REVOKE`; the nested-role owner from
+  #17 still accepted.
 
 ---
 
@@ -982,3 +1082,25 @@ before), all passing.
 | 13 | Codex round 2 (#17): owner through server roles, role ownership and `CONNECT WITH GRANT OPTION`, grants to `goldmark_runtime` on system objects, databases not online, names for every securable class, unknown kinds not echoed | **Met** | Integration: nested server role with CONTROL SERVER accepted; role owned by another user refused; `CONNECT WITH GRANT OPTION` refused; `SELECT ON sys.objects` to the role refused; offline database refused, accepted, fixed; certificate grant named `[ItCert2]`; the login's own view still finds role-granted rights. Unit: unknown kind not echoed |
 | 14 | CI green | **Met** | PR #17: 12 checks green on every push |
 | 15 | Codex round 3 (past the two-round limit) | Owner: fix the docs example, defer the rest | Docs fixed in PR #17; #18 and #19 deferred to 2c, #20 to the availability-group slice |
+
+## Slice 2c acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine: 236 in-process
+tests, 147 integration tests (three SQL Server 2025 containers), 82 smoke
+checks, all passing.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | `deploy/.env` holds only the `sa` password the image needs (HANDOFF §1) | **Met** | `.env.example`, both Compose files; smoke: `.env` has only `SQLSERVER_ACCEPT_EULA` and `SQLSERVER_SA_PASSWORD`, Compose refuses without them, the app's environment has no password, db-init's none of the generated ones |
+| 2 | Generated administrator, migration and runtime logins: prefix + random suffix, random passwords, in files whose path is a setting (DEC-032, owner 2A) | **Met** | `CredentialFile` unit tests (format, 0600/0700, atomic, no contents in messages); integration `GeneratedCredentialsTests`, `GeneratedAdministratorTests`; smoke: names, modes, another uid cannot read |
+| 3 | Administrator and migration credentials in a volume only db-init mounts; the runtime one read-only in the app; the app reads its password from a file (DEC-032) | **Met** | Compose; smoke: mounts inspected; app unit tests (reads the file, refuses a missing or invalid one, no secret in logs) |
+| 4 | First run: sa creates the generated administrator, then sa is disabled; `AllowSaAdmin` removed (DEC-032) | **Met** | Integration: administrator created (sysadmin), `sa` disabled, database owned by `sa`, later runs never try `sa`; smoke: `sa` sign-in refused (account disabled) |
+| 5 | A tested recovery before disabling `sa`; measure `mssql-conf set-sa-password` (DEC-032) | **Met** | Measured first (DEC-034); `docs/ops/database-recovery.md`; smoke: administrator volume removed, db-init stops with the recovery steps, `mssql-conf` re-enables `sa`, db-init resets the same administrator and disables `sa`, app ready; integration: each `bootstrap-db` path, including a tampered marker |
+| 6 | The SQL container's healthcheck uses a CONNECT-only login (DEC-032, owner 4A) | **Met** | `health-login.sh`, `healthcheck.sh`; measured restart and lockout paths; smoke: the login holds only CONNECT SQL, no user, `healthcheck.sh` never uses `sa` |
+| 7 | The external-SQL file keeps the operator's administrator; generation in Mode Create (DEC-032); Mode Existing writes the files from settings (owner 5A) | **Met** | Integration: generation, settings written to files, Mode Existing; smoke: Mode Existing app reads its file, Mode Create generates both logins |
+| 8 | Upgrade of a stack with passwords in `.env` (owner 1A) | **Met** | Integration in both collections: names kept, passwords replaced, `sa` disabled |
+| 9 | No automatic rotation (owner 3A) | **Met** | Lost file → new password, same login; settings → rotated and file rewritten (integration, smoke) |
+| 10 | #18: securables owned by `public` refused, measured first | **Met** | DEC-035; integration: schema and role cases refused, measurement test; fresh installation passes |
+| 11 | #19: the owner's effective CONTROL SERVER, honouring DENY | **Met** | DEC-035; integration: role grant + direct DENY refused, then accepted after REVOKE; nested-role owner still accepted |
+| 12 | Rule 7 (audit records, `/api/v1` parity, endpoint policies) | **Not applicable** | No application mutation, UI function or endpoint was added |
+| 13 | CI green | **Not executed** | Runs on the PR |

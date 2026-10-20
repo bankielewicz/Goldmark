@@ -79,6 +79,9 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
         "goldmark-database-principal:{3}:it_wgo")] // CONNECT WITH GRANT OPTION is not a plain CONNECT (Codex on #17)
     [InlineData("GRANT SELECT ON SCHEMA::cmdb TO public;", "goldmark-grant:{3}:public:SELECT:SCHEMA:[cmdb]")]
     [InlineData("ALTER DATABASE CURRENT SET TRUSTWORTHY ON;", "goldmark-database-option:{3}:TRUSTWORTHY")]
+    // Securables owned by public: every user controls them (#18; measured below).
+    [InlineData("ALTER AUTHORIZATION ON SCHEMA::cmdb TO [public];", "goldmark-public-owner:{3}:schema:cmdb")]
+    [InlineData("ALTER AUTHORIZATION ON ROLE::goldmark_runtime TO [public];", "goldmark-public-owner:{3}:database+principal:goldmark_runtime")]
     public async Task A_managed_runtime_login_changed_out_of_band_is_refused_on_the_next_run(string change, string expectedId) // #4
     {
         var (installation, _) = await sql.ProvisionAsync();
@@ -175,6 +178,46 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
         var result = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
 
         Assert.True(result.Code == 0, result.ToString());
+    }
+
+    [Fact]
+    public async Task An_owner_with_CONTROL_SERVER_through_a_role_but_denied_it_directly_is_refused() // #19
+    {
+        var installation = sql.NewInstallation();
+        var owner = $"{installation.MigrationUser}_deny";
+        await sql.AsAdminAsync("master",
+            $"CREATE LOGIN {owner} WITH PASSWORD = N'{SqlServerFixture.Secret()}'; CREATE SERVER ROLE {owner}_role; GRANT CONTROL SERVER TO {owner}_role; " +
+            $"ALTER SERVER ROLE {owner}_role ADD MEMBER {owner}; DENY CONTROL SERVER TO {owner}; " +
+            $"CREATE DATABASE {installation.Database}; ALTER AUTHORIZATION ON DATABASE::{installation.Database} TO {owner};");
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains($"[goldmark-database-owner:{installation.Database}:{owner}]", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("Nothing was changed.", refused.Error, StringComparison.Ordinal);
+
+        await sql.AsAdminAsync("master", $"REVOKE CONTROL SERVER FROM {owner};");
+        var allowed = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);
+        Assert.True(allowed.Code == 0, allowed.ToString());
+    }
+
+    [Fact]
+    public async Task Ownership_by_public_or_by_a_role_gives_its_members_control() // #18: measured on SQL Server 2025, HANDOFF §5.3
+    {
+        var installation = sql.NewInstallation();
+        var user = $"{installation.RuntimeUser}_m";
+        var password = SqlServerFixture.Secret();
+        await sql.AsAdminAsync("master", $"CREATE LOGIN {user} WITH PASSWORD = N'{password}'; CREATE DATABASE {installation.Database};");
+        await sql.AsAdminAsync(installation.Database,
+            $"CREATE USER {user} FOR LOGIN {user}; EXEC('CREATE SCHEMA by_public'); EXEC('CREATE SCHEMA by_role'); CREATE TABLE by_public.T (x int); " +
+            $"CREATE ROLE it_owner_role; ALTER ROLE it_owner_role ADD MEMBER {user}; CREATE ROLE it_public_role; " +
+            "ALTER AUTHORIZATION ON SCHEMA::by_public TO [public]; ALTER AUTHORIZATION ON SCHEMA::by_role TO it_owner_role; " +
+            "ALTER AUTHORIZATION ON ROLE::it_public_role TO [public];");
+
+        Assert.Equal(1, await sql.ScalarAsync<int>(user, password, installation.Database, "SELECT HAS_PERMS_BY_NAME(N'by_public', N'SCHEMA', N'CONTROL');"));
+        Assert.Equal(1, await sql.ScalarAsync<int>(user, password, installation.Database, "SELECT HAS_PERMS_BY_NAME(N'by_role', N'SCHEMA', N'CONTROL');"));
+        await sql.ExecuteAsync(user, password, installation.Database, $"DELETE FROM by_public.T; ALTER ROLE it_public_role ADD MEMBER {user};");
+        Assert.Equal(1, await sql.ScalarAsync<int>(user, password, installation.Database, "SELECT IS_ROLEMEMBER(N'it_public_role');"));
     }
 
     [Fact]

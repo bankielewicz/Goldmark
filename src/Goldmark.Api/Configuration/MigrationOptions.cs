@@ -10,6 +10,10 @@ public sealed class MigrationOptions
 {
     public const string SectionName = "Goldmark:Migration";
 
-    public string User { get; set; } = "goldmark_migrator";
+    /// <summary>No default: set it with <see cref="Password"/>, or leave both empty and let <c>bootstrap-db</c> generate them (<see cref="CredentialFile"/>).</summary>
+    public string User { get; set; } = "";
     public string Password { get; set; } = "";
+
+    /// <summary>Optional path of the migration login's credential file, which <c>bootstrap-db</c> writes and <c>migrate</c> reads.</summary>
+    public string? CredentialFile { get; set; }
 }

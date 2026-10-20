@@ -4,19 +4,20 @@ Goldmark can use a SQL Server 2025 instance you already run instead of the bundl
 SQL Server Express container (US-01). Use `deploy/docker-compose.external-sql.yml`
 in place of `deploy/docker-compose.yml`; both read `deploy/.env`. Decisions:
 DEC-031 (principal audit), DEC-032 (administrator login, modes), DEC-033 (Compose
-file).
+file), DEC-034 (generated credentials).
 
 ```sh
 cp deploy/.env.example deploy/.env && chmod 600 deploy/.env
-# fill in GOLDMARK_DB_PASSWORD, GOLDMARK_DB_MIGRATION_PASSWORD and the
-# "Existing SQL Server" section (host, administrator login, TLS)
+# fill in the "Existing SQL Server" section (host, administrator login, TLS)
 docker compose -f deploy/docker-compose.external-sql.yml up -d --build --wait
 ```
 
 The one-shot `db-init` container runs `bootstrap-db migrate`, then the app starts.
 `db-init` runs on every `docker compose up`, so the administrator credential stays in
-`deploy/.env` (mode `600`). Only `db-init` receives it; the app container gets the
-runtime login only.
+`deploy/.env` (mode `600`). Only `db-init` receives it. Goldmark's runtime and
+migration logins live in credential files in two volumes
+([database-credentials.md](database-credentials.md)): the app mounts only the runtime
+login's, read-only, and receives no password in its environment.
 
 ## Requirements
 
@@ -65,14 +66,21 @@ ALTER SERVER ROLE sysadmin ADD MEMBER goldmark_dba;
 
 - **`Create` (default).** It creates the database (with `AUTO_CLOSE OFF`), the runtime
   and migration logins, their users and the migration login's `db_owner` membership,
-  as needed, and rotates their passwords when you change them in `deploy/.env`.
-  Existing logins or users it did not create are refused unless
-  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`.
+  as needed. Leave `GOLDMARK_DB_USER`, `GOLDMARK_DB_PASSWORD`,
+  `GOLDMARK_DB_MIGRATION_USER` and `GOLDMARK_DB_MIGRATION_PASSWORD` empty and it
+  generates both logins (`goldmark_app_<suffix>`, `goldmark_migrator_<suffix>`, random
+  passwords) into its credential files. If you set a pair, it uses that login and
+  password instead and writes them to the file; changing the password there later
+  rotates the login. Existing logins or users it did not create are refused unless
+  `GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true`. Your administrator login is never replaced:
+  the generated administrator exists only with the bundled SQL Server.
 - **`Existing`.** A DBA creates everything first; `bootstrap-db` creates and changes
   nothing except Goldmark's marker (the `goldmark:managed` extended property) on the
   two database users. It refuses, with nothing changed, if the database, a login, a
   user or the `db_owner` membership is missing, if a user's name differs from its
   login's, or if a password differs from `deploy/.env`. It never changes a password.
+  It writes the two logins to its credential files, so the app reads its login from a
+  file here too (owner decision 5A); the four settings are required in this mode.
 
 The DBA script for Mode `Existing` (use your names; the passwords must match
 `GOLDMARK_DB_PASSWORD` and `GOLDMARK_DB_MIGRATION_PASSWORD`):
@@ -167,7 +175,8 @@ Kinds that must be fixed (about Goldmark's logins or database):
 | Kind | Meaning |
 |---|---|
 | `goldmark-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in the Goldmark database beyond a new database's default (a grant in `model` is copied into new databases) |
-| `goldmark-database-owner:<db>:<owner>` | The Goldmark database is owned by a login without CONTROL SERVER (for example one that created it before Goldmark did): its owner controls everything in it |
+| `goldmark-database-owner:<db>:<owner>` | The Goldmark database is owned by a login without effective CONTROL SERVER (for example one that created it before Goldmark did, or one denied CONTROL SERVER although a role grants it; checked by impersonating the owner, #19): its owner controls everything in it |
+| `goldmark-public-owner:<db>:<kind>:<name>` | `public` owns a schema, role, object or other securable in the Goldmark database, so every user there holds every right on it (#18) |
 | `goldmark-database-principal:<db>:<principal>` | Another user or application role in the Goldmark database holds a role, a permission beyond a plain `CONNECT`, or owns anything (a role it owns can be altered to give it Goldmark's rights) |
 | `runtime-role-grant:<db>:<permission>:<class>[:<target>]` | The `goldmark_runtime` role holds a grant that Goldmark's migrations do not make (including on system objects) |
 | `goldmark-database-option:<db>:<option>` | `TRUSTWORTHY` or `DB_CHAINING` is on for the Goldmark database |
@@ -186,9 +195,16 @@ Kinds that must be fixed (about Goldmark's logins or database):
 
 ## Changing passwords
 
-In Mode `Create`, change `GOLDMARK_DB_PASSWORD` or `GOLDMARK_DB_MIGRATION_PASSWORD`
-and run `docker compose … up -d`: `db-init` rotates the login's password. In Mode
-`Existing`, the DBA changes the password first, then you update `deploy/.env`.
+Generated passwords are not rotated automatically ([database-credentials.md](database-credentials.md#rotation)).
+In Mode `Create`, set the login's pair in `deploy/.env` and run `docker compose … up -d`:
+`db-init` rotates the login's password and rewrites its credential file. In Mode
+`Existing`, the DBA changes the password first, then you update `deploy/.env`. Either
+way, recreate the app afterwards (`up -d --force-recreate app`): it reads its login
+only when it starts.
+
+Upgrading an installation from before slice 2c needs nothing in Mode `Create` or
+`Existing`: the passwords in `deploy/.env` are written to the credential files on the
+next run. In Mode `Create` you can then delete the four settings.
 
 ## Not supported yet
 

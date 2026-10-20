@@ -30,8 +30,8 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 # Edit deploy/.env and fill in every REQUIRED value (there are no defaults):
 #   SQLSERVER_ACCEPT_EULA=Y   (accepts the SQL Server Express license terms)
-#   SQLSERVER_SA_PASSWORD=... GOLDMARK_DB_PASSWORD=... GOLDMARK_DB_MIGRATION_PASSWORD=...
-#   (three different passwords, e.g. each from: openssl rand -base64 30)
+#   SQLSERVER_SA_PASSWORD=... (e.g. from: openssl rand -base64 30)
+# Goldmark's own database logins are generated on the first start.
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
@@ -51,12 +51,18 @@ What starts:
 | Service | Purpose |
 |---|---|
 | `sql-volume-init` | One-shot: prepares the SQL Server TLS volumes (no network, `CAP_CHOWN` only) |
-| `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict) |
-| `db-init` | One-shot, on every start: audits the SQL Server instance and both logins (the principal audit), creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only), then applies the schema migrations as the migration login. It refuses, changing nothing, if the audit finds a problem or if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
-| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log |
+| `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict). Its healthcheck signs in with a CONNECT-only login, not `sa` |
+| `db-init` | One-shot, on every start: audits the SQL Server instance and both logins (the principal audit), creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only) with generated names and passwords, then applies the schema migrations as the migration login. On the first start it signs in as `sa`, creates Goldmark's own administrator login and **disables `sa`**; later starts sign in as that administrator. It refuses, changing nothing, if the audit finds a problem or if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
+| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login, read from a credential file: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log |
 
 Stop with `docker compose -f deploy/docker-compose.yml down`. Add `-v` to also
-delete all data, including the database and certificates.
+delete all data, including the database, certificates and generated credentials.
+
+The generated credentials live in Docker volumes
+([docs/ops/database-credentials.md](docs/ops/database-credentials.md)). Keep
+`SQLSERVER_SA_PASSWORD` in `deploy/.env` (the SQL Server image needs it on every
+start) and back up the `goldmark-db-admin` volume: if it is lost, follow
+[docs/ops/database-recovery.md](docs/ops/database-recovery.md).
 
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in

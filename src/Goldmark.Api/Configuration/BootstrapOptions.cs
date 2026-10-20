@@ -16,17 +16,20 @@ public sealed class BootstrapOptions
     public const string ExistingMode = "Existing";
 
     /// <summary>
-    /// Administrator login (CONTROL SERVER), used only by <c>bootstrap-db</c>. No default:
-    /// <c>sa</c> is refused unless <see cref="AllowSaAdmin"/> is set (DEC-032).
+    /// Administrator login (CONTROL SERVER), used only by <c>bootstrap-db</c>. No default.
+    /// <c>sa</c> is accepted only with <see cref="AdminCredentialFile"/>, as the initial
+    /// administrator that creates Goldmark's own and is then disabled (DEC-032, DEC-034).
     /// </summary>
     public string AdminUser { get; set; } = "";
     public string AdminPassword { get; set; } = "";
 
     /// <summary>
-    /// Allows <c>sa</c> as <see cref="AdminUser"/>. Only the bundled SQL Server deployment sets it,
-    /// until Goldmark generates its own administrator login (slice 2c).
+    /// Optional path of a generated administrator's credential file (the bundled SQL Server). When
+    /// set, <see cref="AdminUser"/> must be <c>sa</c> and is used only while this file does not exist:
+    /// that run creates a sysadmin login with a generated name and password, writes it here and
+    /// disables <c>sa</c>. Later runs sign in with this file and never with <c>sa</c> (DEC-034).
     /// </summary>
-    public bool AllowSaAdmin { get; set; }
+    public string? AdminCredentialFile { get; set; }
 
     /// <summary><see cref="CreateMode"/> (default) or <see cref="ExistingMode"/>.</summary>
     public string Mode { get; set; } = CreateMode;
