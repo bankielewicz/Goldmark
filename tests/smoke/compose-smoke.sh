@@ -329,6 +329,59 @@ check "hashed JS asset ${asset:-?} is served immutable" bash -c "grep -q ' 200' 
 check "client route /ci/{id} falls back to the SPA shell" is_status /ci/0190a7b2-0000-7000-8000-000000000000 200
 check "unknown API route returns 404" is_status /api/v1/cis 404
 
+# --- Slice 3: first-run setup, sessions, key ring (US-02, US-03, DEC-038) ------------
+# The setup token is the one secret Goldmark logs: once per start, until setup is complete.
+wait_until 60 bash -c "\"\${0}\" logs --no-color --no-log-prefix app 2>/dev/null | grep -q 'Setup token'" "${compose[@]}" >/dev/null 2>&1 || true
+setup_token="$("${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null | grep 'Setup token' | python3 -c 'import json, sys; print(json.loads(sys.stdin.readline())["SetupToken"])' 2>/dev/null)"
+setup_lines="$("${compose[@]}" logs --no-color --no-log-prefix app 2>/dev/null | grep -c 'Setup token')"
+check "the setup token is logged once at start (found with: docker compose logs app | grep \"Setup token\")" bash -c "[[ '${setup_lines}' == 1 && -n '${setup_token}' ]]"
+jar="${work}/cookies.txt"
+api() { # method path [json]: the SPA's way, with cookies and a fresh anti-forgery token
+  local token
+  token="$(curl_tls -c "${jar}" -b "${jar}" "${base}/api/v1/auth/antiforgery" | python3 -c 'import json, sys; print(json.load(sys.stdin)["token"])')"
+  curl_tls -c "${jar}" -b "${jar}" -X "$1" -H 'Content-Type: application/json' -H "X-Goldmark-Antiforgery: ${token}" \
+    -w '\n%{http_code}' --data "${3:-{\}}" "${base}$2"
+}
+totp() { python3 -c 'import base64, hashlib, hmac, struct, sys, time
+k = base64.b32decode(sys.argv[1].replace(" ", ""))
+h = hmac.new(k, struct.pack(">Q", int(time.time()) // 30), hashlib.sha1).digest()
+o = h[-1] & 15
+print("%06d" % ((struct.unpack(">I", h[o:o + 4])[0] & 0x7fffffff) % 1000000))' "$1"; }
+smoke_admin_password="smoke admin $(openssl rand -hex 8)"
+all_secrets+=("${smoke_admin_password}")
+check "setup status is 'required' before setup" bash -c "[[ \"\$(curl_tls ${base}/api/v1/setup 2>/dev/null)\" == *required* ]]" 2>/dev/null \
+  || true
+setup_ok=false
+if [[ "$(api POST /api/v1/setup/token "{\"token\":\"${setup_token}\"}" | tail -n 1)" == 200 \
+      && "$(api POST /api/v1/enrolment/account "{\"userName\":\"smoke.admin\",\"displayName\":\"Smoke Admin\",\"password\":\"${smoke_admin_password}\"}" | tail -n 1)" == 200 ]]; then
+  smoke_key="$(api POST /api/v1/enrolment/authenticator | head -n 1 | python3 -c 'import json, sys; print(json.load(sys.stdin)["key"])')"
+  all_secrets+=("${smoke_key// /}")
+  done_body="$(api POST /api/v1/enrolment/complete "{\"code\":\"$(totp "${smoke_key}")\"}")"
+  if [[ "$(tail -n 1 <<< "${done_body}")" == 200 ]]; then
+    setup_ok=true
+    while read -r code; do all_secrets+=("${code}"); done < <(head -n 1 <<< "${done_body}" | python3 -c 'import json, sys; print("\n".join(json.load(sys.stdin)["recoveryCodes"]))')
+  fi
+fi
+check "first-run setup through the API: token, administrator, authenticator, recovery codes" ${setup_ok}
+check "the administrator is signed in afterwards (GET /api/v1/users 200)" bash -c "[[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert '${work}/app-cert.pem' -b '${jar}' ${base}/api/v1/users)\" == 200 ]]"
+check "a state-changing request without the anti-forgery header is refused (400)" \
+  bash -c "[[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert '${work}/app-cert.pem' -b '${jar}' -X POST -H 'Content-Type: application/json' --data '{}' ${base}/api/v1/auth/sign-out)\" == 400 ]]"
+cp "${jar}" "${work}/copied-cookies.txt"
+check "sign-out answers 204" bash -c "[[ \"\$(api POST /api/v1/auth/sign-out | tail -n 1)\" == 204 ]]"
+check "a session cookie copied before sign-out no longer works (server-side session ended)" \
+  bash -c "[[ \"\$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 --cacert '${work}/app-cert.pem' -b '${work}/copied-cookies.txt' ${base}/api/v1/users)\" == 401 ]]"
+check "setup is complete and refuses the token again (409)" bash -c "[[ \"\$(api POST /api/v1/setup/token '{\"token\":\"${setup_token}\"}' | tail -n 1)\" == 409 ]]"
+keyring_mode="$(docker run --rm --network none --user 1654:1654 -v "${project}_goldmark-keys:/k:ro" --entrypoint bash "${sql_image}" \
+  -c 'stat -c "%a %u" /k; for f in /k/*.xml; do stat -c "%a %u" "$f"; done | sort -u' 2>&1 | tr '\n' ' ' | sed 's/ $//')"
+check "the key ring is 700 with 600 key files, owned by the app user (got: ${keyring_mode})" [ "${keyring_mode}" == "700 1654 600 1654" ]
+other_keys="$(docker run --rm --network none --user 10001:10001 -v "${project}_goldmark-keys:/k:ro" --entrypoint bash "${sql_image}" -c 'cat /k/*.xml' 2>&1)"
+if [[ $? -ne 0 && "${other_keys}" != *masterKey* ]]; then
+  pass "another uid cannot read the key ring"
+else
+  fail "another uid cannot read the key ring"
+fi
+check "only the app mounts the key ring" bash -c "[[ \"\$(docker inspect -f '{{range .Mounts}}{{.Name}} {{end}}' ${project}-db-init-1)\" != *goldmark-keys* ]]"
+
 # --- SQL Server: Express, version, least privilege, strict TLS ------------------
 edition="$(sql_as "${admin_user}" "${admin_password}" "SELECT CONCAT(CONVERT(int, SERVERPROPERTY('EngineEdition')), '|', CONVERT(nvarchar(128), SERVERPROPERTY('Edition')), '|', CONVERT(nvarchar(16), SERVERPROPERTY('ProductMajorVersion')));")"
 echo "      SQL Server: ${edition}"
@@ -682,6 +735,8 @@ for n, line in enumerate(lines, 1):
 PY
 )"
 if [[ -z "${json_result}" ]]; then pass "app logs are JSON lines"; else fail "app logs are JSON lines" "${json_result}"; fi
+# The app container was re-created and restarted after setup completed: no new setup token.
+check "after setup is complete, a restarted app logs no setup token" bash -c "! grep -q 'Setup token' '${work}/app.log'"
 secret_patterns=(); for x in "${all_secrets[@]}"; do [[ -n "${x}" ]] && secret_patterns+=(-e "${x}"); done
 if ! grep -qF "${secret_patterns[@]}" "${work}/app.log" "${work}/other.log" "${work}/compose-stderr.log" "${work}/db-init-before-recovery.log"; then
   pass "no secret appears in any container log (sa, generated, healthcheck and probe passwords: ${#secret_patterns[@]} patterns)"

@@ -1,8 +1,12 @@
 using System.Security.Authentication;
+using Goldmark.Api.Audit;
+using Goldmark.Api.Auth;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Data;
 using Goldmark.Api.Health;
 using Goldmark.Api.Security;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.Extensions.Options;
@@ -34,11 +38,23 @@ internal static class GoldmarkApplication
                 https.KeyPath = Rooted(https.KeyPath, environment.ContentRootPath);
             });
 
+        builder.Services.AddSingleton<IValidateOptions<DataProtectionSettings>, DataProtectionSettingsValidator>();
+        builder.Services.AddOptions<DataProtectionSettings>().BindConfiguration(DataProtectionSettings.SectionName).ValidateOnStart()
+            .PostConfigure<IHostEnvironment>((keys, environment) => keys.KeyDirectory = Rooted(keys.KeyDirectory, environment.ContentRootPath) ?? "");
+        // Data Protection keys as files in a directory from settings, 0700/0600 (DEC-038 item 5).
+        builder.Services.AddDataProtection().SetApplicationName("Goldmark");
+        builder.Services.AddOptions<KeyManagementOptions>().Configure<IOptions<DataProtectionSettings>>((keys, settings) =>
+            keys.XmlRepository = new PrivateKeyRingRepository(settings.Value.KeyDirectory));
+
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddScoped<DbSession>();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddScoped<AuditTrail>();
         builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();
         builder.Services.AddProblemDetails();
+        builder.Services.AddGoldmarkAuth();
 
         builder.Services.AddOptions<HstsOptions>().Configure<IOptions<HttpsOptions>>((hsts, https) =>
         {
@@ -85,8 +101,16 @@ internal static class GoldmarkApplication
         }
 
         app.UseGoldmarkRequestLogging();
+        app.UseGoldmarkApiNoStore();
+        // Static files first, then routing: existing assets are served without authentication, and a
+        // request that reaches routing gets an endpoint (or none) before authorization runs.
         app.UseGoldmarkStaticFiles();
+        app.UseRouting();
+        app.UseRateLimiter();
+        app.UseAuthentication();
+        app.UseAuthorization();
         app.MapGoldmarkHealthEndpoints();
+        app.MapGoldmarkApi();
         app.MapGoldmarkSpa();
         return app;
     }

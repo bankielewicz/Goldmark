@@ -29,6 +29,9 @@ public class GoldmarkFactory : WebApplicationFactory<Program>
 
     public GoldmarkFactory()
     {
+        // Goldmark serves HTTPS only; its cookies are Secure (__Host-), so clients must use https.
+        ClientOptions.BaseAddress = new Uri("https://localhost");
+
         WebRoot = Path.Combine(_root, "wwwroot");
         Directory.CreateDirectory(Path.Combine(WebRoot, "assets"));
         File.WriteAllText(Path.Combine(WebRoot, "index.html"),
@@ -46,6 +49,9 @@ public class GoldmarkFactory : WebApplicationFactory<Program>
             ["Goldmark:Database:Password"] = TestSecrets.DatabasePassword,
             ["Goldmark:Database:ConnectTimeoutSeconds"] = "2",
             ["Goldmark:Https:GeneratedCertificateDirectory"] = Path.Combine(_root, "tls"),
+            ["Goldmark:DataProtection:KeyDirectory"] = Path.Combine(_root, "keys"),
+            // Tests send many sign-in requests from one address; RateLimitTests set their own limit.
+            ["Goldmark:Auth:RequestsPerMinute"] = "10000",
         };
     }
 

@@ -114,6 +114,8 @@ services:
       - "${GOLDMARK_HTTPS_PORT:-8443}:8443"
     volumes:
       - goldmark-tls:/var/lib/goldmark/tls
+      # Sign-in key ring (ASP.NET Core Data Protection, DEC-038 item 5); only the app mounts it.
+      - goldmark-keys:/var/lib/goldmark/keys
       - sql-tls-public:/run/goldmark/sql-tls:ro
       - goldmark-db-runtime:/var/lib/goldmark/db-runtime:ro
     networks: [frontend, backend]
@@ -136,6 +138,10 @@ volumes:
   sql-tls-private: {}
   sql-tls-public: {}
   goldmark-tls: {}
+  # Data Protection keys for sign-in cookies, anti-forgery tokens and stored authenticator keys
+  # (DEC-038 item 5). Back it up with the database: losing it signs everyone out and voids every
+  # authenticator (people then sign in with a recovery code and set two-factor up again).
+  goldmark-keys: {}
   # Generated database credentials (DEC-034). goldmark-db-admin holds the administrator and the
   # migration login and is mounted by db-init only. Losing it: docs/ops/database-recovery.md.
   goldmark-db-runtime: {}

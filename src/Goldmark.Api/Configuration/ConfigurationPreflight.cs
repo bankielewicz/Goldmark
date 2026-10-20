@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Goldmark.Api.Auth;
 using Goldmark.Api.Hosting;
 using Serilog.Events;
 
@@ -19,6 +20,8 @@ internal static partial class ConfigurationPreflight
         Check(errors, HttpsOptions.SectionName, () => configuration.GetSection(HttpsOptions.SectionName).Get<HttpsOptions>());
         Check(errors, BootstrapOptions.SectionName, () => configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>());
         Check(errors, MigrationOptions.SectionName, () => configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>());
+        Check(errors, DataProtectionSettings.SectionName, () => configuration.GetSection(DataProtectionSettings.SectionName).Get<DataProtectionSettings>());
+        Check(errors, AuthOptions.SectionName, () => configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>());
         Check(errors, LoggingSetup.MinimumLevelKey, () => configuration.GetValue<LogEventLevel>(LoggingSetup.MinimumLevelKey));
         return errors;
     }
