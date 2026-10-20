@@ -29,8 +29,10 @@ State boards (one copy each, published to one canvas only):
 Not stored here: each canvas's `canvas.json` (board positions and titles).
 
 Status: review input, not approved designs. They are a starting point for
-the design-system handoff and the per-slice design handoffs in
-`docs/HANDOFF.md` (rules 3 and 4), which still happen. Where `DECISIONS.md`
+the per-slice design handoffs in `docs/HANDOFF.md` (rule 3), which still
+happen. The design-system handoff (rule 4) is done: the approved design system
+is in [`../system/`](../system/README.md) (DEC-039), and slice 3's approved
+screens are in [`slice-3/`](slice-3/README.md) (DEC-040). Where `DECISIONS.md`
 or `HANDOFF.md` differs from a mockup, those documents win.
 
 Checked against `DECISIONS.md` and `HANDOFF.md` on 2026-10-19:

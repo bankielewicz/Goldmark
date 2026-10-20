@@ -2,25 +2,26 @@
 
 ## Current State and Sources of Authority
 
-Goldmark CMDB has a working slice 1–2 baseline: a .NET 10 HTTPS API, health endpoints, Serilog JSON logging, an empty React SPA, Docker Compose with SQL Server 2025 Express, and the DbUp baseline schema with separate migration and runtime logins. There are no CMDB features or authentication yet; it is not production-ready.
+Goldmark CMDB has a working slice 1–3 baseline: a .NET 10 HTTPS API, health endpoints, Serilog JSON logging, a React SPA on Fluent UI v9, Docker Compose with SQL Server 2025 Express or an existing SQL Server 2025, the DbUp schema with separate migration and runtime logins and generated database credentials, and sign-in: first-run setup, local accounts with TOTP two-factor authentication, invitations, roles and deny-by-default endpoint access. There are no CMDB features yet; it is not production-ready.
 
 Start slice work with `docs/HANDOFF.md` (status, working rules, next slice and gotchas), `docs/DECISIONS.md` (approved decisions), and the relevant requirements in `docs/PRD.md`. The PRD remains DRAFT v0.2; decisions override conflicting PRD text. DEC-021 and the handoff supersede PRD §11's build plan. Preserve requirement and decision IDs. `docs/specs/PRD-draft.md` is a local draft copy, not the current authority entry point.
 
-As of 2026-10-19, slices 1 and 2 are merged (PRs #1 and #14; slice 2's decisions are DEC-022…DEC-029). The handoff names slice 2b as next. Read the current handoff rather than assuming this snapshot authorizes the next slice. Licensing and DCO remain pending; no license has been granted.
+As of 2026-10-20, slices 1, 2, 2b, 2c and 3 are merged (PRs #1, #14, #17, #22 and #24; decisions up to DEC-040). The handoff names slice 4 as next, once the owner replies "APPROVED". Read the current handoff rather than assuming this snapshot authorizes the next slice. Licensing and DCO remain pending; no license has been granted.
 
 ## Project Structure
 
 - `Goldmark.slnx`: the API, its in-process test project and its SQL Server integration test project.
-- `src/Goldmark.Api/`: configuration validation, HTTPS/security headers, health/readiness (including the schema-version check), SQL connections, SPA hosting, embedded migrations, and the `healthcheck`, `bootstrap-db` and `migrate` container commands (`Commands/ContainerCommands.cs`).
+- `src/Goldmark.Api/`: configuration validation, HTTPS/security headers, health/readiness (including the schema-version check), SQL connections and data access through `DbSession` (`Data/`), sign-in, users and roles (`Auth/`, `Users/`), the audit trail (`Audit/`), SPA hosting, embedded migrations, and the `healthcheck`, `bootstrap-db` and `migrate` container commands (`Commands/ContainerCommands.cs`).
 - `tests/Goldmark.Api.Tests/`: xUnit v3 in-process tests, including HTTP tests via `WebApplicationFactory`. No Docker needed.
-- `tests/Goldmark.Api.IntegrationTests/`: migrations, logins and runtime permissions against a real SQL Server 2025 container (Testcontainers, one container per test collection; DEC-027). Needs Docker.
+- `tests/Goldmark.Api.IntegrationTests/`: migrations, logins, runtime permissions and the sign-in, setup and invitation flows against a real SQL Server 2025 container (Testcontainers, one container per test collection; DEC-027). Needs Docker.
+- `tests/sql-gate/`: proves that non-constant SQL passed to `DbSession` fails the build (NFR-SEC-3).
 - `db/`: forward-only migrations (`migrations/NNNN_lower_snake.sql`), their hash manifest `migrations.sha256`, and `check-migrations.sh` with its self-test (DEC-028).
 - `tests/smoke/compose-smoke.sh`: real Compose, SQL Server and browser smoke tests.
 - `web/`: React 19 + TypeScript + Vite browser-only SPA; `src/`, Node policy/build-output tests in `scripts/` and `tests/`, Playwright tests in `e2e/`.
 - `deploy/`: Compose, required environment-variable template, SQL Server entrypoint and health/TLS scripts.
-- `.github/workflows/ci.yml`: dependency policy, web, .NET, Compose smoke, dependency review and CodeQL gates.
+- `.github/workflows/ci.yml`: dependency policy, web, .NET, SQL Server integration tests, migration immutability, Compose smoke, dependency review and CodeQL gates.
 - `docs/ops/`, `docs/security/`: operational and endpoint-access guidance.
-- `docs/design/screens/`: 21 HTML mockups, the Shared states board and six per-screen state boards, and their review status; prompts are in `docs/specs/claude-design-prompts.md`. These and ignored `tmp/` references are design input, not application code or approved designs. They wait for slice 3's design-system handoff.
+- `docs/design/screens/`: 21 HTML mockups, the Shared states board and six per-screen state boards, and their review status; prompts are in `docs/specs/claude-design-prompts.md`. These and ignored `tmp/` references are design input, not application code or approved designs. The approved design system is in `docs/design/system/` (DEC-039) and slice 3's approved screens are in `docs/design/screens/slice-3/` (DEC-040).
 
 Add `Goldmark.Core`, `.Data`, `.Jobs`, `.Contracts`, `collectors/` and `spec/` only when the authorized slice needs them. Do not scaffold empty projects or install future dependencies.
 
@@ -31,7 +32,7 @@ Follow the owner rules in `docs/HANDOFF.md` §2. For a new slice session, confir
 - Branch from latest `main` as `slice/<nn>-<short-name>`, one PR per slice. Implement acceptance criteria with tests, run lint and the full suite, self-review and fix, then publish only within the authorized scope. Never auto-merge; pull `main` after the owner merges.
 - After the initial push, allow at most two review-fix rounds. Report later findings with a fix-now/defer recommendation and follow the handoff's issue-routing rule rather than starting another round without authorization.
 - Before UI code, provide the batched **DESIGN HANDOFF — paste into Claude Design** for all screens in the slice and wait for the design result. Backend/API work may proceed within the authorized slice. Existing mockups do not bypass this gate.
-- Slice 3 must first verify Fluent UI v9 under the served CSP and Trusted Types policy, then complete the design-system handoff before screen handoffs. If verification fails, stop and bring options to the owner; do not weaken the policy to make it work.
+- Fluent UI v9 runs under the served CSP and Trusted Types policy with a per-response style nonce for the SPA shell (DEC-037). Any other relaxation of the policy goes to the owner; do not weaken it to make something work. Screen handoffs build on the approved design system (`docs/design/system/`).
 - Update `docs/HANDOFF.md` in each slice PR; record decisions and deviations in `docs/DECISIONS.md`. Keep chat updates short. Ask before changing scope or adding unanticipated dependencies; the handoff requires owner approval for every new npm dependency.
 
 ## Toolchain, Build and Local Development
@@ -88,7 +89,7 @@ The smoke script generates test secrets, uses port 18443, runs Playwright and re
 
 Follow `.editorconfig`, `tests/.editorconfig`, `web/eslint.config.js` and `web/.prettierrc.json`: UTF-8/LF, four-space C#, two spaces otherwise; file-scoped C# namespaces, private fields `_camelCase`, constants/static readonly fields PascalCase. Use PascalCase types/components and camelCase TypeScript functions. .NET warnings/analyzers and ESLint warnings fail the build. Preserve test naming conventions (`*Tests.cs`, `*.test.mjs`, `*.spec.ts`).
 
-Keep the frontend browser-only: no Next.js, SSR, RSC or Node.js runtime. Add-ons use platform contracts, never code loaded into the CMDB UI. Preserve CSP, Trusted Types, HTTPS, SQL TLS pinning and secret-free frontend builds. Every endpoint needs an explicit access classification, an update to `docs/security/endpoint-access.md`, and coverage in `EndpointInventoryTests`; deny-by-default authentication/authorization is planned for slice 3, not already implemented. Report vulnerabilities privately per `SECURITY.md`.
+Keep the frontend browser-only: no Next.js, SSR, RSC or Node.js runtime. Add-ons use platform contracts, never code loaded into the CMDB UI. Preserve CSP, Trusted Types, HTTPS, SQL TLS pinning and secret-free frontend builds. Every endpoint needs an explicit access classification, an update to `docs/security/endpoint-access.md`, and coverage in `EndpointInventoryTests`. Authorization is deny-by-default: map each endpoint with `RequireAccess(AccessPolicy.X)` or `AllowAnonymousByDesign(rationale)`, or it is refused. Report vulnerabilities privately per `SECURITY.md`.
 
 - npm: exact versions, a justified `web/dependency-allowlist.json` entry, and committed `package.json`/`pnpm-lock.yaml` changes together. pnpm 11 policy lives in `web/pnpm-workspace.yaml`; preserve the strict seven-day release age, blocked lifecycle scripts and registry/trust controls. Check the installed tree before running installed tooling.
 - NuGet: central versions in `Directory.Packages.props`, versionless project references, source mappings in `NuGet.config`, and committed per-project lockfiles. For an approved change, regenerate with `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, then verify locked restore. Preserve signature validation and NuGetAudit failures at all severities.
@@ -96,7 +97,7 @@ Keep the frontend browser-only: no Next.js, SSR, RSC or Node.js runtime. Add-ons
 
 ## Verification and Pull Requests
 
-For behavior changes, establish a meaningful failing test, implement, then refactor; report when the failing test cannot be established or run. Cover the slice's acceptance criteria and run the applicable checks above plus required CI gates before declaring completion. Current suites are xUnit (in-process and SQL Server integration via Testcontainers), the migration checker's self-test, Node's test runner and Playwright/Compose. Pester, shared C#/PowerShell identity vectors and axe remain future work. There is no numerical coverage threshold.
+For behavior changes, establish a meaningful failing test, implement, then refactor; report when the failing test cannot be established or run. Cover the slice's acceptance criteria and run the applicable checks above plus required CI gates before declaring completion. Current suites are xUnit (in-process and SQL Server integration via Testcontainers), the migration checker's self-test, the NFR-SEC-3 gate self-test, Node's test runner and Playwright/Compose, with axe accessibility checks in Playwright. Pester and shared C#/PowerShell identity vectors remain future work. There is no numerical coverage threshold.
 
 Bind evidence to the actual revision/working tree: report commands, outcomes and acceptance criteria as PASS, FAIL, NOT_RUN or BLOCKED. Distinguish local checks from GitHub CI and document skipped checks; historical handoff results do not qualify new changes. Documentation-only updates should check referenced paths, commands and whitespace without claiming application tests ran.
 
