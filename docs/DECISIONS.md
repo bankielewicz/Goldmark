@@ -625,7 +625,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   followed by a check that nothing changed.
 - **Done in slice 2b (DEC-031, #4):** auditing grants on other individual objects and
   ownership chains. Audit-log retention (NFR-LOG-3) will need a delete path
-  that is not the runtime login (slice 4).
+  that is not the runtime login (slice 4). Amended by DEC-041: the runtime login may start the
+  bounded purge procedure, but never decides what it deletes.
 
 ## DEC-026 Slice-2 NuGet dependencies: DbUp, Testcontainers
 
