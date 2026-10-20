@@ -32,9 +32,11 @@ import {
 } from '@fluentui/react-icons';
 import { useEffect, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 
+import { ApiError } from '../api';
 import { usePreferences } from '../preferences';
 import { followLink, navigate, useLocation } from '../router';
 import { isAdmin, useSession } from '../session';
+import { ErrorBar } from '../ui/common';
 
 const wideQuery = '(min-width: 1100px)';
 
@@ -144,7 +146,17 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const wide = useWide();
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [signOutFailure, setSignOutFailure] = useState<ApiError | null>(null);
   const user = session.user;
+
+  const signOut = () => {
+    setSignOutFailure(null);
+    session
+      .signOut()
+      .catch((error: unknown) =>
+        setSignOutFailure(error instanceof ApiError ? error : new ApiError(0, 'network', 'Couldn’t reach Goldmark.')),
+      );
+  };
 
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
@@ -264,7 +276,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 Compact density
               </MenuItemCheckbox>
               <MenuDivider />
-              <MenuItem icon={<SignOutRegular />} onClick={() => void session.signOut()}>
+              <MenuItem icon={<SignOutRegular />} onClick={signOut}>
                 Sign out
               </MenuItem>
             </MenuList>
@@ -295,6 +307,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </>
         )}
         <main id="main" tabIndex={-1} className={styles.main}>
+          {signOutFailure ? (
+            <ErrorBar
+              error={signOutFailure}
+              message="You’re still signed in: Goldmark couldn’t end your session. Try again before you leave this computer."
+              onRetry={signOut}
+            />
+          ) : null}
           {children}
         </main>
       </div>

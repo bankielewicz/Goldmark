@@ -67,9 +67,11 @@ public sealed class GoldmarkApp(SqlServerFixture sql, Installation installation,
         return ((ScalarValue)token).Value as string ?? throw new InvalidOperationException("No setup token.");
     }
 
-    public static bool IsSetupToken(LogEvent e) =>
+    public static bool IsSetupToken(LogEvent e) => IsEvent(e, 3001);
+
+    public static bool IsEvent(LogEvent e, int eventId) =>
         e.Properties.TryGetValue("EventId", out var id) && id is StructureValue s
-        && s.Properties.Any(p => p.Name == "Id" && p.Value is ScalarValue { Value: 3001 });
+        && s.Properties.Any(p => p.Name == "Id" && p.Value is ScalarValue { Value: int value } && value == eventId);
 
     private sealed class CookieHandler(CookieContainer cookies) : DelegatingHandler
     {

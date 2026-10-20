@@ -151,8 +151,20 @@ test.describe('slice 3 screens', () => {
     await expect(page.getByText('Two-factor authentication is on')).toBeVisible();
     await expectAccessible(page, 'two-factor page');
 
+    // A sign-out that never reaches the server leaves the session alive, so it must not say "signed
+    // out" (Codex, PR #24): the person stays signed in, sees why, and can retry.
+    await page.route('**/api/v1/auth/sign-out', (route) => route.abort());
     await page.getByRole('button', { name: /^Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
+    await expect(page.getByText(/You’re still signed in/)).toBeVisible();
+    await expectAccessible(page, 'sign-out failed');
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1, name: 'Two-factor authentication' })).toBeVisible();
+    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('menuitem', { name: 'Sign out' }).click();
+    await expect(page.getByText(/You’re still signed in/)).toBeVisible();
+    await page.unroute('**/api/v1/auth/sign-out');
+    await page.getByRole('button', { name: 'Retry' }).click();
     await expect(page.getByText('You’re signed out.')).toBeVisible();
     await page.goto('/users');
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();

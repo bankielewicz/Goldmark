@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Goldmark.Api.Data;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -13,7 +14,8 @@ namespace Goldmark.Api.Auth;
 /// Authenticator keys are encrypted with Data Protection; recovery codes are stored as PBKDF2 hashes
 /// (Identity's password hasher), never as the codes.
 /// </summary>
-internal sealed class UserStore(DbSession db, IPasswordHasher<GoldmarkUser> hasher, IDataProtectionProvider protection, TimeProvider time) :
+internal sealed partial class UserStore(DbSession db, IPasswordHasher<GoldmarkUser> hasher, IDataProtectionProvider protection, TimeProvider time,
+    ILogger<UserStore> logger) :
     IUserPasswordStore<GoldmarkUser>,
     IUserSecurityStampStore<GoldmarkUser>,
     IUserLockoutStore<GoldmarkUser>,
@@ -171,6 +173,50 @@ internal sealed class UserStore(DbSession db, IPasswordHasher<GoldmarkUser> hash
 
     public Task<int> GetAccessFailedCountAsync(GoldmarkUser user, CancellationToken cancellationToken) => Task.FromResult(user.AccessFailedCount);
 
+    /// <summary>
+    /// Counts a failed attempt in one statement, so concurrent failures are each counted; at
+    /// <paramref name="threshold"/> the account is locked until <paramref name="lockoutEnd"/> (or
+    /// later, if already locked longer) and the count starts again, as Identity does. A new
+    /// concurrency stamp makes a write from a copy read before this failure fail rather than put the
+    /// old count back. True if this failure locked the account (not if it was locked longer already).
+    /// </summary>
+    public async Task<bool> RecordAccessFailedAsync(GoldmarkUser user, int threshold, DateTimeOffset lockoutEnd, CancellationToken cancellationToken)
+    {
+        // SET reads the row's values from before the update, in every expression. A lockout is never
+        // moved earlier: an administrator's lock (LockoutEnd = max) made since the row was read stands.
+        var row = await db.QuerySingleOrDefaultAsync<(int Before, int AccessFailedCount, DateTimeOffset? LockoutEnd, string? ConcurrencyStamp)>("""
+            UPDATE cmdb.UserAccount
+            SET AccessFailedCount = CASE WHEN AccessFailedCount + 1 >= @threshold THEN 0 ELSE AccessFailedCount + 1 END,
+                LockoutEnd = CASE WHEN AccessFailedCount + 1 < @threshold THEN LockoutEnd
+                    WHEN LockoutEnd > @lockoutEnd THEN LockoutEnd ELSE @lockoutEnd END,
+                ConcurrencyStamp = @next
+            OUTPUT deleted.AccessFailedCount, inserted.AccessFailedCount, inserted.LockoutEnd, inserted.ConcurrencyStamp
+            WHERE Id = @id;
+            """, new { id = user.Id, threshold, lockoutEnd, next = NewStamp() }, cancellationToken);
+        if (row.ConcurrencyStamp is not { } stamp)
+        {
+            throw new InvalidOperationException("The account no longer exists.");
+        }
+
+        user.AccessFailedCount = row.AccessFailedCount;
+        user.LockoutEnd = row.LockoutEnd;
+        user.ConcurrencyStamp = stamp;
+        // This failure locked the account only if it set the end: not if a longer lock was already there.
+        return row.Before + 1 >= threshold && row.LockoutEnd == lockoutEnd;
+    }
+
+    /// <summary>
+    /// Clears the failed-attempt count after a correct answer, in one statement that cannot fail on a
+    /// stamp a concurrent failure changed. The lockout end is left alone: a concurrent failure may
+    /// just have locked the account.
+    /// </summary>
+    public async Task ClearAccessFailedAsync(GoldmarkUser user, CancellationToken cancellationToken)
+    {
+        await db.ExecuteAsync("UPDATE cmdb.UserAccount SET AccessFailedCount = 0 WHERE Id = @id AND AccessFailedCount <> 0;",
+            new { id = user.Id }, cancellationToken);
+        user.AccessFailedCount = 0;
+    }
+
     public Task<bool> GetLockoutEnabledAsync(GoldmarkUser user, CancellationToken cancellationToken) => Task.FromResult(true);
 
     public Task SetLockoutEnabledAsync(GoldmarkUser user, bool enabled, CancellationToken cancellationToken) =>
@@ -191,8 +237,28 @@ internal sealed class UserStore(DbSession db, IPasswordHasher<GoldmarkUser> hash
         return Task.CompletedTask;
     }
 
-    public Task<string?> GetAuthenticatorKeyAsync(GoldmarkUser user, CancellationToken cancellationToken) =>
-        Task.FromResult(user.AuthenticatorKey is null ? null : _keys.Unprotect(user.AuthenticatorKey));
+    /// <summary>
+    /// The decrypted key; null if there is none, or if the key ring no longer holds the key it was
+    /// encrypted with (DEC-038 item 5: the ring was lost or replaced). A code then fails like a wrong
+    /// one, and a recovery code still signs the person in to set up a new authenticator.
+    /// </summary>
+    public Task<string?> GetAuthenticatorKeyAsync(GoldmarkUser user, CancellationToken cancellationToken)
+    {
+        if (user.AuthenticatorKey is null)
+        {
+            return Task.FromResult<string?>(null);
+        }
+
+        try
+        {
+            return Task.FromResult<string?>(_keys.Unprotect(user.AuthenticatorKey));
+        }
+        catch (CryptographicException)
+        {
+            LogAuthenticatorKeyUnreadable(logger, user.Id);
+            return Task.FromResult<string?>(null);
+        }
+    }
 
     /// <summary>
     /// Records <paramref name="timeStep"/> as used if it is newer than the last accepted step;
@@ -322,4 +388,9 @@ internal sealed class UserStore(DbSession db, IPasswordHasher<GoldmarkUser> hash
         Roles.PersonRole(roleName) ?? throw new InvalidOperationException("Not a role a person can hold.");
 
     private static string NewStamp() => Guid.NewGuid().ToString("N");
+
+    [LoggerMessage(EventId = 3003, EventName = "AuthenticatorKeyUnreadable", Level = LogLevel.Warning,
+        Message = "The authenticator key of user {UserId} cannot be decrypted: the Data Protection key ring no longer holds its key " +
+            "(lost, or restored from an older backup). The user can sign in with a recovery code and set up a new authenticator.")]
+    private static partial void LogAuthenticatorKeyUnreadable(ILogger logger, Guid userId);
 }

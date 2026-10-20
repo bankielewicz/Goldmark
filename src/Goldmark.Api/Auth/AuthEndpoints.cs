@@ -179,7 +179,18 @@ internal static class AuthEndpoints
         }
 
         await context.SignOutAsync(AuthSchemes.TwoFactor);
-        return Results.Ok(new { user = await StartSessionAsync(context, users, user) });
+        var signedIn = await StartSessionAsync(context, users, user);
+        if (usesRecoveryCode && await users.IsAuthenticatorUnreadableAsync(user))
+        {
+            // The key ring lost the authenticator's key (DEC-038 item 5): the password and recovery code
+            // just proven start setting up a new authenticator, as the two-factor page would after
+            // confirming both, so the person does not need a second recovery code.
+            await new EnrolmentState(EnrolmentKind.ChangeAuthenticator, user.Id, SecurityStamp: user.SecurityStamp, PasswordVerified: true)
+                .SaveAsync(context);
+            return Results.Ok(new { user = signedIn, next = "new-authenticator" });
+        }
+
+        return Results.Ok(new { user = signedIn });
     }
 
     private static async Task<IResult> SignOutAsync(HttpContext context, AuditTrail audit)
@@ -205,22 +216,21 @@ internal static class AuthEndpoints
             : null;
 
     /// <summary>
-    /// Counts a failed password or code (Identity locks the account at the threshold) and audits it,
-    /// inside the caller's transaction.
+    /// Counts a failed password or code (the account locks at the threshold) and audits it, inside the
+    /// caller's transaction. Of concurrent failures, only the one that locked the account audits the lockout.
     /// </summary>
     internal static async Task<IResult> FailAsync(GoldmarkUserManager users, AuditTrail audit, GoldmarkUser user, string reason,
         AuthOptions options, Func<IResult> notLocked, AuditActor? actor = null, string action = AuditActions.SignInFailed)
     {
-        await users.AccessFailedAsync(user);
+        var lockedNow = await users.RecordFailureAsync(user);
         await audit.WriteAsync(action, actor ?? AuditActor.Anonymous, "User", user.Id, new { reason });
-        if (await users.IsLockedOutAsync(user))
+        if (lockedNow)
         {
             await audit.WriteAsync(AuditActions.AccountLockedOut, AuditActor.System, "User", user.Id,
                 new { minutes = options.LockoutMinutes });
-            return Locked(options);
         }
 
-        return notLocked();
+        return await users.IsLockedOutAsync(user) ? Locked(options) : notLocked();
     }
 
     /// <summary>The person whose password was verified in step 1, if nothing about them changed since.</summary>

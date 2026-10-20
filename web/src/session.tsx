@@ -17,6 +17,7 @@ interface SessionValue {
   reload: () => Promise<void>;
   /** After a sign-in, setup or link flow finished: the server has started a session. */
   signedIn: (user: SessionUser) => void;
+  /** Rejects with an {@link ApiError} if the server could not end the session; the person is still signed in. */
   signOut: () => Promise<void>;
   clearNotice: () => void;
 }
@@ -101,13 +102,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setNotice(null);
       },
       signOut: async () => {
+        // Signed out only once the server session is gone: if the request fails, the cookie still
+        // works, so the person stays signed in and is told (the caller shows the error).
         try {
           await api('POST', '/api/v1/auth/sign-out', {}, { signedIn: false });
-        } finally {
-          setUser(null);
-          setNotice('signed-out');
-          navigate('/sign-in', { replace: true });
+        } catch (error) {
+          // 401: the session had already ended on the server.
+          if (!(error instanceof ApiError && error.status === 401)) {
+            throw error;
+          }
         }
+        setUser(null);
+        setNotice('signed-out');
+        navigate('/sign-in', { replace: true });
       },
       clearNotice: () => setNotice(null),
     }),

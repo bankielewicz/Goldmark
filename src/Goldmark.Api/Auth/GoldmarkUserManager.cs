@@ -75,6 +75,42 @@ internal sealed class GoldmarkUserManager(
         return await Rows.TryUseTimeStepAsync(user, step, CancellationToken);
     }
 
+    /// <summary>
+    /// Counts a failed password or code. Identity's own increments the count it read and writes the row
+    /// under its concurrency stamp, so of several concurrent failures only one was counted (Codex, PR #24);
+    /// this one counts in a single statement. Use <see cref="RecordFailureAsync"/>, which also says
+    /// whether the failure locked the account.
+    /// </summary>
+    public override async Task<IdentityResult> AccessFailedAsync(GoldmarkUser user)
+    {
+        await RecordFailureAsync(user);
+        return IdentityResult.Success;
+    }
+
+    /// <summary>Counts a failed password or code, locking the account at the threshold; true if this failure locked it.</summary>
+    public Task<bool> RecordFailureAsync(GoldmarkUser user)
+    {
+        ThrowIfDisposed();
+        // Identity's clock: IsLockedOutAsync compares the lockout end with DateTimeOffset.UtcNow.
+        return Rows.RecordAccessFailedAsync(user, Options.Lockout.MaxFailedAccessAttempts,
+            DateTimeOffset.UtcNow.Add(Options.Lockout.DefaultLockoutTimeSpan), CancellationToken);
+    }
+
+    /// <summary>Clears the failed-attempt count in one statement, so a concurrent failure cannot make it fail unnoticed.</summary>
+    public override async Task<IdentityResult> ResetAccessFailedCountAsync(GoldmarkUser user)
+    {
+        ThrowIfDisposed();
+        await Rows.ClearAccessFailedAsync(user, CancellationToken);
+        return IdentityResult.Success;
+    }
+
+    /// <summary>
+    /// True if the person has an authenticator whose key the key ring can no longer decrypt (DEC-038
+    /// item 5): no code from it can be checked, so it must be set up again.
+    /// </summary>
+    public async Task<bool> IsAuthenticatorUnreadableAsync(GoldmarkUser user) =>
+        user.HasAuthenticator && await GetAuthenticatorKeyAsync(user) is null;
+
     public Task RecordSignInAsync(GoldmarkUser user) => Rows.RecordSignInAsync(user, CancellationToken);
 
     public Task MarkSetupCompleteAsync(GoldmarkUser administrator) => Rows.MarkSetupCompleteAsync(administrator, CancellationToken);

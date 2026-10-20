@@ -62,11 +62,12 @@ export function SignInPage() {
 
   async function submitSecondFactor() {
     const body = step === 'code' ? { code } : { recoveryCode };
-    const { data } = await api<{ user: SessionUser }>('POST', '/api/v1/auth/sign-in/two-factor', body, {
+    const { data } = await api<{ user: SessionUser; next?: string }>('POST', '/api/v1/auth/sign-in/two-factor', body, {
       signedIn: false,
     });
     session.signedIn(data.user);
-    navigate(next, { replace: true });
+    // Goldmark can no longer check the authenticator (its keys were lost, DEC-038 item 5): set it up again now.
+    navigate(data.next === 'new-authenticator' ? '/account/two-factor?authenticator=new' : next, { replace: true });
   }
 
   async function onSubmit(event: FormEvent) {

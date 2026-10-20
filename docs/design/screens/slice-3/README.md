@@ -32,6 +32,10 @@ Where the built UI differs from the boards, and why:
 - **The shell's search box and As-of control are absent** until their slices (5 and 7): slice 3
   shows only what exists (the sparse-shell board's own note).
 - **The Microsoft sign-in button (P1)** appears with OIDC, slice 25.
+- **A lost-key state on the two-factor page:** when Goldmark can no longer decrypt a person's
+  authenticator key (a lost key ring, DEC-038 item 5), signing in with a recovery code opens the
+  "Scan with your new authenticator" dialog at once, with an intro saying the old app's codes can no
+  longer be checked (Codex, PR #24). The boards have no such state.
 
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.

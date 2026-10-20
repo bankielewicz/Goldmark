@@ -1,5 +1,7 @@
 using System.Net;
+using Goldmark.Api.Auth;
 using Goldmark.Api.IntegrationTests.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Goldmark.Api.IntegrationTests;
 
@@ -138,7 +140,8 @@ public sealed class SetupAndSignInTests(SqlServerFixture sql)
         // A recovery code works once.
         var recovery = scenario.App.Client();
         AuthScenario.Ok(await recovery.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
-        AuthScenario.Ok(await recovery.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0].ToLowerInvariant() }));
+        var recovered = AuthScenario.Ok(await recovery.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0].ToLowerInvariant() }));
+        Assert.False(recovered.Body.TryGetProperty("next", out _)); // the authenticator still works: nothing to set up
         var again = scenario.App.Client();
         AuthScenario.Ok(await again.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
         Assert.Equal("invalid-recovery-code", (await again.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0] })).Code);
@@ -220,6 +223,70 @@ public sealed class SetupAndSignInTests(SqlServerFixture sql)
         }
 
         Assert.Equal("locked", (await client.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = "BBBBB-CCCCC" })).Code);
+    }
+
+    [Fact]
+    public async Task Concurrent_failures_are_each_counted_and_lock_the_account_once()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (_, admin) = await scenario.SetUpAsync();
+        var database = scenario.Installation.Database;
+        const string Count = "SELECT AccessFailedCount FROM cmdb.UserAccount;";
+
+        // Codex, PR #24: copies of the account read before each other's failures, as concurrent requests
+        // read it. Identity's AccessFailedAsync wrote back the count it read, so only one was counted.
+        var scopes = Enumerable.Range(0, 6).Select(_ => scenario.App.Services.CreateAsyncScope()).ToList();
+        try
+        {
+            var copies = new List<(GoldmarkUserManager Users, GoldmarkUser User)>();
+            foreach (var scope in scopes)
+            {
+                var users = scope.ServiceProvider.GetRequiredService<GoldmarkUserManager>();
+                copies.Add((users, (await users.FindByIdAsync(admin.Id.ToString("D")))!));
+            }
+
+            Assert.True((await copies[0].Users.AccessFailedAsync(copies[0].User)).Succeeded);
+            Assert.True((await copies[1].Users.AccessFailedAsync(copies[1].User)).Succeeded);
+            Assert.Equal(2, await sql.AdminScalarAsync<int>(database, Count));
+
+            var lockedBy = new List<bool>();
+            foreach (var (users, user) in copies[2..5])
+            {
+                lockedBy.Add(await users.RecordFailureAsync(user));
+            }
+
+            Assert.Equal([false, false, true], lockedBy);
+            Assert.True(await copies[4].Users.IsLockedOutAsync(copies[4].User));
+            Assert.Equal(0, await sql.AdminScalarAsync<int>(database, Count));
+
+            // A correct answer clears the count even when a failure changed the row since it was read.
+            await sql.AsAdminAsync(database, "UPDATE cmdb.UserAccount SET LockoutEnd = NULL, AccessFailedCount = 3;");
+            var stale = copies[5];
+            Assert.True((await stale.Users.ResetAccessFailedCountAsync(stale.User)).Succeeded);
+            Assert.Equal(0, await sql.AdminScalarAsync<int>(database, Count));
+
+            // An administrator locks the account after a request read it: that request's failure,
+            // even the one that reaches the threshold, must not shorten the lock to 15 minutes.
+            await sql.AsAdminAsync(database, "UPDATE cmdb.UserAccount SET AccessFailedCount = 4;");
+            await sql.AsAdminAsync(database, "UPDATE cmdb.UserAccount SET LockoutEnd = '9999-12-31T23:59:59.9999999+00:00';");
+            Assert.False(await stale.Users.RecordFailureAsync(stale.User)); // the lock was already there: no second lockout
+            Assert.True(stale.User.IsLockedByAdministrator);
+            Assert.Equal(1, await sql.AdminScalarAsync<int>(database,
+                "SELECT COUNT(*) FROM cmdb.UserAccount WHERE LockoutEnd = '9999-12-31T23:59:59.9999999+00:00';"));
+        }
+        finally
+        {
+            foreach (var scope in scopes)
+            {
+                await scope.DisposeAsync();
+            }
+        }
+
+        // Through the API: five wrong passwords at once lock the account, audited once.
+        await Task.WhenAll(Enumerable.Range(0, 5).Select(i =>
+            scenario.App.Client().PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = $"wrong guess {i} here" })));
+        Assert.Equal("locked", (await scenario.App.Client().PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password })).Code);
+        Assert.Single(await scenario.AuditAsync("auth.account.locked-out"));
     }
 
     [Fact]

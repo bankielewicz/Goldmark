@@ -1235,6 +1235,11 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      `web/tests/contrast.test.mjs`: 51 checks of the pairs the screens use, recomputed from the brand
      ramp with Fluent's own theme functions; it caught failed-rule text in the password checklist
      using a danger token at 4.16:1 in dark, now the palette red the boards use (5.20:1).
+  9. **Forgotten passwords: deferred, recorded (A)** (owner, 2026-10-20, review of PR #24: "A. Defer,
+     record it"). Slice 3 has no password recovery: a two-factor reset keeps the password, and the
+     PRD asks for none. Issue #25 holds both mechanisms (an administrator's reset through the link and
+     separate code; an operator-only container command for when the only administrator is locked out);
+     the owner places it in the plan. Until then the README advises keeping two administrators.
 - **How the backend implements DEC-038 and the above** (reading PRD §8.1 "ASP.NET Core Identity"):
   - **NFR-SEC-3 gate without a new package.** Every Dapper call goes through `Data/DbSession.cs`, whose
     SQL arguments are `[ConstantExpected]`; the SDK's CA1857 is an error under warnings-as-errors, so
@@ -1244,12 +1249,17 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     expects CA1857 on exactly its five marked violations.
   - **Passwords and lockout:** Identity's hasher (PBKDF2-HMAC-SHA512, 128-bit salt, 100,000 iterations:
     its v3 defaults, read from its source); 12 to 128 characters, no composition rules, the bundled
-    list. Lockout through `UserManager.AccessFailedAsync` (5 failures, 15 minutes, settings), counting
-    wrong passwords, codes and recovery codes. Unknown, disabled and not-yet-set-up accounts fail
-    exactly like a wrong password, including the lockout: their failures are counted in memory, keyed
-    by a hash of the normalized name (what someone typed may be a password, so it is never stored or
-    logged), with a dummy hash computed so the time taken matches. An automatic lockout does not end
-    existing sessions (anyone can cause one); an administrator's lock does.
+    list. Lockout after 5 failures for 15 minutes (settings), counting wrong passwords, codes and
+    recovery codes. `GoldmarkUserManager` overrides `AccessFailedAsync` and `ResetAccessFailedCountAsync`
+    with one SQL statement each (Codex, PR #24): Identity's own read the row, changed the count and wrote
+    it back under the concurrency stamp, so of concurrent failures only one was counted. A failure never
+    moves a lockout earlier, so an administrator's lock made meanwhile stands. Unknown, disabled and
+    not-yet-set-up accounts fail exactly like a wrong password, including the lockout: their failures
+    are counted in memory, keyed by a hash of the normalized name (what someone typed may be a password,
+    so it is never stored or logged), with a dummy hash computed so the time taken matches. Like an
+    account's count, they have no idle expiry (the cache runs on the app's clock); a restart, or a full
+    cache (10,000 names), can forget them, which is accepted. An automatic lockout does not end existing
+    sessions (anyone can cause one); an administrator's lock does.
   - **Codes:** `TotpTokenProvider` (Identity's `AuthenticatorTokenProvider` slot): RFC 6238, HMAC-SHA1
     (what authenticator apps require; CA5350 is suppressed on that one method with this reason), the
     current step or one either side, and a step is never accepted twice (`LastTotpTimeStep`, reset to
@@ -1289,7 +1299,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     KeyDirectory` (`/var/lib/goldmark/keys`, the `goldmark-keys` volume only the app mounts), directory
     0700, files 0600, written atomically. Keys are not encrypted at rest, by DEC-038 5A, so Data
     Protection logs "No XML encryptor configured" at Warning when it creates a key (every 90 days); that
-    warning is expected.
+    warning is expected. An authenticator key the ring can no longer decrypt (lost, or restored without
+    the database's matching volume) makes a code fail like a wrong one, with Warning event 3003; a
+    sign-in with a recovery code then starts setting up a new authenticator at once, so one recovery
+    code is enough (Codex, PR #24). Back up and restore `goldmark-keys` together with the database.
   - **Audit actions:** `setup.completed`, `setup.token-rejected`, `auth.sign-in.succeeded`,
     `auth.sign-in.failed` (with the reason), `auth.account.locked-out`, `auth.recovery-code.used`,
     `auth.signed-out`, `user.invitation.created`/`reissued`/`revoked`/`redeemed`, `user.link.code-failed`,

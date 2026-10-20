@@ -24,10 +24,11 @@ import {
   useToastController,
 } from '@fluentui/react-components';
 import { CheckmarkCircleRegular } from '@fluentui/react-icons';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 
 import { api, ApiError } from '../api';
 import { formatUtc } from '../format';
+import { navigate, useLocation } from '../router';
 import { PageHeader } from '../shell/PageHeader';
 import { AuthenticatorSetup, CodeInput, ErrorBar, Notice, PasswordInput, RecoveryCodes } from '../ui/common';
 
@@ -71,7 +72,7 @@ type DialogState =
   | { kind: 'confirm-codes' }
   | { kind: 'new-codes'; codes: string[] }
   | { kind: 'confirm-authenticator' }
-  | { kind: 'new-authenticator'; key: string; version: number };
+  | { kind: 'new-authenticator'; key: string; version: number; lostKey?: boolean };
 
 /** The signed-in person's own two-factor page (DEC-038 item 9): status, new codes, a new authenticator. */
 export function TwoFactorPage() {
@@ -81,6 +82,9 @@ export function TwoFactorPage() {
   const [status, setStatus] = useState<Status | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const { search } = useLocation();
+  const lostKey = search.get('authenticator') === 'new';
+  const lostKeyStarted = useRef(false);
 
   const load = useCallback(async () => {
     setFailure(null);
@@ -94,6 +98,22 @@ export function TwoFactorPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Sent here by sign-in: the recovery code that signed in has already started a new authenticator,
+  // because Goldmark can no longer check the old one (DEC-038 item 5).
+  useEffect(() => {
+    if (!lostKey || lostKeyStarted.current) return;
+    lostKeyStarted.current = true;
+    navigate('/account/two-factor', { replace: true });
+    void (async () => {
+      try {
+        const { data } = await api<{ key: string }>('POST', '/api/v1/enrolment/authenticator', {}, { signedIn: false });
+        setDialog({ kind: 'new-authenticator', key: data.key, version: Date.now(), lostKey: true });
+      } catch {
+        // The step expired: the page's own button starts again.
+      }
+    })();
+  }, [lostKey]);
 
   const toast = (text: string) =>
     dispatchToast(
@@ -346,7 +366,11 @@ function TwoFactorDialog({
                     problem?.code === 'invalid-code' ? 'That code didn’t work. Codes change every 30 seconds.' : null
                   }
                   codeLabel="6-digit code from the new app"
-                  intro="Scan with the new app, or enter the key. The old authenticator stops working once you verify."
+                  intro={
+                    state.lostKey
+                      ? 'Goldmark can no longer check codes from your authenticator app, so set it up again: scan with the app, or enter the key.'
+                      : 'Scan with the new app, or enter the key. The old authenticator stops working once you verify.'
+                  }
                 />
               ) : null}
             </DialogContent>

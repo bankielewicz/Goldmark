@@ -79,15 +79,24 @@ internal static class AccountEndpoints
         DbSession db, AuditTrail audit, IOptions<AuthOptions> options)
     {
         var user = await SignedInUserAsync(context, users);
-        var refused = await db.InTransactionAsync(() => ConfirmAsync(request, user, users, audit, options.Value));
+        var refused = await db.InTransactionAsync<IResult?>(async () =>
+        {
+            if (await ConfirmAsync(request, user, users, audit, options.Value) is { } refusal)
+            {
+                return refusal;
+            }
+
+            // In the transaction that redeemed the code: a spent code always has its audit row.
+            if (UsesRecoveryCode(request))
+            {
+                await audit.WriteAsync(AuditActions.RecoveryCodeUsed, "User", user.Id, new { remaining = await users.CountRecoveryCodesAsync(user) });
+            }
+
+            return null;
+        });
         if (refused is not null)
         {
             return refused;
-        }
-
-        if (!string.IsNullOrEmpty(request.RecoveryCode))
-        {
-            await audit.WriteAsync(AuditActions.RecoveryCodeUsed, "User", user.Id, new { remaining = await users.CountRecoveryCodesAsync(user) });
         }
 
         await new EnrolmentState(EnrolmentKind.ChangeAuthenticator, user.Id, SecurityStamp: user.SecurityStamp, PasswordVerified: true)
@@ -154,7 +163,7 @@ internal static class AccountEndpoints
                 AuditActor.User(user.Id), AuditActions.ConfirmationFailed);
         }
 
-        var usesRecoveryCode = string.IsNullOrEmpty(request.Code) && !string.IsNullOrEmpty(request.RecoveryCode);
+        var usesRecoveryCode = UsesRecoveryCode(request);
         var accepted = usesRecoveryCode
             ? (await users.RedeemTwoFactorRecoveryCodeAsync(user, request.RecoveryCode!)).Succeeded
             : await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, request.Code ?? "");
@@ -167,6 +176,10 @@ internal static class AccountEndpoints
         await users.ResetAccessFailedCountAsync(user);
         return null;
     }
+
+    /// <summary>A recovery code is checked only when no 6-digit code was given.</summary>
+    private static bool UsesRecoveryCode(ConfirmRequest request) =>
+        string.IsNullOrEmpty(request.Code) && !string.IsNullOrEmpty(request.RecoveryCode);
 
     /// <summary>The session's person; the session check has already made sure they exist and may sign in.</summary>
     private static async Task<GoldmarkUser> SignedInUserAsync(HttpContext context, GoldmarkUserManager users) =>

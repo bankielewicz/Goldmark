@@ -167,6 +167,34 @@ public sealed class AuthPrimitivesTests
     }
 
     [Fact]
+    public void Unknown_user_names_keep_their_failures_until_they_lock_as_an_account_keeps_its_count()
+    {
+        // Codex, PR #24: four failures, a pause longer than the lockout, one more. An account's count
+        // has no idle expiry, so it locks; an unknown name must lock too, or the answer tells them apart.
+        var time = new ManualTime(DateTimeOffset.Parse("2026-10-20T12:00:00Z", System.Globalization.CultureInfo.InvariantCulture));
+        using var throttle = new UnknownUserThrottle(Options.Create(new AuthOptions()), time);
+
+        for (var i = 1; i < 5; i++)
+        {
+            Assert.False(throttle.RecordFailure("NOBODY"));
+        }
+
+        time.Advance(TimeSpan.FromHours(6));
+        Assert.True(throttle.RecordFailure("NOBODY"));
+        Assert.True(throttle.IsLockedOut("NOBODY"));
+
+        // After the lockout the count starts again, as an account's does.
+        time.Advance(TimeSpan.FromMinutes(16));
+        Assert.False(throttle.IsLockedOut("NOBODY"));
+        for (var i = 1; i < 5; i++)
+        {
+            Assert.False(throttle.RecordFailure("NOBODY"));
+        }
+
+        Assert.True(throttle.RecordFailure("NOBODY"));
+    }
+
+    [Fact]
     public void The_user_export_neutralizes_spreadsheet_formulas()
     {
         var user = new UserSummary(Guid.NewGuid(), "sam", "=HYPERLINK(\"http://x\")", ["Viewer"], true,

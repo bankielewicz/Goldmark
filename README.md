@@ -62,7 +62,15 @@ The generated credentials live in Docker volumes
 ([docs/ops/database-credentials.md](docs/ops/database-credentials.md)). Keep
 `SQLSERVER_SA_PASSWORD` in `deploy/.env` (the SQL Server image needs it on every
 start) and back up the `goldmark-db-admin` volume: if it is lost, follow
-[docs/ops/database-recovery.md](docs/ops/database-recovery.md).
+[docs/ops/database-recovery.md](docs/ops/database-recovery.md). Back up the
+`goldmark-keys` volume too, and restore it together with the database: it holds
+the keys that encrypt sign-in cookies and every user's authenticator secret.
+Without it, everyone signs in again and authenticator codes stop working until
+each person signs in with a recovery code and sets up the app again.
+
+Keep at least two administrators: Goldmark cannot yet reset a forgotten password
+(#25), so an only administrator who forgets theirs leaves nobody able to manage
+users.
 
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in

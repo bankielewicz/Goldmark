@@ -1,6 +1,8 @@
 using System.Net;
+using Goldmark.Api.Auth;
 using Goldmark.Api.IntegrationTests.Infrastructure;
 using Goldmark.Api.Security;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -61,6 +63,57 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
         AuthScenario.Ok(await signIn.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
         Assert.Equal("invalid-code", (await signIn.PostAsync("/api/v1/auth/sign-in/two-factor", new { code = await admin.Authenticator.NextCodeAsync() })).Code);
         AuthScenario.Ok(await signIn.PostAsync("/api/v1/auth/sign-in/two-factor", new { code = await next.NextCodeAsync() }));
+    }
+
+    [Fact]
+    public async Task A_recovery_code_spent_on_a_new_authenticator_is_audited_in_the_same_transaction()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (client, admin) = await scenario.SetUpAsync();
+        const string Unused = "SELECT COUNT(*) FROM cmdb.RecoveryCode WHERE UsedAt IS NULL;";
+
+        // Codex, PR #24: when the audit row cannot be written, the code must not be spent either.
+        await sql.AsAdminAsync(scenario.Installation.Database, "DENY INSERT ON OBJECT::cmdb.AuditLog TO goldmark_runtime;");
+        var failed = await client.PostAsync("/api/v1/account/two-factor/authenticator", new { password = admin.Password, recoveryCode = admin.RecoveryCodes[0] });
+        Assert.Equal(HttpStatusCode.InternalServerError, failed.Status);
+        Assert.Equal(10, await sql.AdminScalarAsync<int>(scenario.Installation.Database, Unused));
+
+        await sql.AsAdminAsync(scenario.Installation.Database, "REVOKE INSERT ON OBJECT::cmdb.AuditLog FROM goldmark_runtime;");
+        AuthScenario.Ok(await client.PostAsync("/api/v1/account/two-factor/authenticator", new { password = admin.Password, recoveryCode = admin.RecoveryCodes[0] }));
+        Assert.Equal(9, await sql.AdminScalarAsync<int>(scenario.Installation.Database, Unused));
+        Assert.Single(await scenario.AuditAsync("auth.recovery-code.used"), a => a.Contains("\"remaining\":9", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task After_the_key_ring_loses_an_authenticator_key_one_recovery_code_is_enough_to_set_up_a_new_one()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (_, admin) = await scenario.SetUpAsync();
+        // As after a lost or replaced key ring (DEC-038 item 5): the stored key was encrypted with a
+        // key this ring does not hold.
+        var foreign = new EphemeralDataProtectionProvider().CreateProtector(UserStore.AuthenticatorKeyPurpose).Protect(admin.Authenticator.Key);
+        await sql.AsAdminAsync(scenario.Installation.Database, $"UPDATE cmdb.UserAccount SET AuthenticatorKey = N'{foreign}';");
+
+        // A code cannot be checked: it fails like a wrong one, not with a server error, and the log says why.
+        var client = scenario.App.Client();
+        AuthScenario.Ok(await client.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
+        Assert.Equal("invalid-code", (await client.PostAsync("/api/v1/auth/sign-in/two-factor", new { code = await admin.Authenticator.NextCodeAsync() })).Code);
+        Assert.Contains(scenario.App.Logs.Events, e => GoldmarkApp.IsEvent(e, 3003));
+
+        // Codex, PR #24: the recovery code that signs in also starts the new authenticator, so the
+        // person needs no second one (with one code left, they would otherwise be stuck).
+        var signedIn = AuthScenario.Ok(await client.PostAsync("/api/v1/auth/sign-in/two-factor", new { recoveryCode = admin.RecoveryCodes[0] }));
+        Assert.Equal("new-authenticator", signedIn.Value("next"));
+        Assert.Equal("authenticator", AuthScenario.Ok(await client.GetAsync("/api/v1/enrolment")).Value("next"));
+        var next = new Authenticator(AuthScenario.Ok(await client.PostAsync("/api/v1/enrolment/authenticator")).Value("key"));
+        AuthScenario.Ok(await client.PostAsync("/api/v1/account/two-factor/authenticator/verify", new { code = await next.NextCodeAsync() }));
+        Assert.Equal(9, AuthScenario.Ok(await client.GetAsync("/api/v1/account/two-factor")).Body.GetProperty("recoveryCodesRemaining").GetInt32());
+        Assert.Single(await scenario.AuditAsync("account.authenticator.changed"));
+
+        var again = scenario.App.Client();
+        AuthScenario.Ok(await again.PostAsync("/api/v1/auth/sign-in", new { userName = admin.UserName, password = admin.Password }));
+        var withCode = AuthScenario.Ok(await again.PostAsync("/api/v1/auth/sign-in/two-factor", new { code = await next.NextCodeAsync() }));
+        Assert.False(withCode.Body.TryGetProperty("next", out _));
     }
 
     [Fact]
