@@ -21,6 +21,16 @@ public sealed class DatabaseOptions
     public string User { get; set; } = "";
     public string Password { get; set; } = "";
 
+    /// <summary>
+    /// Optional path of the runtime login's credential file (<see cref="Configuration.CredentialFile"/>),
+    /// which <c>bootstrap-db</c> writes. When set, the login's name and password are read from it;
+    /// <see cref="User"/> and <see cref="Password"/>, if also set, must match it.
+    /// </summary>
+    public string? CredentialFile { get; set; }
+
+    /// <summary>Why <see cref="CredentialFile"/> could not be applied (reported by the validator), or null.</summary>
+    internal string? CredentialFileProblem { get; set; }
+
     /// <summary><c>Strict</c> (TDS 8, default) or <c>Mandatory</c>. Unencrypted connections are not supported.</summary>
     public string Encrypt { get; set; } = "Strict";
 
@@ -57,18 +67,25 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
             failures.Add($"{DatabaseOptions.SectionName}:Name must not be a SQL Server system database.");
         }
 
-        if (string.IsNullOrWhiteSpace(options.User))
+        if (options.CredentialFileProblem is { } problem)
         {
-            failures.Add($"{DatabaseOptions.SectionName}:User is required.");
+            failures.Add(problem);
         }
-        else if (string.Equals(options.User, "sa", StringComparison.OrdinalIgnoreCase))
+        else
         {
-            failures.Add($"{DatabaseOptions.SectionName}:User must be a least-privilege login, not 'sa'.");
-        }
+            if (string.IsNullOrWhiteSpace(options.User))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:User is required (or {DatabaseOptions.SectionName}:CredentialFile).");
+            }
+            else if (string.Equals(options.User, "sa", StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:User must be a least-privilege login, not 'sa'.");
+            }
 
-        if (string.IsNullOrEmpty(options.Password))
-        {
-            failures.Add($"{DatabaseOptions.SectionName}:Password is required (there is no default password).");
+            if (string.IsNullOrEmpty(options.Password))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:Password is required (there is no default password), or {DatabaseOptions.SectionName}:CredentialFile.");
+            }
         }
 
         if (options.Encrypt is not ("Strict" or "Mandatory"))
@@ -84,6 +101,23 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         }
 
         return failures.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(failures);
+    }
+
+    /// <summary>
+    /// Replaces <see cref="DatabaseOptions.User"/> and <see cref="DatabaseOptions.Password"/> with the
+    /// contents of <see cref="DatabaseOptions.CredentialFile"/>, if one is configured, or records why
+    /// it cannot be used. Settings that are also given must match the file.
+    /// </summary>
+    public static void ApplyCredentialFile(DatabaseOptions options)
+    {
+        if (CredentialFile.Resolve(DatabaseOptions.SectionName, options.CredentialFile, options.User, options.Password, out var credential) is { } problem)
+        {
+            options.CredentialFileProblem = problem;
+            return;
+        }
+
+        options.User = credential.User;
+        options.Password = credential.Password;
     }
 
     /// <summary>

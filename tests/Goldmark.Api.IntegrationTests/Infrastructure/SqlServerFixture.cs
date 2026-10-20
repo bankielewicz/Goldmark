@@ -40,6 +40,15 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
 
     public string SaPassword { get; } = Secret();
 
+    /// <summary>
+    /// The administrator bootstrap-db signs in with, and tests change the instance with
+    /// (<see cref="AsAdminAsync"/>): a dedicated sysadmin login, because sa is refused as the
+    /// administrator outside the generated-administrator setup, which disables it (DEC-032, DEC-034).
+    /// </summary>
+    public const string AdminUser = "it_dba";
+
+    public string AdminPassword { get; } = Secret();
+
     public string Host { get; private set; } = "";
 
     public int Port { get; private set; }
@@ -87,7 +96,11 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
 
         CertificatePath = Path.Combine(_work, "sqlserver.crt");
         await File.WriteAllTextAsync(CertificatePath, certificate.Stdout, TestContext.Current.CancellationToken);
+        await ExecuteAsync("sa", SaPassword, "master", $"CREATE LOGIN {AdminUser} WITH PASSWORD = N'{AdminPassword}'; ALTER SERVER ROLE sysadmin ADD MEMBER {AdminUser};");
     }
+
+    /// <summary>A directory for one test's files (for example credential files), removed with the fixture.</summary>
+    public string NewDirectory() => Directory.CreateDirectory(Path.Combine(_work, $"files{Interlocked.Increment(ref _sequence)}")).FullName;
 
     public async ValueTask DisposeAsync()
     {
@@ -120,10 +133,8 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
             ["Goldmark:Database:HostNameInCertificate"] = CertificateHostName,
             ["Goldmark:Migration:User"] = installation.MigrationUser,
             ["Goldmark:Migration:Password"] = installation.MigrationPassword,
-            ["Goldmark:Bootstrap:AdminUser"] = "sa",
-            ["Goldmark:Bootstrap:AdminPassword"] = SaPassword,
-            // As the bundled deployment does, until slice 2c (DEC-032).
-            ["Goldmark:Bootstrap:AllowSaAdmin"] = "true",
+            ["Goldmark:Bootstrap:AdminUser"] = AdminUser,
+            ["Goldmark:Bootstrap:AdminPassword"] = AdminPassword,
             ["Goldmark:Bootstrap:WaitSeconds"] = "30",
         };
         foreach (var (key, value) in overrides ?? new Dictionary<string, string?>())
@@ -198,9 +209,12 @@ public sealed partial class SqlServerFixture : IAsyncLifetime
         return (T)Convert.ChangeType(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken), typeof(T), System.Globalization.CultureInfo.InvariantCulture)!;
     }
 
-    public Task AsAdminAsync(string database, string sql) => ExecuteAsync("sa", SaPassword, database, sql);
+    public Task AsAdminAsync(string database, string sql) => ExecuteAsync(AdminUser, AdminPassword, database, sql);
 
-    public Task<T> AdminScalarAsync<T>(string database, string sql) => ScalarAsync<T>("sa", SaPassword, database, sql);
+    public Task<T> AdminScalarAsync<T>(string database, string sql) => ScalarAsync<T>(AdminUser, AdminPassword, database, sql);
+
+    /// <summary>What the recovery's <c>mssql-conf set-sa-password</c> does to a disabled sa (measured, DEC-034).</summary>
+    public Task EnableSaAsync() => AsAdminAsync("master", $"ALTER LOGIN sa WITH PASSWORD = N'{SaPassword}'; ALTER LOGIN sa ENABLE;");
 
     /// <summary>Meets SQL Server's password policy and Goldmark's 12-128 character rule.</summary>
     public static string Secret() => $"{Convert.ToHexString(RandomNumberGenerator.GetBytes(12))}-aA9";

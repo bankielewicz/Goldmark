@@ -1,4 +1,4 @@
-# Goldmark + bundled SQL Server 2025 Express (US-01, slices 1-2b).
+# Goldmark + bundled SQL Server 2025 Express (US-01, slices 1-2c).
 #
 #   cp deploy/.env.example deploy/.env    # then fill in every required value
 #   docker compose -f deploy/docker-compose.yml up -d --build --wait
@@ -54,31 +54,34 @@ services:
     security_opt: ["no-new-privileges:true"]
     restart: unless-stopped
 
-  # One-shot, idempotent. bootstrap-db (as sa) audits the instance and both logins, then creates
-  # the database, the least-privilege runtime login and the migration login (db_owner of this
-  # database only); migrate (as the migration login) applies the schema migrations and grants
-  # the runtime login its role. Only this container receives the sa and migration passwords;
-  # the app never does. An existing SQL Server: deploy/docker-compose.external-sql.yml.
+  # One-shot, idempotent. bootstrap-db audits the instance and both logins, then creates the
+  # database, the least-privilege runtime login and the migration login (db_owner of this
+  # database only) with generated names and passwords, which it keeps in the two volumes below
+  # (DEC-034); migrate (as the migration login) applies the schema migrations and grants the
+  # runtime login its role. On the first run bootstrap-db signs in as sa, creates Goldmark's own
+  # administrator (sysadmin, kept in goldmark-db-admin) and disables sa; later runs sign in as
+  # that administrator. Only this container mounts goldmark-db-admin; the app reads the runtime
+  # login from goldmark-db-runtime, read-only. An existing SQL Server:
+  # deploy/docker-compose.external-sql.yml.
   db-init:
     image: goldmark:${GOLDMARK_IMAGE_TAG:-local}
     pull_policy: never
     command: ["bootstrap-db", "migrate"]
     environment:
       Goldmark__Database__Host: sqlserver
-      Goldmark__Database__User: ${GOLDMARK_DB_USER:-goldmark_app}
-      Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:?Set GOLDMARK_DB_PASSWORD in deploy/.env}
+      Goldmark__Database__CredentialFile: /var/lib/goldmark/db-runtime/credential.json
       Goldmark__Database__ServerCertificatePath: /run/goldmark/sql-tls/sqlserver.crt
-      Goldmark__Migration__User: ${GOLDMARK_DB_MIGRATION_USER:-goldmark_migrator}
-      Goldmark__Migration__Password: ${GOLDMARK_DB_MIGRATION_PASSWORD:?Set GOLDMARK_DB_MIGRATION_PASSWORD in deploy/.env}
+      Goldmark__Migration__CredentialFile: /var/lib/goldmark/db-admin/migration.json
+      Goldmark__Bootstrap__AdminCredentialFile: /var/lib/goldmark/db-admin/admin.json
+      # Used only while admin.json does not exist (first run, recovery), then disabled again.
       Goldmark__Bootstrap__AdminUser: sa
       Goldmark__Bootstrap__AdminPassword: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in deploy/.env}
-      # sa is refused everywhere else (DEC-032). The bundled SQL Server has no other administrator
-      # yet; slice 2c replaces sa with a generated administrator login.
-      Goldmark__Bootstrap__AllowSaAdmin: "true"
       Goldmark__Bootstrap__AdoptExistingLogin: ${GOLDMARK_DB_ADOPT_EXISTING_LOGIN:-false}
       Goldmark__Bootstrap__AcceptedFindings: ${GOLDMARK_DB_ACCEPTED_FINDINGS:-}
     volumes:
       - sql-tls-public:/run/goldmark/sql-tls:ro
+      - goldmark-db-runtime:/var/lib/goldmark/db-runtime
+      - goldmark-db-admin:/var/lib/goldmark/db-admin
     networks: [backend]
     depends_on:
       sqlserver:
@@ -98,8 +101,8 @@ services:
     image: goldmark:${GOLDMARK_IMAGE_TAG:-local}
     environment:
       Goldmark__Database__Host: sqlserver
-      Goldmark__Database__User: ${GOLDMARK_DB_USER:-goldmark_app}
-      Goldmark__Database__Password: ${GOLDMARK_DB_PASSWORD:?Set GOLDMARK_DB_PASSWORD in deploy/.env}
+      # The runtime login's generated name and password, written by db-init (DEC-034).
+      Goldmark__Database__CredentialFile: /var/lib/goldmark/db-runtime/credential.json
       Goldmark__Database__ServerCertificatePath: /run/goldmark/sql-tls/sqlserver.crt
       Goldmark__Https__Hostnames: ${GOLDMARK_TLS_HOSTNAMES:-localhost}
       Goldmark__Https__CertificatePath: ${GOLDMARK_TLS_CERT_FILE:-}
@@ -112,6 +115,7 @@ services:
     volumes:
       - goldmark-tls:/var/lib/goldmark/tls
       - sql-tls-public:/run/goldmark/sql-tls:ro
+      - goldmark-db-runtime:/var/lib/goldmark/db-runtime:ro
     networks: [frontend, backend]
     depends_on:
       db-init:
@@ -132,3 +136,7 @@ volumes:
   sql-tls-private: {}
   sql-tls-public: {}
   goldmark-tls: {}
+  # Generated database credentials (DEC-034). goldmark-db-admin holds the administrator and the
+  # migration login and is mounted by db-init only. Losing it: docs/ops/database-recovery.md.
+  goldmark-db-runtime: {}
+  goldmark-db-admin: {}

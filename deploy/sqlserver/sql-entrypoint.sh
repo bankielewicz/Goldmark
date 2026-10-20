@@ -61,4 +61,7 @@ mssql_conf=/opt/mssql/bin/mssql-conf
 "${mssql_conf}" set network.forceencryption 1 >/dev/null
 "${mssql_conf}" set network.forcestrict 1 >/dev/null
 
+# The healthcheck's CONNECT-only login, created once SQL Server accepts connections (DEC-034).
+/bin/bash /goldmark/scripts/health-login.sh &
+
 exec /opt/mssql/bin/launch_sqlservr.sh /opt/mssql/bin/sqlservr

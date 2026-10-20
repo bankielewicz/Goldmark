@@ -97,18 +97,21 @@ public sealed class ExistingSqlServerTests(SqlServerFixture sql)
         {
             ["Goldmark:Bootstrap:AdminUser"] = dba,
             ["Goldmark:Bootstrap:AdminPassword"] = dbaPassword,
-            ["Goldmark:Bootstrap:AllowSaAdmin"] = "false",
         });
 
         Assert.True(result.Code == 0, result.ToString());
     }
 
     [Fact]
-    public async Task Sa_is_refused_as_the_administrator_unless_allowed()
+    public async Task Sa_is_refused_as_the_administrator()
     {
         var installation = sql.NewInstallation();
 
-        var refused = await sql.RunAsync(installation, ["bootstrap-db"], new Dictionary<string, string?> { ["Goldmark:Bootstrap:AllowSaAdmin"] = "false" });
+        var refused = await sql.RunAsync(installation, ["bootstrap-db"], new Dictionary<string, string?>
+        {
+            ["Goldmark:Bootstrap:AdminUser"] = "sa",
+            ["Goldmark:Bootstrap:AdminPassword"] = sql.SaPassword,
+        });
 
         Assert.Equal(2, refused.Code);
         Assert.Contains("Goldmark:Bootstrap:AdminUser must not be 'sa'", refused.Error, StringComparison.Ordinal);

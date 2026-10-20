@@ -6,10 +6,11 @@ in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
 **As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14) and 2b (PR #17) are merged,
-with the handoff and docs PRs #11, #13 and #16. Next: **slice 2c** (generated
-database credentials, #18, #19); its notes are in §3. The owner sets its model
-(rule 5 does not name one; Opus was suggested). Docker Compose is the first
-distribution, not the target deployment (DEC-030, rule 8).
+with the handoff and docs PRs #11, #13, #16 and #21. **Slice 2c** (generated
+database credentials, `sa` disabled, #18, #19; DEC-034, DEC-035) is in review.
+Next: the owner places the Windows service / installer / Windows authentication
+slice in the plan (DEC-030; asked at the end of 2c), then **slice 3**; notes in §3.
+Docker Compose is the first distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -23,7 +24,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 1 | **done** (PR #1) | `claude/slice-01-scaffold` | Skeleton, CI, Dockerfile, Compose (SQL Server 2025 Express), `/health/*`, Serilog JSON, web skeleton with NFR-SEC-9 controls | `docker compose up` serves health + empty SPA; CI green; unlisted npm dependency fails CI | — |
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
-| 2c | **next** | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
+| 2c | **in review** | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
@@ -91,7 +92,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    21-screen prompts) and the mockups and state boards in
    [`docs/design/screens/`](design/screens/). They are review input, not
    approved designs.
-5. **Models and sessions.** Opus for slices 2b, 3, 19 and 24 (security- or
+5. **Models and sessions.** Opus for slices 2b, 2c, 3, 19 and 24 (security- or
    logic-heavy); Sonnet for the rest. The owner sets the model per session.
    One new session per slice: start by reading this file, `DECISIONS.md` and
    `PRD.md`, confirm the next slice and open decisions in 3–5 lines, and wait
@@ -116,40 +117,24 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    authentication. Keep provisioning in `bootstrap-db` (a plain CLI command),
    settings source-agnostic, and checks based on effective rights.
 
-## 3. Next slice (2c): notes
+## 3. Next slice: notes
 
-Slice 2b's decisions are DEC-030…DEC-033. For 2c (DEC-032):
+**Open (owner):** where the Windows service distribution, installer wizard, Windows
+authentication and availability groups (#20) go in the plan (DEC-030). Until then the
+next slice is **3** (`slice/03-auth`), whose first step is the Fluent UI v9
+verification under the served CSP and Trusted Types (DEC-017, DEC-021); if it fails,
+stop and bring options. Then the design-system handoff (rule 4) and the slice's
+screen handoff (rule 3) before any UI code.
 
-- **Generated credentials.** `bootstrap-db` generates the administrator,
-  migration and runtime credentials (a recognisable prefix plus a random suffix
-  for names, random passwords) and writes them to a path from its settings: a
-  volume in Docker, DPAPI or the installer later (rule 8). The administrator and
-  migration credentials go to a volume only `db-init` mounts; the runtime
-  credential goes to one the app mounts read-only. `GOLDMARK_DB_PASSWORD` and
-  `GOLDMARK_DB_MIGRATION_PASSWORD` leave `.env`.
-- **`sa`.** The first run connects as `sa`, creates the generated administrator,
-  then disables `sa`. `AllowSaAdmin` (bundled Compose file only) then goes away.
-  The SQL Server image needs `MSSQL_SA_PASSWORD` on every start even with `sa`
-  disabled (an image constraint: document it).
-- **Lockout risk.** If the generated administrator's volume is lost and `sa` is
-  disabled, nobody can sign in as sysadmin (on Linux there is no
-  local-administrator fallback in single-user mode). Whether
-  `mssql-conf set-sa-password` re-enables a disabled `sa` is unmeasured. A tested
-  recovery comes before disabling `sa`.
-- **Healthcheck.** `deploy/sqlserver/healthcheck.sh` signs in as `sa`; it needs a
-  CONNECT-only login instead.
-- The external-SQL file keeps the operator's own administrator (no `sa`);
-  generation there applies to the migration and runtime logins in Mode `Create`.
-- The principal audit already treats every login it manages the same way, so it
-  needs no change for generated names.
-- **Audit follow-ups from PR #17** (Codex round 3, deferred to 2c by the owner):
-  - #18: report securables in the Goldmark database owned by `public`, except the
-    built-in schemas;
-  - #19: evaluate the database owner's *effective* CONTROL SERVER, honouring a
-    `DENY` (impersonate the owner).
+Slice 2c left these for later work:
 
-  The third follow-up, #20 (availability-group permission targets shown as
-  `#id`), belongs to the availability-group slice (DEC-030).
+- **Rotation command.** Generated passwords are not rotated automatically (DEC-034,
+  owner decision 3A); an explicit `rotate-db-credentials` command fits the Windows
+  service slice, where DPAPI replaces the credential volumes.
+- **Credential storage on Windows.** The credential-file paths are settings; the
+  Windows service points them at a DPAPI-protected store (rule 8).
+- **Backups (US-60, slice 24)** must include the `goldmark-db-admin` volume, or a
+  restore needs the `sa` recovery (`docs/ops/database-recovery.md`).
 
 ## 4. Open issues and owners
 
@@ -160,9 +145,10 @@ Slice 2b's decisions are DEC-030…DEC-033. For 2c (DEC-032):
 | #3 wildcard linked-server and remote-login mappings | 2b (closed by PR #17) |
 | #4 audit of adopted and shared-instance principals beyond database scope | 2b (closed by PR #17) |
 | #15 `migrate`: runtime user found by name, adopted user may have another name | 2b (closed by PR #17: `bootstrap-db` refuses a differently named user, DEC-032) |
-| Generated credentials, `sa` disabled in the bundled deployment | 2c (DEC-032) |
-| #18 principal audit: securables in the Goldmark database owned by `public` | 2c (`slice-2`) |
-| #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (`slice-2`) |
+| Generated credentials, `sa` disabled in the bundled deployment | 2c (in review: DEC-034) |
+| #18 principal audit: securables in the Goldmark database owned by `public` | 2c (closed by the 2c PR: DEC-035) |
+| #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (closed by the 2c PR: DEC-035) |
+| Rotation command for generated credentials | owner: with the Windows service slice (DEC-034, 3A) |
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
 | Windows service distribution, installer wizard, Windows authentication, availability groups | owner: place in the plan (DEC-030) |
 | Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
@@ -178,6 +164,10 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 ## 5. Environment gotchas
 
 ### 5.1 GitHub access from the agent
+
+- **Slice 2c session:** the GitHub MCP server failed to connect ("Authorization
+  header is badly formatted"); `gh` on the owner's machine reads issues. PR and
+  issue writes still go through owner-run `gh` scripts.
 
 - **Status:** the owner is updating the GitHub MCP credential to a
   fine-grained PAT with Contents RW, Pull requests RW, Issues RW, Actions R,
@@ -286,6 +276,28 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   with variable substitution off.
 - `Microsoft.Data.SqlClient` refuses globalization-invariant mode; the runtime
   image is the chiseled `-extra` (ICU) variant.
+- **Generated credentials (slice 2c, DEC-034).** In the bundled stack `sa` is
+  **disabled** after the first `db-init`; sign in as the generated administrator
+  (`goldmark-db-admin` volume, `admin.json`) or as the runtime login
+  (`goldmark-db-runtime`, `credential.json`). The app image has no shell: read a
+  volume with the SQL image, `docker run --rm --user 1654:1654 -v
+  goldmark_goldmark-db-admin:/c:ro --entrypoint cat <sql image> /c/admin.json`.
+  The SQL healthcheck's login is in `sql-tls-private/healthcheck.credential`.
+- **`sa` measured on the pinned image:** disabled stays disabled across restarts;
+  a changed `MSSQL_SA_PASSWORD` is ignored after the first start;
+  `mssql-conf -n set-sa-password` with SQL Server stopped re-enables `sa` (the
+  recovery, `docs/ops/database-recovery.md`). `sqlservr --force-setup` run directly
+  never exits (it keeps serving): run it detached if ever needed.
+- **Ownership (measured, #18):** ownership by `public` or by a role gives every
+  member CONTROL. `public` is a keyword: `ALTER AUTHORIZATION … TO [public]`.
+- **Impersonation (measured, #19):** a disabled login can be impersonated
+  (`EXECUTE AS LOGIN`); a login denied CONTROL SERVER cannot be impersonated into
+  master at all (error 916), which the owner check reports.
+- Integration tests: the fixture's administrator is the sysadmin `it_dba`
+  (`AsAdminAsync`), not `sa`. `GeneratedAdministratorTests` disable `sa` in a third
+  container of their own and re-enable it per test (`EnableSaAsync`, what
+  `mssql-conf` does). A container's tmpfs mounts are emptied on restart, so tests that
+  restart SQL Server need volumes.
 
 ### 5.4 .NET and tooling
 
@@ -320,6 +332,11 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   definitions are named `…Tests`).
 
 ### 5.5 The agent's sandbox (local verification)
+
+- **Slice 2c ran on the owner's WSL** (`/mnt/c/Projects/CMDB`), not the sandbox: the
+  pinned SDK, Node and pnpm were installed, Docker Desktop was up, and the
+  committed Dockerfile builds as-is (no TLS-inspecting proxy). Smoke there:
+  `GOLDMARK_E2E_CHANNEL=chrome tests/smoke/compose-smoke.sh` (`/usr/bin/google-chrome`).
 
 - Run `source /root/.goldmark-env` first (Node at `/opt/node24`, .NET at
   `/opt/dotnet`). Use `NUGET_CERT_REVOCATION_MODE=offline` locally only (CRL
@@ -363,8 +380,9 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-033, the slice-1, slice-2 and slice-2b
-  acceptance mappings.
+- `docs/DECISIONS.md`: DEC-001…DEC-035, the slice-1, slice-2, slice-2b and
+  slice-2c acceptance mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/ops/external-sql-server.md` (existing SQL Server, Mode Existing, every
-  audit finding), `docs/security/endpoint-access.md`.
+  audit finding), `docs/ops/database-credentials.md` (generated logins, `sa`),
+  `docs/ops/database-recovery.md` (lost credentials), `docs/security/endpoint-access.md`.
