@@ -35,6 +35,13 @@ internal sealed class DbSession(SqlConnectionFactory factory) : IAsyncDisposable
         return await connection.QuerySingleOrDefaultAsync<T>(Command(sql, parameters, cancellationToken));
     }
 
+    /// <summary>The single-row query with a longer timeout than the 30-second default, for maintenance such as the audit purge.</summary>
+    public async Task<T?> QuerySingleOrDefaultAsync<T>([ConstantExpected] string sql, int commandTimeoutSeconds, CancellationToken cancellationToken)
+    {
+        var connection = await OpenAsync(cancellationToken);
+        return await connection.QuerySingleOrDefaultAsync<T>(Command(sql, null, cancellationToken, commandTimeoutSeconds));
+    }
+
     public async Task<T?> ExecuteScalarAsync<T>([ConstantExpected] string sql, object? parameters = null,
         CancellationToken cancellationToken = default)
     {
@@ -96,8 +103,8 @@ internal sealed class DbSession(SqlConnectionFactory factory) : IAsyncDisposable
         }
     }
 
-    private CommandDefinition Command(string sql, object? parameters, CancellationToken cancellationToken) =>
-        new(sql, parameters, _transaction, cancellationToken: cancellationToken);
+    private CommandDefinition Command(string sql, object? parameters, CancellationToken cancellationToken, int? commandTimeoutSeconds = null) =>
+        new(sql, parameters, _transaction, commandTimeoutSeconds, cancellationToken: cancellationToken);
 
     private async Task<SqlConnection> OpenAsync(CancellationToken cancellationToken)
     {

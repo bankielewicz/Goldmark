@@ -120,6 +120,7 @@ internal static class AuthSetup
             .SetFallbackPolicy(new AuthorizationPolicyBuilder(AuthSchemes.Session).AddRequirements(new DenyUnclassifiedEndpoints()).Build())
             .AddPolicy(AccessPolicy.SignedIn, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser())
             .AddPolicy(AccessPolicy.Admin, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin))
+            .AddPolicy(AccessPolicy.AuditReader, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin, Roles.Auditor))
             .AddPolicy(AccessPolicy.TwoFactorPending, p => p.AddAuthenticationSchemes(AuthSchemes.TwoFactor).RequireAuthenticatedUser())
             .AddPolicy(AccessPolicy.Enrolment, p => p.AddAuthenticationSchemes(AuthSchemes.Enrolment).RequireAuthenticatedUser());
 

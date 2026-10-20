@@ -9,8 +9,10 @@ in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
-screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). **Next:** slice
-4 starts only after the owner's "APPROVED" (rule 1); notes in §3. The owner placed the Windows
+screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). **Slice 4**
+(audit log, approved 2026-10-20) is in progress on `slice/04-audit-log`: the owner's decisions are
+DEC-041, the backend is built, and the screen-16 design handoff is with the owner; UI code waits for
+the boards (rule 3). Notes in §3. The owner placed the Windows
 service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
 the first distribution, not the target deployment (DEC-030, rule 8).
 
@@ -28,7 +30,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | **done** (PR #24) | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); merged by PR #24 after two review rounds | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
-| 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
+| 4 | **in progress** (backend done, DEC-041; screen 16 waits for boards) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
@@ -57,7 +59,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52; NFR-SEC-6 pseudonymized export (keyed HMAC, as in the readiness probe) | 7 (saved scenarios), 19 (replay) |
 | 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3; a sample external app (test fixture) can annotate and link without any CMDB UI code change | 5 and 6 (badges, links), 21 |
 | 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2; the sample app resyncs correctly after a simulated outage | — |
-| P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28 | Screen 20 | 20 |
+| P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28; audit retention only shown, not edited, while DEC-041 holds | Screen 20 | 20 |
 
 P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
@@ -124,6 +126,30 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    settings source-agnostic, and checks based on effective rights.
 
 ## 3. Next slice: notes
+
+Slice **4** (`slice/04-audit-log`, approved 2026-10-20) is **in progress**. The owner's decisions
+(DEC-041):
+- old entries are deleted by a daily backend job through a bounded procedure (A);
+- retention has a floor of 365 days (A);
+- exports are audited, reads are not (A).
+
+**Backend built:**
+- **Migration 0004:**
+  - `cmdb.AuditRetention`, which the runtime login can only read.
+  - `cmdb.PurgeAuditLog`, which takes no parameters, keeps the floor in its code and commits each
+    batch with a `System` entry. The runtime login gets EXECUTE on it and still has no DELETE on
+    the table; the deletion works through ownership chaining, and the tests measure it.
+- **`migrate`** writes `Goldmark:Audit:RetentionDays` (in `db-init`'s environment,
+  `GOLDMARK_AUDIT_RETENTION_DAYS`) and audits each change. Its runtime check and both of the
+  principal audit's allow-lists allow that one grant.
+- **`AuditRetentionJob`** starts one minute after the app, gated on readiness, then runs daily.
+- **Policy `AuditReader`** (Admin or Auditor).
+- **Endpoints:** `GET /api/v1/audit` (filters, entry-number cursor, total), `/audit/catalog`,
+  `/audit/people` (only people in the log) and `POST /audit/export` (CSV, at most 100,000, writes
+  `audit.exported`).
+- **Shared CSV helper:** `Security/Csv.cs`, also used by the users export.
+
+**Screen 16 waits for the owner's boards:** the design handoff went to the owner on 2026-10-20.
 
 Slice **3** (`slice/03-auth`) is **merged** (PR #24); what it built, for the slices that follow. **Backend** (DEC-040): migration 0003, Dapper
 behind `DbSession` with the CA1857 gate, Identity on Dapper stores, server-side sessions, setup,
@@ -198,6 +224,7 @@ And for slice 24:
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
+| #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | owner: place in the plan |
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |

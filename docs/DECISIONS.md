@@ -1320,6 +1320,66 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   Net.Codecrete.QrCodeGenerator 3.2.1, both in DEC-038. The integration tests now also reference
   `Microsoft.AspNetCore.Mvc.Testing`, already pinned for the in-process tests. No other package.
 
+## DEC-041 Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited
+
+- **Decision (owner, 2026-10-20, asked in the HANDOFF rule-6 format).**
+  1. **Old entries are deleted by a backend job through a bounded procedure (A).** The owner first
+     asked: "Is the data stored in the database? If so, would a sql job that runs a stored procedure
+     daily be adequate? Or should there be a purge/maintenance windows service? … Sounds like this
+     should be some sort of backend process." After the answers below, they chose "A. Backend job +
+     bounded procedure (Recommended)".
+     - **What is built.** The operator sets the retention period. `migrate` writes it to a one-row
+       table the runtime login can read but cannot change: `DENY INSERT, UPDATE, DELETE`, the
+       `cmdb.Installation` pattern, checked by `migrate`. A migration creates a `dbo`-owned procedure
+       in `cmdb` with static SQL only and **no parameters**: the cutoff comes only from that table.
+       It re-checks the 365-day floor in its own code and deletes older entries in batches (to keep
+       the transaction log small on Express). Each batch commits together with a `System` audit entry
+       giving the cutoff and that batch's count, so no deletion commits without its entry; a run that
+       deletes nothing writes nothing. The procedure manages its own transactions, so it is never
+       called inside another one. `goldmark_runtime` gets `EXECUTE` on that one procedure. A hosted
+       service in `Goldmark.Api` runs it once the database is ready (the readiness check: reachable,
+       at the expected schema version) and then daily, on `TimeProvider`; it is idempotent. No
+       `Goldmark.Jobs` project yet.
+     - **What it amends.** DEC-025 asked for "a delete path that is not the runtime login". The
+       runtime login now **starts** the purge but never **decides** what it deletes: a stolen app
+       credential can only run, early, the deletion the operator already configured. Its rights on
+       the table are unchanged: no `DELETE`, no `UPDATE`.
+     - **Why not a SQL Agent job.** Express, which the bundled stack runs, has no SQL Server Agent.
+       Microsoft's "Editions and supported features of SQL Server 2025" lists "SQL Server Agent:
+       Enterprise Yes, Standard Yes, Express No". On other editions, Goldmark could not create the
+       job: jobs live in `msdb`, and the migration login is `db_owner` of the Goldmark database only
+       (DEC-024). On a full SQL Server a DBA may still schedule the procedure as an extra caller.
+     - **Why not a purge Windows service.** Rule 8 forbids platform-only pieces, so it would need a
+       Docker twin, and slice 4b (DEC-036) already turns the app itself into the Windows service. The
+       same job runs unchanged in Docker, the 4b Windows service and on an external SQL Server.
+     - **Rejected.** An operator-side command run with the migration login (narrowest, but nothing
+       is deleted unless someone runs or schedules it). A maintenance process with its own delete-only
+       login (more moving parts, and that login could delete today's entries).
+     - **To be measured, not assumed (the DEC-025 habit).** The procedure's `DELETE` succeeds through
+       ownership chaining while a direct `DELETE` as the runtime login is still refused. A period
+       under the floor deletes nothing. `migrate`'s runtime check fails in both directions: if
+       `EXECUTE` is granted on anything else or is missing on the procedure, and if the policy
+       table's `DENY` is missing.
+  2. **Retention has a floor of 365 days (A, "A. Floor at 365 days (Recommended)"; NFR-LOG-3).** The
+     setting `Goldmark:Audit:RetentionDays` defaults to 365. A value under 365 is refused with exit 2,
+     naming the setting but not its value; `0` keeps entries indefinitely. `migrate` reads the setting
+     and writes it to the policy table, so it belongs in `db-init`'s environment. A change to it is
+     itself audited (`System`, before and after). The audit screen shows the configured period.
+  3. **Exports are audited, reads are not (A, "A. Exports only (Recommended)").** Each CSV export
+     writes an entry with the filters and the row count. Browsing and filtering on screen write
+     nothing. The export confirmation says the export is recorded.
+  4. **"From where" is the connecting address; trusted proxies are deferred (A, "A. Defer, document,
+     issue (Recommended)").** An entry's IP address is the TCP peer, as for the sign-in rate limit
+     (DEC-040): X-Forwarded-For is not trusted, because any client can send it. Behind a reverse proxy,
+     every entry therefore shows the proxy's address. The README and screen 16 say so. A
+     trusted-proxy setting is #31, for the owner to place in the plan.
+- **Consequences, noted when decided (side agent, 2026-10-20).**
+  - **Changing retention means running `db-init` (`migrate`) again.** The value belongs to `db-init`'s
+    environment; set on the app, it does nothing.
+  - **The Settings screen (20, P1) cannot edit audit retention** as long as item 1 holds: it can only
+    show the period. Editing it in the UI would need the app to write `cmdb.AuditRetention`, which is
+    exactly what item 1 prevents. Changing that goes back to the owner.
+
 ---
 
 ## Slice 1 acceptance mapping

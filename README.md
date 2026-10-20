@@ -65,7 +65,7 @@ What starts:
 | `sql-volume-init` | One-shot: prepares the SQL Server TLS volumes (no network, `CAP_CHOWN` only) |
 | `sqlserver` | SQL Server 2025 **Express**, internal network only, encryption required (TDS 8 strict). Its healthcheck signs in with a CONNECT-only login, not `sa` |
 | `db-init` | One-shot, on every start: audits the SQL Server instance and both logins (the principal audit), creates the `Goldmark` database, the least-privilege runtime login and the migration login (`db_owner` of that database only) with generated names and passwords, then applies the schema migrations as the migration login. On the first start it signs in as `sa`, creates Goldmark's own administrator login and **disables `sa`**; later starts sign in as that administrator. It refuses, changing nothing, if the audit finds a problem or if a login or user already exists and was not created by Goldmark (see `GOLDMARK_DB_ADOPT_EXISTING_LOGIN`) |
-| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login, read from a credential file: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log |
+| `app` | Goldmark (HTTPS on port 8443), non-root, read-only root filesystem. Holds only the runtime login, read from a credential file: DML on Goldmark's tables, no DDL, no UPDATE or DELETE on the audit log (old entries go only through the retention procedure, DEC-041) |
 
 Stop with `docker compose -f deploy/docker-compose.yml down`. Add `-v` to also
 delete all data, including the database, certificates and generated credentials.
@@ -83,6 +83,16 @@ each person signs in with a recovery code and sets up the app again.
 Keep at least two administrators: Goldmark cannot yet reset a forgotten password
 (#25), so an only administrator who forgets theirs leaves nobody able to manage
 users.
+
+The audit log keeps each entry for 365 days by default
+(`GOLDMARK_AUDIT_RETENTION_DAYS`: 365 or more, or 0 to keep entries
+indefinitely). `db-init` writes the period to the database on every start, and the
+app deletes older entries once a day through a procedure that can never delete
+anything younger than 365 days; each deletion is itself recorded in the log
+(DEC-041). To change the period, set it in `deploy/.env` and run `docker compose up`
+again; setting it on the app does nothing. An entry's IP address is the one that
+connected to Goldmark: behind a reverse proxy, every entry shows the proxy's address
+until trusted proxies can be configured (#31).
 
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in

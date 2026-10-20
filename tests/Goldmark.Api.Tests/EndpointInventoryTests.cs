@@ -65,6 +65,11 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Users: reset two-factor"] = ("POST", "/api/v1/users/{id:guid}/two-factor-reset", AccessPolicy.Admin),
             ["Users: new invitation link"] = ("POST", "/api/v1/users/{id:guid}/invitation", AccessPolicy.Admin),
             ["Users: revoke invitation"] = ("DELETE", "/api/v1/users/{id:guid}/invitation", AccessPolicy.Admin),
+
+            ["Audit: list"] = ("GET", "/api/v1/audit", AccessPolicy.AuditReader),
+            ["Audit: catalog"] = ("GET", "/api/v1/audit/catalog", AccessPolicy.AuditReader),
+            ["Audit: people"] = ("GET", "/api/v1/audit/people", AccessPolicy.AuditReader),
+            ["Audit: export CSV"] = ("POST", "/api/v1/audit/export", AccessPolicy.AuditReader),
         };
 
     [Fact]

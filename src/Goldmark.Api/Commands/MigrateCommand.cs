@@ -1,5 +1,6 @@
 using DbUp;
 using DbUp.Engine.Output;
+using Goldmark.Api.Audit;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Data;
 using Microsoft.Data.SqlClient;
@@ -94,11 +95,24 @@ internal static class MigrateCommand
         CROSS JOIN (VALUES (N'UPDATE'), (N'DELETE')) AS p(name)
         WHERE HAS_PERMS_BY_NAME(t.name, N'OBJECT', p.name) = 1
         UNION ALL
+        -- Read-only: the audit retention period, which only migrate writes (0004, DEC-041).
+        SELECT N'permission on cmdb.AuditRetention', p.name
+        FROM (VALUES (N'INSERT'), (N'UPDATE'), (N'DELETE')) AS p(name)
+        WHERE HAS_PERMS_BY_NAME(N'cmdb.AuditRetention', N'OBJECT', p.name) = 1
+        UNION ALL
         -- A column-level GRANT overrides the table-level DENY, so check every column too.
         SELECT N'permission on ' + t.name + N' column', c.name COLLATE DATABASE_DEFAULT + N' UPDATE'
-        FROM (VALUES (N'cmdb.AuditLog'), (N'cmdb.Installation')) AS t(name)
+        FROM (VALUES (N'cmdb.AuditLog'), (N'cmdb.Installation'), (N'cmdb.AuditRetention')) AS t(name)
         JOIN sys.columns AS c ON c.object_id = OBJECT_ID(t.name)
         WHERE HAS_PERMS_BY_NAME(t.name, N'OBJECT', N'UPDATE', c.name, N'COLUMN') = 1
+        UNION ALL
+        -- EXECUTE on the purge procedure (0004) and on nothing else: other objects are checked by the
+        -- principal audit (database-securable), schemas and the database above.
+        SELECT N'missing permission on cmdb.PurgeAuditLog', N'EXECUTE'
+        WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb.PurgeAuditLog', N'OBJECT', N'EXECUTE'), 0) = 0
+        UNION ALL
+        SELECT N'missing permission on cmdb.AuditRetention', N'SELECT'
+        WHERE ISNULL(HAS_PERMS_BY_NAME(N'cmdb.AuditRetention', N'OBJECT', N'SELECT'), 0) = 0
         UNION ALL
         SELECT N'missing database role', N'goldmark_runtime' WHERE ISNULL(IS_ROLEMEMBER(N'goldmark_runtime'), 0) <> 1
         UNION ALL
@@ -113,6 +127,25 @@ internal static class MigrateCommand
         UNION ALL
         SELECT N'missing permission on dbo.SchemaVersions', N'SELECT'
         WHERE ISNULL(HAS_PERMS_BY_NAME(N'dbo.SchemaVersions', N'OBJECT', N'SELECT'), 0) = 0;
+        """;
+
+    // Run as the migration login after the migrations: writes the configured audit retention period
+    // (DEC-041) to the one row the runtime login can only read, and audits a change in the same
+    // transaction. Returns the previous period.
+    internal const string ApplyRetentionSql = """
+        SET NOCOUNT ON;
+        SET XACT_ABORT ON;
+        BEGIN TRANSACTION;
+        DECLARE @before int = (SELECT RetentionDays FROM cmdb.AuditRetention WITH (UPDLOCK, HOLDLOCK) WHERE Id = 1);
+        IF @before IS NULL
+            INSERT INTO cmdb.AuditRetention (Id, RetentionDays) VALUES (1, @days);
+        ELSE IF @before <> @days
+            UPDATE cmdb.AuditRetention SET RetentionDays = @days, ChangedAt = SYSUTCDATETIME() WHERE Id = 1;
+        IF @before IS NULL OR @before <> @days
+            INSERT INTO cmdb.AuditLog (ActorType, Action, Details)
+            VALUES ('System', 'audit.retention.changed', JSON_OBJECT('before': @before, 'after': @days ABSENT ON NULL));
+        COMMIT TRANSACTION;
+        SELECT ISNULL(@before, -1);
         """;
 
     // Executed as the migration login, before anything is read or changed: it must be the user
@@ -131,15 +164,18 @@ internal static class MigrateCommand
         var db = new DatabaseOptions();
         var migration = new MigrationOptions();
         var bootstrap = new BootstrapOptions();
+        var audit = new AuditOptions();
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
+            audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? audit;
             errors = ApplyCredentialFiles(db, migration);
             if (errors.Count == 0)
             {
                 errors = Validate(db, migration, bootstrap);
+                errors.AddRange(AuditOptions.Errors(audit));
             }
         }
 
@@ -219,6 +255,12 @@ internal static class MigrateCommand
             await output.WriteLineAsync(upgrade.Scripts.Any()
                 ? $"{Name}: applied {upgrade.Scripts.Count()} migration(s)"
                 : $"{Name}: no migrations to apply");
+
+            // 2b. The audit retention period from settings (DEC-041), audited when it changes.
+            var before = await ScalarAsync(connection, ApplyRetentionSql, new SqlParameter("@days", System.Data.SqlDbType.Int) { Value = audit.RetentionDays });
+            await output.WriteLineAsync(before == audit.RetentionDays
+                ? $"{Name}: audit retention {Describe(audit.RetentionDays)}"
+                : $"{Name}: audit retention changed to {Describe(audit.RetentionDays)}{(before < 0 ? "" : $" (was {Describe(before)})")}");
 
             // 3. The runtime login gets its rights only through goldmark_runtime.
             switch (await ScalarTextAsync(connection, EnsureRuntimeMemberSql, db.User))
@@ -361,13 +403,16 @@ internal static class MigrateCommand
         return Refused;
     }
 
-    private static async Task<int> ScalarAsync(SqlConnection connection, string sql)
+    private static async Task<int> ScalarAsync(SqlConnection connection, string sql, params SqlParameter[] parameters)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = sql;
         command.CommandTimeout = 180;
+        command.Parameters.AddRange(parameters);
         return Convert.ToInt32(await command.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
     }
+
+    private static string Describe(int retentionDays) => retentionDays == 0 ? "indefinite" : $"{retentionDays} days";
 
     private static async Task<string?> ScalarTextAsync(SqlConnection connection, string sql, string user)
     {

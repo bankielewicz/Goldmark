@@ -14,6 +14,7 @@ policy (`RequireAccess(policy)`, which sets the authorization policy and this me
 |---|---|
 | `SignedIn` | A signed-in session (password and second factor), any role |
 | `Admin` | A signed-in session with the Admin role |
+| `AuditReader` | A signed-in session with the Admin or the Auditor role (the audit log, US-04, US-07) |
 | `TwoFactorPending` | A password verified within the last 5 minutes, second factor not yet given (sign-in step 2 only) |
 | `Enrolment` | An enrolment in progress, for 30 minutes: first-run setup after the setup token, an invitation or two-factor reset after its code, or a new authenticator after the password and a code |
 
@@ -26,8 +27,8 @@ are `Cache-Control: no-store`. Requests that take a credential are rate limited 
 (`Goldmark:Auth:RequestsPerMinute`, 30 by default; HTTP 429).
 
 The M6 tests check that every non-anonymous endpoint answers 401 without credentials and 401 to a
-password-only sign-in, every Admin endpoint 403 to a signed-in Viewer, and every state-changing
-endpoint 400 without the anti-forgery token.
+password-only sign-in, every Admin and AuditReader endpoint 403 to a signed-in Viewer, and every
+state-changing endpoint 400 without the anti-forgery token.
 
 ## Anonymous by design
 
@@ -69,6 +70,10 @@ endpoint 400 without the anti-forgery token.
 | `POST /api/v1/users/{id}/lock`, `/unlock`, `/disable`, `/enable` | Admin | Not on yourself; the last enabled Admin cannot be disabled; lock and disable end the person's sessions |
 | `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself; clears the authenticator and recovery codes, ends sessions, issues a link and code |
 | `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working); revoke, which removes the unused account |
+| `GET /api/v1/audit` | AuditReader | Screen 16: audit entries, newest first, filtered by time, actor, person affected, action, outcome and IP prefix, paged by entry number; every filter is validated and passed as a parameter. Reading writes nothing |
+| `GET /api/v1/audit/catalog` | AuditReader | The actions with their group, label and outcome, and the retention period `migrate` set (DEC-041) |
+| `GET /api/v1/audit/people` | AuditReader | Only the people who appear in the log as actor or person affected (for the filters), not the user directory, which only an Admin sees |
+| `POST /api/v1/audit/export` | AuditReader | CSV of the filtered entries, at most 100,000 (422 `export-too-large` beyond, with nothing recorded); writes an `audit.exported` entry with the filters and the count in the same transaction; formula cells neutralized |
 
 If a richer health report is ever needed (component status, versions), it goes on a separate
 endpoint that requires the Admin role.

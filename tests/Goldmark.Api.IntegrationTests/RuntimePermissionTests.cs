@@ -36,6 +36,12 @@ public sealed class RuntimePermissionTests(SqlServerFixture sql)
         "UPDATE cmdb.Installation SET SetupCompletedAt = SYSUTCDATETIME();",
         "DELETE FROM cmdb.Installation;",
         "TRUNCATE TABLE cmdb.Installation;",
+        // The audit retention period is migrate's (DEC-041): the runtime login can only read it, and it
+        // cannot change or bypass the purge procedure (dynamic SQL is outside the ownership chain)
+        "UPDATE cmdb.AuditRetention SET RetentionDays = 730;",
+        "DELETE FROM cmdb.AuditRetention;",
+        "ALTER PROCEDURE cmdb.PurgeAuditLog AS SELECT 1;",
+        "EXEC sys.sp_executesql N'DELETE FROM cmdb.AuditLog;';",
         // The migration journal is read-only
         "UPDATE dbo.SchemaVersions SET ScriptName = ScriptName;",
         "INSERT INTO dbo.SchemaVersions (ScriptName, Applied) VALUES (N'Goldmark.Migrations.9999_probe.sql', SYSUTCDATETIME());",
@@ -138,7 +144,7 @@ internal static class SchemaChecks
                 ':', (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'cmdb.AuditLog') AND name = N'Probe'),
                 ':', (SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'tampered'));
             """);
-        const string expected = "16:2:0:0:0:0:0:0";
+        const string expected = "17:2:0:0:0:0:0:0";
         return state == expected ? Baseline : state;
     }
 }

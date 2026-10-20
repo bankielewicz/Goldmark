@@ -78,6 +78,8 @@ services:
       Goldmark__Bootstrap__AdminPassword: ${SQLSERVER_SA_PASSWORD:?Set SQLSERVER_SA_PASSWORD in deploy/.env}
       Goldmark__Bootstrap__AdoptExistingLogin: ${GOLDMARK_DB_ADOPT_EXISTING_LOGIN:-false}
       Goldmark__Bootstrap__AcceptedFindings: ${GOLDMARK_DB_ACCEPTED_FINDINGS:-}
+      # Audit retention (DEC-041): migrate writes it to the database, where the app reads it.
+      Goldmark__Audit__RetentionDays: ${GOLDMARK_AUDIT_RETENTION_DAYS:-365}
     volumes:
       - sql-tls-public:/run/goldmark/sql-tls:ro
       - goldmark-db-runtime:/var/lib/goldmark/db-runtime

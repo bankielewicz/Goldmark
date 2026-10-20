@@ -159,18 +159,18 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
             var method = new HttpMethod(endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]);
             var body = method == HttpMethod.Get || method == HttpMethod.Delete ? null : new { };
 
-            if (policy == AccessPolicy.Admin)
+            if (policy is AccessPolicy.Admin or AccessPolicy.AuditReader)
             {
                 Assert.True((await viewer.SendAsync(method, path, body)).Status == HttpStatusCode.Forbidden, $"{name}: a Viewer must get 403");
             }
 
-            if (policy is AccessPolicy.Admin or AccessPolicy.SignedIn)
+            if (policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader)
             {
                 // A password without the second factor is not a session.
                 Assert.True((await pending.SendAsync(method, path, body)).Status == HttpStatusCode.Unauthorized, $"{name}: password-only must get 401");
             }
 
-            if (method != HttpMethod.Get && policy is AccessPolicy.Admin or AccessPolicy.SignedIn)
+            if (method != HttpMethod.Get && policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader)
             {
                 var forged = await admin.SendAsync(method, path, body, antiforgery: false);
                 Assert.True(forged.Status == HttpStatusCode.BadRequest && forged.Text.Contains("anti-forgery", StringComparison.Ordinal),

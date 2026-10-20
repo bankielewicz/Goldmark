@@ -66,6 +66,9 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
     [InlineData("GRANT VIEW DEFINITION ON SCHEMA::dbo TO goldmark_runtime;", "runtime-role-grant:{3}:VIEW+DEFINITION:SCHEMA:[dbo]")]
     [InlineData("EXEC('CREATE PROCEDURE dbo.ItProc AS SELECT 1;'); GRANT EXECUTE ON dbo.ItProc TO goldmark_runtime;", "runtime-role-grant:{3}:EXECUTE:OBJECT:[dbo].[ItProc]")]
     [InlineData("GRANT REFERENCES ON OBJECT::cmdb.Ci TO goldmark_runtime;", "runtime-role-grant:{3}:REFERENCES:OBJECT:[cmdb].[Ci]")]
+    // EXECUTE is granted on the audit purge only (0004, DEC-041): not on another procedure in cmdb, and nothing else on the purge.
+    [InlineData("EXEC('CREATE PROCEDURE cmdb.ItProc AS SELECT 1;'); GRANT EXECUTE ON cmdb.ItProc TO goldmark_runtime;", "runtime-role-grant:{3}:EXECUTE:OBJECT:[cmdb].[ItProc]")]
+    [InlineData("GRANT ALTER ON OBJECT::cmdb.PurgeAuditLog TO goldmark_runtime;", "runtime-role-grant:{3}:ALTER:OBJECT:[cmdb].[PurgeAuditLog]")]
     [InlineData("CREATE TYPE dbo.ItType FROM int; GRANT REFERENCES ON TYPE::dbo.ItType TO goldmark_runtime;", "runtime-role-grant:{3}:REFERENCES:TYPE:[dbo].[ItType]")]
     [InlineData("CREATE CERTIFICATE ItCert ENCRYPTION BY PASSWORD = N'Cert-Pa55word!' WITH SUBJECT = N'it'; GRANT CONTROL ON CERTIFICATE::ItCert TO goldmark_runtime;",
         "runtime-role-grant:{3}:CONTROL:CERTIFICATE:[ItCert]")]
@@ -162,6 +165,19 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
 
         Assert.Contains($"database-securable:{installation.RuntimeUser}:SCHEMA:it_other:SELECT", ids);
         Assert.Contains($"database-securable:{installation.RuntimeUser}:USER:it_imp:IMPERSONATE", ids);
+    }
+
+    [Fact]
+    public async Task The_logins_own_view_allows_EXECUTE_on_the_audit_purge_only() // 0004, DEC-041
+    {
+        var (installation, _) = await sql.ProvisionAsync();
+        await sql.AsAdminAsync(installation.Database, "EXEC('CREATE PROCEDURE cmdb.ItProc AS SELECT 1;'); GRANT EXECUTE ON cmdb.ItProc TO goldmark_runtime;");
+        await using var connection = await sql.OpenAsync(installation.RuntimeUser, installation.RuntimePassword, installation.Database);
+
+        var ids = (await PrincipalAudit.SelfAsync(connection, installation.Database, runtime: true)).Select(f => f.Id).ToList();
+
+        Assert.Contains($"database-securable:{installation.RuntimeUser}:OBJECT:cmdb.ItProc:EXECUTE", ids);
+        Assert.DoesNotContain(ids, id => id.Contains("PurgeAuditLog", StringComparison.Ordinal));
     }
 
     [Fact]

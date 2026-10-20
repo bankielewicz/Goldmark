@@ -1,6 +1,7 @@
 using System.Text;
 using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
+using Goldmark.Api.Security;
 
 namespace Goldmark.Api.Users;
 
@@ -58,10 +59,7 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
             WHERE r.Role = 'Admin' AND u.IsDisabled = 0 AND u.PasswordHash IS NOT NULL;
             """);
 
-    /// <summary>
-    /// The list as CSV for "Export CSV". A cell that a spreadsheet would read as a formula (starting
-    /// with =, +, -, @, a tab or a carriage return) is prefixed with an apostrophe.
-    /// </summary>
+    /// <summary>The list as CSV for "Export CSV", formula cells neutralized (<see cref="Csv"/>).</summary>
     public static string ToCsv(IEnumerable<UserSummary> users)
     {
         var csv = new StringBuilder("Name,Username,Roles,Two-factor,Account,Last sign-in (UTC)\r\n");
@@ -76,20 +74,10 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
                 user.Account.State,
                 user.LastSignInAt?.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) ?? "",
             ];
-            csv.AppendJoin(',', cells.Select(Cell)).Append("\r\n");
+            csv.AppendRow(cells);
         }
 
         return csv.ToString();
-    }
-
-    private static string Cell(string value)
-    {
-        if (value.Length > 0 && value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
-        {
-            value = "'" + value;
-        }
-
-        return value.IndexOfAny([',', '"', '\r', '\n']) >= 0 || value.StartsWith('\'') ? $"\"{value.Replace("\"", "\"\"", StringComparison.Ordinal)}\"" : value;
     }
 
     private UserSummary Summarize(Row row)
