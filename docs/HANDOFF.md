@@ -6,7 +6,8 @@ in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
 **As of 2026-10-20:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22) and **3 (PR #24)**
-are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23. Slice 3 brought first-run
+are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+(CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). **Next:** slice
 4 starts only after the owner's "APPROVED" (rule 1); notes in §3. The owner placed the Windows
@@ -145,7 +146,7 @@ The Fluent UI v9 verification failed under
 `style-src 'self'`; the owner chose a per-response style nonce (DEC-037, options 1B and 2A),
 which is built and tested, and passes with a real server in Chrome 155.0.8059.84, Edge
 155.0.4283.62 and Firefox 158.0.1 (DEC-037): **the Fluent gate is passed.** The design-system handoff (rule 4)
-is approved (DEC-039); next is the slice's screen handoff (rule 3), before any UI code. The
+is approved (DEC-039), and so are the slice's screens (rule 3, DEC-040). The
 owner's slice-3 decisions are DEC-038: audit rows now, invitation links,
 Net.Codecrete.QrCodeGenerator, Dapper and the NFR-SEC-3 gate now, the key ring as files, account
 and session defaults, the setup token logged once. Screens create Fluent's
@@ -198,7 +199,7 @@ And for slice 24:
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
-| Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by one PR with both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 after it merges |
+| Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
 
@@ -458,8 +459,8 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-039, the slice-1, slice-2, slice-2b and
-  slice-2c acceptance mappings.
+- `docs/DECISIONS.md`: DEC-001…DEC-040, the slice-1, slice-2, slice-2b,
+  slice-2c and slice-3 acceptance mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/ops/external-sql-server.md` (existing SQL Server, Mode Existing, every
   audit finding), `docs/ops/database-credentials.md` (generated logins, `sa`),

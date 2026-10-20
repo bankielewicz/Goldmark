@@ -1,10 +1,11 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slices 1–2b of the MVP: an HTTPS host with health endpoints, an empty web UI,
-> a Docker Compose deployment with SQL Server 2025 Express or an existing SQL
-> Server 2025, and the baseline database schema with separate migration and
-> runtime logins, audited on every start. There are no CMDB features yet.
+> Slices 1–3 of the MVP: an HTTPS host with health endpoints, a Docker Compose
+> deployment with SQL Server 2025 Express or an existing SQL Server 2025, the
+> baseline database schema with separate migration and runtime logins, audited
+> on every start, and a web UI for first-run setup, sign-in with two-factor
+> authentication, invitations and user roles. There are no CMDB features yet.
 
 Goldmark (a working codename) is a planned self-hosted configuration
 management database (CMDB) for Windows- and VMware-heavy IT estates:
@@ -40,6 +41,17 @@ Then open <https://localhost:8443/>. Your browser will warn about the
 self-signed certificate that Goldmark generated for this installation; see
 [docs/ops/tls-certificates.md](docs/ops/tls-certificates.md) to trust it or
 replace it with your own.
+
+Until Goldmark is set up, the sign-in page links to first-run setup, which asks
+for a setup token. The app logs a new one each time it starts, until setup is
+complete; enter the newest:
+
+```sh
+docker compose -f deploy/docker-compose.yml logs app | grep "Setup token"
+```
+
+Setup then creates the first administrator account, with two-factor
+authentication through an authenticator app and a set of recovery codes.
 
 | URL | Meaning |
 |---|---|
@@ -125,7 +137,7 @@ command in `db-init` (DbUp, one transaction per script). **Never edit a
 merged script**: add a new one and record its hash, which CI checks:
 
 ```sh
-sha256sum db/migrations/0003_example.sql >> db/migrations.sha256
+sha256sum db/migrations/NNNN_lower_snake.sql >> db/migrations.sha256
 db/check-migrations.sh origin/main
 ```
 
@@ -154,8 +166,9 @@ pnpm run build && pnpm test
 
 `tests/smoke/compose-smoke.sh` starts the real Compose stack with generated
 secrets on port 18443, checks HTTPS, health (including readiness failure and
-recovery when SQL Server stops), the UI, security headers, SQL Server Express,
-least privilege and logs, runs the browser test, and tears everything down.
+recovery when SQL Server stops), the UI, security headers, first-run setup and
+sign-in, SQL Server Express, least privilege and logs, runs the browser test,
+and tears everything down.
 
 ```sh
 GOLDMARK_E2E_CHANNEL=chrome tests/smoke/compose-smoke.sh
@@ -181,7 +194,7 @@ it, and ask first if the PRD did not anticipate it.
 ## Repository layout
 
 ```
-src/Goldmark.Api/        ASP.NET Core host: HTTPS, health, logging, SPA hosting, container commands
+src/Goldmark.Api/        ASP.NET Core host: HTTPS, health, logging, SPA hosting, sign-in and users, audit trail, container commands
 db/migrations/            forward-only schema migrations (DbUp) and their hash manifest
 tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
 tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
@@ -191,7 +204,7 @@ tools/common-passwords/   rebuilds the bundled common-password list from its pin
 web/                      React + TypeScript + Vite SPA, browser-only; dependency policy
 deploy/                   docker-compose.yml (bundled SQL Server), docker-compose.external-sql.yml,
                           .env.example, SQL Server scripts
-docs/                     PRD, decisions, operations and security notes
+docs/                     PRD, decisions, design system and screens, operations and security notes
 ```
 
 Other projects from the PRD's proposed layout (`Goldmark.Core`, `.Data`,
