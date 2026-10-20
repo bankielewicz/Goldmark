@@ -4,9 +4,9 @@ Running log of technical decisions, with rationale. Newest entries are added
 at the end. `docs/PRD.md` is stored as received (draft v0.2). Where an entry
 here narrows or deviates from the PRD, this file wins.
 
-**Approval state (2026-10-19):** slices 1, 2 and 2b are merged (PRs #1, #14, #17); slice 2c is in review (DEC-034, DEC-035). The owner approved
-the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b, 2c
-and 5b, in order, one PR each. Docker Compose is the first distribution, not the
+**Approval state (2026-10-19):** slices 1, 2, 2b and 2c are merged (PRs #1, #14, #17, #22); slice 3 is next. The owner approved
+the **amended MVP build plan** (DEC-021): PRD §11 slices 2–24 plus slices 2b, 2c,
+4b (DEC-036) and 5b, in order, one PR each. Docker Compose is the first distribution, not the
 target deployment (DEC-030). The PRD text stays a draft (DEC-001); the build
 plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 (stack) is confirmed, with SQL Server 2025 as the minimum version (OQ-2 resolved, DEC-030). A2 (licensing, DCO) is pending. The other assumptions remain open.
@@ -48,6 +48,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-033 | `docker-compose.external-sql.yml` | Deployment |
 | DEC-034 | Generated database credentials; `sa` disabled; tested recovery | Database |
 | DEC-035 | Principal audit: securables owned by `public`, the owner's effective CONTROL SERVER | Database |
+| DEC-036 | Windows service distribution placed as slice 4b | Process |
 
 ---
 
@@ -427,7 +428,8 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | Audit of pre-existing / adopted principals and shared-instance conditions: `guest` access in other databases (#2), wildcard linked-server and remote mappings (#3), ownership and lower-scope grants, `guest`/`public` grants in system databases, password-policy/expiry/deny state (#4) | 2b (done: DEC-031) |
 | `docker-compose.external-sql.yml`; US-01 "use an existing SQL Server" | 2b (done: DEC-032, DEC-033) |
 | Generated administrator, migration and runtime credentials; `sa` disabled in the bundled deployment | 2c (done: DEC-034) |
-| Windows service distribution, installer wizard, Windows authentication, availability groups | owner to place (DEC-030) |
+| Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
+| Availability groups (and #20) | owner to place (DEC-030) |
 | Generated certificate renewal without a restart (#5, DEC-006) | 24 |
 | Owner-only ACL for the generated key on Windows dev hosts (#6, DEC-006) | 24 |
 | Types & attributes admin screen (UI #14; no slice in PRD §11) | 5b |
@@ -725,8 +727,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Standing rule** (HANDOFF rule 8): no new Linux- or Docker-only assumptions in
   application code. The principal audit (DEC-031) reads effective rights from the
   login's own token, so it already works for Windows logins and group-granted rights.
-- **Open:** the slice for the Windows service distribution, the wizard, Windows
-  authentication and availability groups is for the owner to place in the plan.
+- **Open:** the slice for availability groups. *(The Windows service distribution, the
+  wizard and Windows authentication are slice 4b: DEC-036.)*
 
 ## DEC-031 Principal audit of Goldmark's logins and the shared instance
 
@@ -998,6 +1000,27 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Tests:** both `ALTER AUTHORIZATION … TO [public]` cases refused; the measurement itself;
   the role-plus-DENY owner refused, then accepted after `REVOKE`; the nested-role owner from
   #17 still accepted.
+
+## DEC-036 Windows service distribution placed as slice 4b
+
+- **Decision (owner, 2026-10-19, option B of three, asked at the end of slice 2c).** The
+  Windows service distribution (DEC-030) becomes **slice 4b** (`slice/04b-windows-service`),
+  after slice 4 and before slice 5. Rejected: A, now as slice 2d (it would delay slice 3's
+  Fluent UI verification, the plan's largest open risk, and need a Windows CI job first);
+  C, after slice 24 (about twenty slices tested only on Docker, so Windows problems surface
+  late).
+- **Rationale.** Slices 3 and 4 add what a Windows service stores differently: sign-in keys
+  (ASP.NET Core Data Protection, NFR-SEC-5) and the audit log's output. Porting after them
+  ports each once, while the codebase is still small, and the UI risk is tested first. Rule 8
+  keeps the wait cheap.
+- **Scope (from DEC-030, DEC-034):** service host; installer wizard; Windows authentication to
+  SQL Server (gMSA), including the principal audit for Windows logins and groups and the
+  password path (`PWDCOMPARE`, the SQL-login-only checks, `SqlConnectionFactory` always sending
+  a password); the credential-file paths on a DPAPI-protected store; a log sink for a service
+  (file or Event Log); service recovery in place of the Docker `HEALTHCHECK`; the
+  `rotate-db-credentials` command (DEC-034, 3A); a Windows CI job. Its "done when" is set by
+  the owner when the slice starts.
+- **Not in it:** availability groups and #20, still for the owner to place (DEC-030).
 
 ---
 

@@ -5,17 +5,16 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14) and 2b (PR #17) are merged,
-with the handoff and docs PRs #11, #13, #16 and #21. **Slice 2c** (generated
-database credentials, `sa` disabled, #18, #19; DEC-034, DEC-035) is in review.
-Next: the owner places the Windows service / installer / Windows authentication
-slice in the plan (DEC-030; asked at the end of 2c), then **slice 3**; notes in §3.
-Docker Compose is the first distribution, not the target deployment (DEC-030, rule 8).
+**As of 2026-10-19:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17) and 2c (PR #22)
+are merged, with the handoff and docs PRs #11, #13, #16 and #21. Next: **slice 3**
+(Fluent UI check first, then auth); notes in §3. The owner placed the Windows
+service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
+the first distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
 Approved by the owner on 2026-10-19 (DEC-021, amended the same day; slice 2c
-added by the owner during slice 2b, DEC-032). One PR
+added by the owner during slice 2b, DEC-032; slice 4b placed after slice 2c, DEC-036). One PR
 per slice, in this order. "Screens" are the PRD §7 UI inventory numbers; a
 slice with screens needs a design handoff before any UI code (rule 3 below).
 
@@ -24,9 +23,10 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 1 | **done** (PR #1) | `claude/slice-01-scaffold` | Skeleton, CI, Dockerfile, Compose (SQL Server 2025 Express), `/health/*`, Serilog JSON, web skeleton with NFR-SEC-9 controls | `docker compose up` serves health + empty SPA; CI green; unlisted npm dependency fails CI | — |
 | 2 | **done** (PR #14) | `slice/02-db-baseline` | DbUp baseline: Tenant, CiType, Ci (temporal), RelationshipType, Relationship (temporal), AuditLog; `migrate` command in `db-init`; `goldmark_migrator` + runtime role; readiness schema-version check; migration immutability check; #7. DEC-022…DEC-029 | Migrations idempotent; runtime login cannot run DDL or UPDATE/DELETE on AuditLog (tested against real SQL Server 2025); #7 closed | — |
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
-| 2c | **in review** | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
+| 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | pending | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (if it fails: stop, bring options, build no screens); design-system handoff (rule 4); first-run setup, local auth, TOTP, roles, deny-by-default policy, authz enumeration test | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | pending | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
+| 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids; Dapper introduced here with the NFR-SEC-3 build gate (analyzer/Semgrep rule failing on interpolated SQL in Dapper calls, plus a test proving it fails) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; NFR-SEC-3 gate; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
@@ -119,20 +119,26 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-**Open (owner):** where the Windows service distribution, installer wizard, Windows
-authentication and availability groups (#20) go in the plan (DEC-030). Until then the
-next slice is **3** (`slice/03-auth`), whose first step is the Fluent UI v9
+The next slice is **3** (`slice/03-auth`). Its first step is the Fluent UI v9
 verification under the served CSP and Trusted Types (DEC-017, DEC-021); if it fails,
 stop and bring options. Then the design-system handoff (rule 4) and the slice's
 screen handoff (rule 3) before any UI code.
 
-Slice 2c left these for later work:
+Slices 3 and 4 come before the Windows service (slice 4b, DEC-036), which ports what
+they store. Keep it cheap (rule 8): sign-in keys (ASP.NET Core Data Protection,
+NFR-SEC-5) and anything else persisted go to a path from settings, not a Docker-only
+location, and nothing new assumes Linux or Docker.
+
+Slice 2c left these for slice 4b:
 
 - **Rotation command.** Generated passwords are not rotated automatically (DEC-034,
-  owner decision 3A); an explicit `rotate-db-credentials` command fits the Windows
-  service slice, where DPAPI replaces the credential volumes.
+  owner decision 3A); an explicit `rotate-db-credentials` command comes with 4b,
+  where DPAPI replaces the credential volumes.
 - **Credential storage on Windows.** The credential-file paths are settings; the
   Windows service points them at a DPAPI-protected store (rule 8).
+
+And for slice 24:
+
 - **Backups (US-60, slice 24)** must include the `goldmark-db-admin` volume, or a
   restore needs the `sa` recovery (`docs/ops/database-recovery.md`).
 
@@ -145,12 +151,13 @@ Slice 2c left these for later work:
 | #3 wildcard linked-server and remote-login mappings | 2b (closed by PR #17) |
 | #4 audit of adopted and shared-instance principals beyond database scope | 2b (closed by PR #17) |
 | #15 `migrate`: runtime user found by name, adopted user may have another name | 2b (closed by PR #17: `bootstrap-db` refuses a differently named user, DEC-032) |
-| Generated credentials, `sa` disabled in the bundled deployment | 2c (in review: DEC-034) |
-| #18 principal audit: securables in the Goldmark database owned by `public` | 2c (closed by the 2c PR: DEC-035) |
-| #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (closed by the 2c PR: DEC-035) |
-| Rotation command for generated credentials | owner: with the Windows service slice (DEC-034, 3A) |
+| Generated credentials, `sa` disabled in the bundled deployment | 2c (done by PR #22: DEC-034) |
+| #18 principal audit: securables in the Goldmark database owned by `public` | 2c (closed by PR #22: DEC-035) |
+| #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (closed by PR #22: DEC-035) |
+| Rotation command for generated credentials | 4b (DEC-034, 3A; DEC-036) |
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
-| Windows service distribution, installer wizard, Windows authentication, availability groups | owner: place in the plan (DEC-030) |
+| Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
+| Availability groups (and #20) | owner: place in the plan (DEC-030, DEC-036) |
 | Fluent UI v9 (Griffel) unverified against `style-src 'self'` and `trusted-types 'none'` | 3 (must pass before any screen is built) |
 | #5 renew the generated TLS certificate without a restart | 24 |
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
@@ -165,18 +172,17 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 
 ### 5.1 GitHub access from the agent
 
-- **Slice 2c session:** the GitHub MCP server failed to connect ("Authorization
-  header is badly formatted"); `gh` on the owner's machine reads issues. PR and
-  issue writes still go through owner-run `gh` scripts.
-
-- **Status:** the owner is updating the GitHub MCP credential to a
-  fine-grained PAT with Contents RW, Pull requests RW, Issues RW, Actions R,
-  Checks R, Commit statuses R, Metadata R on `bankielewicz/Goldmark`. Once a
-  session confirms writes work (open a PR, comment, create an issue), stop
-  generating `gh` scripts and update this section.
-- Until then, the GitHub MCP integration is **read-only**: every write returns
-  `403 Resource not accessible by integration`. Workaround: the agent writes an
-  idempotent `gh` script (`DRY_RUN=1` first) and the owner runs it.
+- **Writes work through the `gh` CLI on the owner's WSL machine** (signed in as
+  `bankielewicz`, `repo` scope): slice 2c's session opened PR #22 with it, so the
+  agent opens PRs itself (an idempotent script, `DRY_RUN=1` first) instead of
+  handing the owner scripts. The sandbox has no such login: there, hand the owner
+  the script as before.
+- The GitHub MCP integration is unreliable: read-only in earlier sessions (every
+  write returned `403 Resource not accessible by integration`), and it failed to
+  connect in slice 2c ("Authorization header is badly formatted"). The owner may
+  update its credential to a fine-grained PAT (Contents RW, Pull requests RW,
+  Issues RW, Actions R, Checks R, Commit statuses R, Metadata R on
+  `bankielewicz/Goldmark`).
 - `git push` works over HTTPS for any branch name (`claude/…`, `slice/…`,
   `docs/…` all verified).
 - Public CI pages can be read without auth: fetch
