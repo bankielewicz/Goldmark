@@ -494,12 +494,17 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
     and the same for volumes and networks.
   - Each PASS line appears twice in the log (live and in the summary); count
     unique lines.
+- **Two sessions in one working folder share HEAD** (slice 4). Another session ran `git switch -c` in
+  `/mnt/c/Projects/CMDB` mid-slice, so later commits landed on its branch. They were recovered with
+  `git branch -f`, `git rebase --onto origin/main <its commit>`, and its branch reset to its origin.
+  Check `git branch --show-current` before every commit when another session may share the folder,
+  or give each session its own worktree (`git worktree add`).
 
 ## 6. References
 
 - PR #1 (slice 1) description: evidence, review history, deviations.
-- `docs/DECISIONS.md`: DEC-001…DEC-040, the slice-1, slice-2, slice-2b,
-  slice-2c and slice-3 acceptance mappings.
+- `docs/DECISIONS.md`: DEC-001…DEC-041, the slice-1, slice-2, slice-2b,
+  slice-2c, slice-3 and slice-4 acceptance mappings.
 - `docs/ops/tls-certificates.md`, `docs/ops/hsts.md`,
   `docs/ops/external-sql-server.md` (existing SQL Server, Mode Existing, every
   audit finding), `docs/ops/database-credentials.md` (generated logins, `sa`),

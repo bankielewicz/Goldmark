@@ -1524,9 +1524,11 @@ integration tests (SQL Server 2025), Compose smoke 94 unique checks with Playwri
 
 ## Slice 4 acceptance mapping
 
-Same status vocabulary as slice 1. Local runs on the owner's WSL machine, 2026-10-21: 371 in-process
-tests, 208 integration tests (SQL Server 2025), web 48 policy tests and 56 dist and contrast tests,
-lint, typecheck and format; Compose smoke 97 unique checks with Playwright 8/8 inside (Chrome).
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine:
+- **2026-10-21:** 371 in-process tests; web 48 policy tests and 56 dist and contrast tests, lint,
+  typecheck and format; Compose smoke, 97 unique checks with Playwright 8/8 inside (Chrome).
+- **2026-10-20:** the full integration suite, 208 tests (SQL Server 2025), on the backend commit.
+  Only `AuditLogApiTests` ran again on 2026-10-21, after the export's entry-count header was added.
 
 | # | Criterion (source) | Status | Evidence |
 |---|---|---|---|

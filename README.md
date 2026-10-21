@@ -1,11 +1,12 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slices 1–3 of the MVP: an HTTPS host with health endpoints, a Docker Compose
+> Slices 1–4 of the MVP: an HTTPS host with health endpoints, a Docker Compose
 > deployment with SQL Server 2025 Express or an existing SQL Server 2025, the
 > baseline database schema with separate migration and runtime logins, audited
 > on every start, and a web UI for first-run setup, sign-in with two-factor
-> authentication, invitations and user roles. There are no CMDB features yet.
+> authentication, invitations, user roles and the audit log (filters, CSV
+> export, retention). There are no CMDB features yet.
 
 Goldmark (a working codename) is a planned self-hosted configuration
 management database (CMDB) for Windows- and VMware-heavy IT estates:

@@ -493,7 +493,10 @@ export function AuditPage() {
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [people, setPeople] = useState<Person[]>([]);
   const [page, setPage] = useState<EntriesPage | null>(null);
+  // The entries' failure (first page or "Load more"), and the catalog's and people's, kept apart so
+  // each Retry repeats the request that failed.
   const [failure, setFailure] = useState<ApiError | null>(null);
+  const [referenceFailure, setReferenceFailure] = useState<ApiError | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
   const [exportState, setExportState] = useState<ExportState | null>(null);
@@ -508,6 +511,7 @@ export function AuditPage() {
 
   // The action labels, the retention period and the people for the filters: loaded once.
   const loadReference = useCallback(async () => {
+    setReferenceFailure(null);
     try {
       const [catalogResponse, peopleResponse] = await Promise.all([
         api<Catalog>('GET', '/api/v1/audit/catalog'),
@@ -516,7 +520,7 @@ export function AuditPage() {
       setCatalog(catalogResponse.data);
       setPeople(peopleResponse.data.people);
     } catch (error) {
-      if (error instanceof ApiError) setFailure(error);
+      if (error instanceof ApiError) setReferenceFailure(error);
     }
   }, []);
 
@@ -545,11 +549,6 @@ export function AuditPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const retry = () => {
-    if (!catalog) void loadReference();
-    void load();
-  };
 
   useEffect(() => setIpText(filters.ip), [filters.ip]);
 
@@ -671,7 +670,7 @@ export function AuditPage() {
 
   let body: ReactNode;
   if (failure && !page) {
-    body = <ErrorBar error={failure} onRetry={retry} message="Couldn’t load the audit log." />;
+    body = <ErrorBar error={failure} onRetry={() => void load()} message="Couldn’t load the audit log." />;
   } else if (!page) {
     body = (
       <Skeleton aria-label="Loading audit entries" className={styles.skeleton}>
@@ -813,6 +812,13 @@ export function AuditPage() {
           The audit log is append-only: entries can’t be edited or deleted.{retention ? ` ${retention}` : ''}
         </MessageBarBody>
       </MessageBar>
+      {referenceFailure ? (
+        <ErrorBar
+          error={referenceFailure}
+          onRetry={() => void loadReference()}
+          message="Couldn’t load the action names, the people for the filters and the retention period."
+        />
+      ) : null}
       <div role="search" aria-label="Filter the audit log" className={styles.filters}>
         <Field label="Time range (UTC)">
           <Dropdown
