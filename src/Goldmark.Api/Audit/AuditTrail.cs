@@ -52,7 +52,7 @@ internal sealed record AuditActor(string Type, Guid? Id)
     public static AuditActor User(Guid id) => new(AuditActorTypes.User, id);
 }
 
-/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9) and slice 4 (DEC-041); <see cref="AuditCatalog"/> labels each one.</summary>
+/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041) and slice 4a (DEC-042); <see cref="AuditCatalog"/> labels each one.</summary>
 internal static class AuditActions
 {
     public const string SetupCompleted = "setup.completed";
@@ -78,9 +78,18 @@ internal static class AuditActions
     public const string TwoFactorReset = "user.two-factor.reset";
     public const string TwoFactorResetCompleted = "user.two-factor.reset-completed";
 
+    // Slice 4a (DEC-042): password resets, dual control, and the person's own password change.
+    public const string PasswordReset = "user.password.reset";
+    public const string PasswordResetCompleted = "user.password.reset-completed";
+    public const string ApprovalRequested = "user.approval.requested";
+    public const string RequestApproved = "user.approval.approved";
+    public const string RequestDeclined = "user.approval.declined";
+    public const string RequestCancelled = "user.approval.cancelled";
+
     public const string ConfirmationFailed = "account.confirmation.failed";
     public const string RecoveryCodesRegenerated = "account.recovery-codes.regenerated";
     public const string AuthenticatorChanged = "account.authenticator.changed";
+    public const string PasswordChanged = "account.password.changed";
 
     // Slice 4 (DEC-041). The last two are written by SQL, not through AuditTrail: the purge by
     // cmdb.PurgeAuditLog (0004), a retention change by migrate.

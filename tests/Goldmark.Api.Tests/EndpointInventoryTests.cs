@@ -47,6 +47,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Enrolment: new authenticator"] = ("POST", "/api/v1/enrolment/authenticator", AccessPolicy.Enrolment),
             ["Enrolment: authenticator QR code"] = ("GET", "/api/v1/enrolment/authenticator.svg", AccessPolicy.Enrolment),
             ["Enrolment: verify and finish"] = ("POST", "/api/v1/enrolment/complete", AccessPolicy.Enrolment),
+            ["Enrolment: confirm a password reset"] = ("POST", "/api/v1/enrolment/confirm", AccessPolicy.Enrolment),
 
             ["Account: two-factor status"] = ("GET", "/api/v1/account/two-factor", AccessPolicy.SignedIn),
             ["Account: new recovery codes"] = ("POST", "/api/v1/account/two-factor/recovery-codes", AccessPolicy.SignedIn),

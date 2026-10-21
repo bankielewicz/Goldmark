@@ -45,8 +45,8 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/auth/sign-in` | Sign-in step 1: the password is the credential | Only "incorrect", "locked" or "next: two-factor". Unknown, disabled and not-yet-set-up accounts answer exactly like a wrong password, including the lockout; a person locked by an administrator, or whose two-factor was reset, learns it only with the right password |
 | `GET /api/v1/setup` | The SPA must know whether first-run setup is needed | `required`, `complete` or `unknown` |
 | `POST /api/v1/setup/token` | First-run setup step 1: the setup token from the log is the credential | Whether the token is this process's; nothing once setup is complete (409) |
-| `POST /api/v1/links/check` | An invitation or reset link's token is the credential | Whether the link is valid, expired or no longer valid (used and revoked look the same), its purpose and the tries left |
-| `POST /api/v1/links/redeem` | The token plus its separate code are the credential; 5 wrong codes revoke the link | With the right code: the person's user name, display name and roles |
+| `POST /api/v1/links/check` | An invitation or reset link's token is the credential | Whether the link is valid, expired, no longer valid (used and revoked look the same) or not active yet (awaiting another administrator's approval, DEC-042), its purpose and the tries left |
+| `POST /api/v1/links/redeem` | The token plus its separate code are the credential; 5 wrong codes revoke the link | With the right code: the person's user name, display name and roles. A link awaiting approval has no code: 409 `link-pending`, and nothing counts as a wrong try |
 
 ## Requiring a policy
 
@@ -56,10 +56,11 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/auth/sign-out` | SignedIn | Ends the session on the server |
 | `GET /api/v1/enrolment` | Enrolment | The enrolment's next step and whose it is |
 | `POST /api/v1/enrolment/account` | Enrolment | Setup only: the first administrator's user name, display name and password |
-| `POST /api/v1/enrolment/password` | Enrolment | Invitation: a new password; reset: the current one (failures count toward lockout) |
+| `POST /api/v1/enrolment/password` | Enrolment | Invitation and password resets: a new password; two-factor reset: the current one (failures count toward lockout) |
 | `POST /api/v1/enrolment/authenticator` | Enrolment | A new authenticator key, kept in the enrolment until a code proves it |
 | `GET /api/v1/enrolment/authenticator.svg` | Enrolment | The QR code, SVG, `no-store`, only to the person enrolling |
-| `POST /api/v1/enrolment/complete` | Enrolment | Verifies a code and commits the setup, invitation or reset in one transaction; returns 10 recovery codes once and signs in (a new session) |
+| `POST /api/v1/enrolment/complete` | Enrolment | Verifies a code and commits the setup, invitation or reset in one transaction; returns 10 recovery codes once and signs in (a new session). Refused for a password reset, which keeps its authenticator |
+| `POST /api/v1/enrolment/confirm` | Enrolment | Password reset only (DEC-042): a code from the person's own authenticator, or a recovery code (failures count toward lockout), then the new password, the used link and a new session commit together |
 | `GET /api/v1/account/two-factor` | SignedIn | Own status: set up since, recovery codes remaining |
 | `POST /api/v1/account/two-factor/recovery-codes` | SignedIn | Needs the password and a current code; returns 10 new codes once |
 | `POST /api/v1/account/two-factor/authenticator` | SignedIn | Needs the password and a current code or a recovery code; starts the new-authenticator enrolment |

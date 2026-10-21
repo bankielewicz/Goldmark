@@ -30,8 +30,8 @@ internal static class LinkClosure
 /// <summary>A link as stored (<c>cmdb.UserInvitation</c>): hashes only, and the code's key encrypted.</summary>
 internal sealed record LinkRow(
     Guid Id, Guid UserId, string Purpose, byte[]? CodeHash, byte CodeHashScheme, byte[]? CodeKey, byte FailedCodeAttempts,
-    DateTime ExpiresAt, DateTime? RedeemedAt, DateTime? RevokedAt, bool ApprovalRequired, DateTime? ApprovedAt, Guid? CreatedBy,
-    DateTime CreatedAt)
+    DateTime ExpiresAt, DateTime? RedeemedAt, DateTime? RevokedAt, bool ApprovalRequired, DateTime? ApprovedAt, Guid? ApprovedBy,
+    Guid? CreatedBy, DateTime CreatedAt)
 {
     public bool IsOpen => RedeemedAt is null && RevokedAt is null;
 
@@ -65,7 +65,7 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
 
     private const string Columns = """
         Id, UserId, Purpose, CodeHash, CodeHashScheme, CodeKey, FailedCodeAttempts, ExpiresAt, RedeemedAt, RevokedAt,
-        ApprovalRequired, ApprovedAt, CreatedBy, CreatedAt
+        ApprovalRequired, ApprovedAt, ApprovedBy, CreatedBy, CreatedAt
         """;
 
     private readonly IDataProtector _codeKeys = protection.CreateProtector(CodeKeyPurpose);

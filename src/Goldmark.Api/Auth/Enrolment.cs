@@ -3,13 +3,18 @@ using Microsoft.AspNetCore.Authentication;
 
 namespace Goldmark.Api.Auth;
 
-/// <summary>What an enrolment sets up: the first administrator, an invited person, two-factor again, or a new authenticator.</summary>
+/// <summary>
+/// What an enrolment sets up: the first administrator, an invited person, two-factor again, a new
+/// authenticator, a new password (proved with the authenticator), or a new password and authenticator.
+/// </summary>
 internal enum EnrolmentKind
 {
     Setup,
     Invitation,
     TwoFactorReset,
     ChangeAuthenticator,
+    PasswordReset,
+    CombinedReset,
 }
 
 /// <summary>
@@ -36,8 +41,9 @@ internal sealed record EnrolmentState(
     public string NextStep => this switch
     {
         { Kind: EnrolmentKind.Setup, PasswordHash: null } => "account",
-        { Kind: EnrolmentKind.Invitation, PasswordHash: null } => "password",
+        { Kind: EnrolmentKind.Invitation or EnrolmentKind.CombinedReset or EnrolmentKind.PasswordReset, PasswordHash: null } => "password",
         { Kind: EnrolmentKind.TwoFactorReset, PasswordVerified: false } => "password",
+        { Kind: EnrolmentKind.PasswordReset } => "confirm",
         { AuthenticatorKey: null } => "authenticator",
         _ => "verify",
     };
