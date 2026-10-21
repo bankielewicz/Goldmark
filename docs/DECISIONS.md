@@ -1378,6 +1378,14 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      https://claude.ai/artifact/8oEjLkZAiNJ14qTT3ssJjs, copied to `docs/design/screens/slice-4/`. The UI
      must match it. Changes from the handoff are on its Notes board: expandable rows use Fluent's
      Table rather than DataGrid; the IP address header has an info Tooltip; one sample entry was added.
+  6. **PR #32 round 1's open items (owner, 2026-10-21, each "A … (Recommended)").**
+     - Both CSV exports (audit log and users) start with the UTF-8 byte-order mark, so Excel on Windows
+       reads non-ASCII names correctly ("A. Fix now, both exports"); in round 2.
+     - The people list and the count read through the whole log; deferred to #33, for slice 24's
+       performance work ("A. Defer to an issue").
+     - An action the catalog doesn't list shows by its code, counts as Succeeded and can't be filtered.
+       This is recorded only ("A. Record it, no code"): readiness refuses a database migrated by a newer
+       build (DEC-023), and a test checks that every action this build writes is in the catalog.
 - **Consequences, noted when decided (side agent, 2026-10-20).**
   - **Changing retention means running `db-init` (`migrate`) again.** The value belongs to `db-init`'s
     environment; set on the app, it does nothing.

@@ -85,7 +85,7 @@ internal static class AuditEndpoints
         }
 
         request.HttpContext.Response.Headers[EntriesHeader] = entries.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return Results.File(System.Text.Encoding.UTF8.GetBytes(AuditLog.ToCsv(entries)), "text/csv; charset=utf-8",
+        return Results.File(Csv.Utf8WithBom(AuditLog.ToCsv(entries)), "text/csv; charset=utf-8",
             $"goldmark-audit-{time.GetUtcNow():yyyyMMdd}.csv");
     }
 

@@ -165,6 +165,15 @@ public sealed class AuditLogTests
     }
 
     [Fact]
+    public void A_CSV_file_starts_with_the_UTF8_byte_order_mark_so_Excel_reads_names_correctly()
+    {
+        var bytes = Goldmark.Api.Security.Csv.Utf8WithBom("Name\r\nZoë Müller\r\n");
+
+        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, bytes[..3]);
+        Assert.Equal("Name\r\nZoë Müller\r\n", System.Text.Encoding.UTF8.GetString(bytes, 3, bytes.Length - 3));
+    }
+
+    [Fact]
     public async Task The_purge_job_waits_a_minute_then_retries_until_the_database_is_ready()
     {
         var time = new ManualTimers(DateTimeOffset.UnixEpoch);

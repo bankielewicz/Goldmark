@@ -187,10 +187,10 @@ Not changed:
 - Codex's "index on `At`": `IX_AuditLog_At` exists (0001).
 - A fast client clock shifts only the start of a preset range (no `to` is sent).
 
-Left to the owner (fix now or defer):
-- Actions missing from the catalog count as Succeeded but can't be filtered.
-- The people list and the count scan the log.
-- The CSV has no BOM.
+Left to the owner, decided 2026-10-21 (DEC-041 item 6):
+- Actions missing from the catalog count as Succeeded but can't be filtered: recorded, no code.
+- The people list and the count scan the log: deferred to #33 (slice 24).
+- The CSV has no BOM: fixed in round 2, for both exports.
 
 Slice **3** (`slice/03-auth`) is **merged** (PR #24); what it built, for the slices that follow. **Backend** (DEC-040): migration 0003, Dapper
 behind `DbSession` with the CA1857 gate, Identity on Dapper stores, server-side sessions, setup,
@@ -265,6 +265,7 @@ And for slice 24:
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
+| #33 audit log: the people list and the count scan the whole log (DEC-041 item 6) | 24 |
 | #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | owner: place in the plan |
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
