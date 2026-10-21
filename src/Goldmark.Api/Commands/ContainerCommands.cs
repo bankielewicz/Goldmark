@@ -34,9 +34,16 @@ internal static class ContainerCommands
             return await HealthCheckCommand.RunAsync();
         }
 
+        if (args[0] == RecoverAdminCommand.Name)
+        {
+            // Takes one argument (the username), so it never chains.
+            return await RecoverAdminCommand.RunAsync([.. args.Skip(1)], configuration, output, error);
+        }
+
         if (args.FirstOrDefault(a => !Chainable.ContainsKey(a)) is { } unknown)
         {
-            await error.WriteLineAsync($"Unknown command '{unknown}'. Commands: {HealthCheckCommand.Name} (alone), or one or more of: {string.Join(", ", Chainable.Keys)}.");
+            await error.WriteLineAsync($"Unknown command '{unknown}'. Commands: {HealthCheckCommand.Name} (alone), "
+                + $"{RecoverAdminCommand.Name} <username> (alone), or one or more of: {string.Join(", ", Chainable.Keys)}.");
             return 2;
         }
 
