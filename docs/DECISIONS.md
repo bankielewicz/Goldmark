@@ -1386,6 +1386,21 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      - An action the catalog doesn't list shows by its code, counts as Succeeded and can't be filtered.
        This is recorded only ("A. Record it, no code"): readiness refuses a database migrated by a newer
        build (DEC-023), and a test checks that every action this build writes is in the catalog.
+  7. **Findings after both review rounds (`/code-review` on PR #32; owner, 2026-10-21, each "A …
+     (Recommended)").**
+     - Fixed now, as one change ("A. Fix the bundle now"):
+       - a custom-range year outside 2000 to 9998 is a field message, never a request;
+       - any unexpected failure ends in an error state with Retry;
+       - each expand button names its entry ("Show details for entry 48213: Roles changed at
+         16:03:40"), a change from the board's label so that screen readers can tell entries apart;
+       - the IP prefix pattern ends with `\z`;
+       - one download helper;
+       - `AuditQuery.None` moved into the test.
+     - Deferred:
+       - the retention period checked before `bootstrap-db` changes anything, #34;
+       - strict ISO 8601 times for API callers, #35, slice 8;
+       - end-to-end cancellation of abandoned requests, added to #33 for slice 24. Rewriting the page's
+         tested request counter was declined.
 - **Consequences, noted when decided (side agent, 2026-10-20).**
   - **Changing retention means running `db-init` (`migrate`) again.** The value belongs to `db-init`'s
     environment; set on the app, it does nothing.

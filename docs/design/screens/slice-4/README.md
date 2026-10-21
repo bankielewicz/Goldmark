@@ -40,6 +40,9 @@ Where the built UI (`web/src/pages/AuditPage.tsx`) differs from the boards, and 
 - **The custom time range uses the browser's own date-and-time fields**, read as UTC, because Fluent v9's
   core has no date picker; a date-picker package would be a new dependency.
 - **"Show this person in Users & roles" opens screen 17 filtered by that username** (`/users?q=`).
+- **Each expand button names its entry:** "Show details for entry 48213: Roles changed at 16:03:40",
+  not the board's "Show details for the entry at 16:03:40". Several entries are often written in the
+  same second, and screen readers must tell them apart (NFR-A11Y-1; owner, DEC-041 item 7).
 
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.

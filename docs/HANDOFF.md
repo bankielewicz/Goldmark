@@ -202,6 +202,18 @@ Left to the owner, decided 2026-10-21 (DEC-041 item 6):
 
 Anything raised after round 2 goes to the owner as fix-now or defer, then becomes an issue.
 
+**After both rounds** (`/code-review`, 10 findings, all valid, none security; owner, 2026-10-21, DEC-041
+item 7):
+- Fixed as one change:
+  - custom-range years outside 2000 to 9998;
+  - unexpected failures end in an error state;
+  - unique expand-button names;
+  - `\z` in the IP pattern;
+  - one download helper;
+  - `AuditQuery.None` moved into the test.
+- Deferred: #34 (retention checked before `bootstrap-db`), #35 (ISO 8601 times, slice 8),
+  cancellation added to #33 (slice 24).
+
 Slice **3** (`slice/03-auth`) is **merged** (PR #24); what it built, for the slices that follow. **Backend** (DEC-040): migration 0003, Dapper
 behind `DbSession` with the CA1857 gate, Identity on Dapper stores, server-side sessions, setup,
 invitations and two-factor reset with a separate code, Users & roles with its guards, the
@@ -275,7 +287,9 @@ And for slice 24:
 | #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
-| #33 audit log: the people list and the count scan the whole log (DEC-041 item 6) | 24 |
+| #33 audit log: the people list and the count scan the whole log; abandoned requests aren't cancelled (DEC-041 items 6, 7) | 24 |
+| #34 db-init: the audit retention period is range-checked only by `migrate`, after `bootstrap-db` has run (DEC-041 item 7) | owner: place in the plan |
+| #35 audit API: `from` and `to` are parsed leniently, not as strict ISO 8601 (DEC-041 item 7) | 8 |
 | #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | owner: place in the plan |
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
