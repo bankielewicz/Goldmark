@@ -198,7 +198,7 @@ public sealed class AuthPrimitivesTests
     public void The_user_export_neutralizes_spreadsheet_formulas()
     {
         var user = new UserSummary(Guid.NewGuid(), "sam", "=HYPERLINK(\"http://x\")", ["Viewer"], true,
-            new UserAccountState("active", null, null), null, DateTime.UtcNow, "e");
+            new UserAccountState("active", null, null, false), null, DateTime.UtcNow, "e");
 
         var csv = UserDirectory.ToCsv([user]);
 

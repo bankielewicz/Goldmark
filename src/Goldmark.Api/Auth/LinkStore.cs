@@ -46,7 +46,7 @@ internal sealed record LinkRow(
 internal sealed record IssuedLink(string Token, string Code, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
 
 /// <summary>A link asked for under dual control, shown once to the one who asked: the token only (DEC-042).</summary>
-internal sealed record RequestedLink(string Token, DateTime ExpiresAt, int ExpiryHours);
+internal sealed record RequestedLink(string Token, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
 
 /// <summary>The code of an approved link, shown once to the approving administrator (DEC-042).</summary>
 internal sealed record ApprovedCode(string Code, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
@@ -131,7 +131,7 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
             VALUES (@id, @userId, @purpose, @tokenHash, NULL, 1, @now, @createdBy, @expires);
             """,
             new { id = Guid.CreateVersion7(), userId, purpose, tokenHash = LinkSecrets.HashToken(token), now, createdBy, expires });
-        return new RequestedLink(token, expires, options.Value.LinkExpiryHours);
+        return new RequestedLink(token, expires, options.Value.LinkExpiryHours, options.Value.LinkCodeAttempts);
     }
 
     /// <summary>

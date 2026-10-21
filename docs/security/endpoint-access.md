@@ -66,11 +66,15 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/account/two-factor/authenticator` | SignedIn | Needs the password and a current code or a recovery code; starts the new-authenticator enrolment |
 | `POST /api/v1/account/two-factor/authenticator/verify` | SignedIn | Installs the new authenticator; other sessions end, this one continues |
 | `GET /api/v1/users`, `GET /api/v1/users/{id}`, `GET /api/v1/users/export` | Admin | Screen 17's list, one person (with ETag), CSV export (formula cells neutralized) |
-| `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once |
-| `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |
+| `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once. Under dual control (another Admin could approve, DEC-042) the link only: the approver gets the code |
+| `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in, and not while a password-and-two-factor reset is open; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |
 | `POST /api/v1/users/{id}/lock`, `/unlock`, `/disable`, `/enable` | Admin | Not on yourself; the last enabled Admin cannot be disabled; lock and disable end the person's sessions |
-| `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself; clears the authenticator and recovery codes, ends sessions, issues a link and code |
-| `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working); revoke, which removes the unused account |
+| `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself, nor while a password reset or a request waits; clears the authenticator and recovery codes, ends sessions, issues a link and code |
+| `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working; under dual control a new request); revoke, which removes the unused account |
+| `POST /api/v1/users/{id}/password-reset` | Admin | DEC-042. Not on yourself, nor on a disabled or not-yet-set-up account, nor while a request waits. Password only: the old password stops working, sessions end, a link and code are shown once. With `alsoTwoFactor` (never for an Admin): under dual control a request (link only) that changes nothing until approved; with no other Admin, the password and authenticator are cleared and the link and code shown |
+| `POST /api/v1/users/{id}/request/approve` | Admin | Another Admin approves a waiting request (not their own, not about themselves): the code is made and shown once; a password-and-two-factor reset takes effect then |
+| `POST /api/v1/users/{id}/request/decline`, `/request/cancel` | Admin | Decline (another Admin) or cancel (the one who asked) a waiting request; an invitation's unused account is removed |
+| `GET /api/v1/users/approvals` | Admin | How many requests the caller could approve now, for the nav count |
 | `GET /api/v1/audit` | AuditReader | Screen 16: audit entries, newest first, filtered by time, actor, person affected, action, outcome and IP prefix, paged by entry number; every filter is validated and passed as a parameter. Reading writes nothing |
 | `GET /api/v1/audit/catalog` | AuditReader | The actions with their group, label and outcome, and the retention period `migrate` set (DEC-041) |
 | `GET /api/v1/audit/people` | AuditReader | Only the people who appear in the log as actor or person affected (for the filters), not the user directory, which only an Admin sees |
