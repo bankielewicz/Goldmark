@@ -51,6 +51,9 @@ internal static class GoldmarkApplication
         builder.Services.AddScoped<DbSession>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<AuditTrail>();
+        builder.Services.AddScoped<AuditRetention>();
+        builder.Services.AddScoped<AuditLog>();
+        builder.Services.AddHostedService<AuditRetentionJob>();
         builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();
         builder.Services.AddProblemDetails();

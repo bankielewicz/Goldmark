@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark audit log notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 980px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Screen 16 · notes</h1>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; align-items: start">
+    <section style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Fluent v9 components</h2>
+      <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px">
+        <li>Shell: NavDrawer (inline at 1100 px and wider, rail below), NavSectionHeader, NavItem with aria-current="page"; Avatar + Menu; ToggleButton for the theme.</li>
+        <li>Header: Breadcrumb, Title3 as h1, Toolbar with Button "Export CSV…" (secondary, ArrowExport icon).</li>
+        <li>Notice: MessageBar intent="info", not dismissible.</li>
+        <li>Filters: Field + Dropdown (Time range; Action with multiselect and OptionGroup headers; Outcome), Field + Combobox (Actor, Person affected), Field + Input (Source IP), Button appearance="subtle" (Clear filters).</li>
+        <li>Table: Table, TableHeader, TableHeaderCell (sortable, Time only), TableRow, TableCell; expander Button appearance="subtle" with ChevronRight / ChevronDown and aria-expanded.</li>
+        <li>Badges: Badge appearance="outline" for the actor type; appearance="tint" with icon for the outcome (success, danger, severe).</li>
+        <li>Details: a definition list (dl) in a TableRow spanning every column; Link; Button appearance="subtle".</li>
+        <li>Export: Dialog modalType="modal", DialogSurface, DialogTitle, DialogContent, DialogActions, Spinner size="tiny", Toast.</li>
+        <li>States: Skeleton, MessageBar intent="error" with Retry, the shared 403 state, Tooltip.</li>
+      </ul>
+    </section>
+    <section style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Changes to the design system</h2>
+      <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px">
+        <li><b>Expandable rows use Table, not DataGrid.</b> The data table pattern's DataGrid has no expandable rows. The audit log needs no selection or column chooser, so the board uses Fluent's Table primitives with an expander button per row and a details row spanning the columns. Everything else on the pattern (header, borders, Compact density, Load more) is unchanged.</li>
+        <li><b>"Blocked" outcome</b> uses the badge vocabulary's severe intent (dark orange), as Degraded does, with a lock icon and the word.</li>
+        <li>No new tokens, colours or components.</li>
+      </ul>
+      <h2 style="margin: 8px 0 0; font-size: 16px; line-height: 22px; font-weight: 600">Changes to the handoff</h2>
+      <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px">
+        <li>IP address header: an info button with the Tooltip "The address that connected to Goldmark. Behind a reverse proxy, this is the proxy's address." (owner's addition, DEC-041 item 4, #31).</li>
+        <li>The Auditor board shows the Failed outcome filter with three sample rows; the Link code wrong row was added to the sample data so that filter has more than two.</li>
+        <li>The 1024 board drops the IP column, as asked; the address stays in the expanded details.</li>
+      </ul>
+    </section>
+    <section style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Notes for the build</h2>
+      <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px">
+        <li>Data: GET /api/v1/audit (filters, cursor, total), /audit/catalog (labels, groups, outcomes, retention period), /audit/people (Actor and Person-affected options), POST /audit/export.</li>
+        <li>The Action filter's groups and labels come from the catalog; a later slice's actions appear without a UI change.</li>
+        <li>Filters live in the page address (query string), so a filtered view can be bookmarked.</li>
+        <li>The retention notice shows the catalog's period; 0 means "kept indefinitely" (DEC-041).</li>
+        <li>Times are UTC; the Tooltip shows the viewer's local time.</li>
+        <li>"Show this person in Users &amp; roles" only for an Admin, and only while the account exists.</li>
+        <li>Nothing on the page edits or deletes an entry; only the export writes one (audit.exported).</li>
+        <li>Sample data is fictional.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

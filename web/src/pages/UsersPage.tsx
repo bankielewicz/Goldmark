@@ -63,7 +63,9 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNo
 import { api, ApiError } from '../api';
 import { formatRemaining, formatUtc, formatUtcTime, initialsOf } from '../format';
 import { usePreferences } from '../preferences';
+import { useLocation } from '../router';
 import { useSession } from '../session';
+import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
 import { CopyButton, ErrorBar } from '../ui/common';
 import { describeFieldError } from './EnrolmentPage';
@@ -212,7 +214,9 @@ export function UsersPage() {
   const { dispatchToast } = useToastController(toasterId);
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
-  const [filter, setFilter] = useState('');
+  const { search } = useLocation();
+  // "Show this person in Users & roles" on the audit log opens the page filtered (?q=username).
+  const [filter, setFilter] = useState(() => search.get('q') ?? '');
   const [role, setRole] = useState('All');
   const [account, setAccount] = useState<string>('All');
   const [panel, setPanel] = useState<Panel | null>(null);
@@ -500,18 +504,6 @@ function joinRoles(roles: string[]): string {
   return roles.length <= 1
     ? (roles[0] ?? 'no role')
     : `${roles.slice(0, -1).join(', ')} and ${roles[roles.length - 1]}`;
-}
-
-function useWide(): boolean {
-  const query = '(min-width: 1100px)';
-  const [wide, setWide] = useState(() => window.matchMedia(query).matches);
-  useEffect(() => {
-    const list = window.matchMedia(query);
-    const listener = () => setWide(list.matches);
-    list.addEventListener('change', listener);
-    return () => list.removeEventListener('change', listener);
-  }, []);
-  return wide;
 }
 
 function AccountState({ user }: { user: UserRow }) {

@@ -152,7 +152,7 @@ public sealed class ApiClient(HttpClient http, CookieContainer cookies) : IDispo
             ? JsonDocument.Parse(text).RootElement.Clone()
             : (JsonElement?)null;
         return new Response(response.StatusCode, json, text, response.Headers.ETag?.Tag, response.Content.Headers.ContentType?.MediaType,
-            response.Headers.CacheControl?.ToString());
+            response.Headers.CacheControl?.ToString(), response.Headers.ToDictionary(h => h.Key, h => string.Join(",", h.Value), StringComparer.OrdinalIgnoreCase));
     }
 
     public async Task<string> AntiforgeryTokenAsync()
@@ -168,7 +168,8 @@ public sealed class ApiClient(HttpClient http, CookieContainer cookies) : IDispo
     public void Dispose() => Http.Dispose();
 }
 
-public sealed record Response(HttpStatusCode Status, JsonElement? Json, string Text, string? ETag, string? ContentType, string? CacheControl)
+public sealed record Response(HttpStatusCode Status, JsonElement? Json, string Text, string? ETag, string? ContentType, string? CacheControl,
+    IReadOnlyDictionary<string, string> Headers)
 {
     public string? Code => Json is { } j && j.TryGetProperty("code", out var code) ? code.GetString() : null;
 

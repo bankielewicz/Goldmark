@@ -441,6 +441,18 @@ export function AuthenticatorSetup({
   );
 }
 
+/** Saves a file the page made or received (recovery codes, the audit export) through a temporary link. */
+export function downloadBlob(blob: Blob, fileName: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /** The shown-once recovery codes (step 4, and new codes on the two-factor page). */
 export function RecoveryCodes({
   codes,
@@ -471,16 +483,7 @@ export function RecoveryCodes({
         <CopyButton value={codes.join('\n')} label="Copy all" size="medium" />
         <Button
           icon={<ArrowDownloadRegular />}
-          onClick={() => {
-            const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'goldmark-recovery-codes.txt';
-            document.body.append(link);
-            link.click();
-            link.remove();
-            window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-          }}
+          onClick={() => downloadBlob(new Blob([text], { type: 'text/plain' }), 'goldmark-recovery-codes.txt')}
         >
           Download .txt
         </Button>

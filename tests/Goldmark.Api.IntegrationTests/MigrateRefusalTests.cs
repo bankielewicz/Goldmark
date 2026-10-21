@@ -41,6 +41,14 @@ public sealed class MigrateRefusalTests(SqlServerFixture sql)
     [InlineData("DENY INSERT ON OBJECT::cmdb.AuditLog TO goldmark_runtime;", "missing permission on cmdb.AuditLog INSERT")]
     [InlineData("DENY INSERT ON OBJECT::cmdb.Installation TO goldmark_runtime;", "missing permission on cmdb.Installation INSERT")]
     [InlineData("REVOKE SELECT ON OBJECT::dbo.SchemaVersions FROM goldmark_runtime;", "missing permission on dbo.SchemaVersions SELECT")]
+    // The audit retention period (0004, DEC-041): read-only for the runtime login, which may only run the purge.
+    [InlineData("REVOKE UPDATE ON OBJECT::cmdb.AuditRetention FROM goldmark_runtime;", "permission on cmdb.AuditRetention UPDATE")]
+    [InlineData("REVOKE INSERT ON OBJECT::cmdb.AuditRetention FROM goldmark_runtime;", "permission on cmdb.AuditRetention INSERT")]
+    [InlineData("REVOKE DELETE ON OBJECT::cmdb.AuditRetention FROM goldmark_runtime;", "permission on cmdb.AuditRetention DELETE")]
+    [InlineData("GRANT UPDATE ON OBJECT::cmdb.AuditRetention (RetentionDays) TO goldmark_runtime;", "permission on cmdb.AuditRetention column RetentionDays UPDATE")]
+    [InlineData("REVOKE EXECUTE ON OBJECT::cmdb.PurgeAuditLog FROM goldmark_runtime;", "missing permission on cmdb.PurgeAuditLog EXECUTE")]
+    [InlineData("GRANT EXECUTE ON SCHEMA::cmdb TO goldmark_runtime;", "permission on schema cmdb EXECUTE")]
+    [InlineData("GRANT EXECUTE TO {0};", "database permission EXECUTE")]
     public async Task Migrate_refuses_a_runtime_login_whose_effective_rights_differ_from_its_role(string change, string? finding)
     {
         var (installation, _) = await sql.ProvisionAsync();

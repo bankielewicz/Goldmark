@@ -26,7 +26,7 @@ internal static class UserEndpoints
             .WithDisplayName("Users: list");
 
         users.MapGet("/export", async (UserDirectory directory, TimeProvider time) =>
-                Results.File(System.Text.Encoding.UTF8.GetBytes(UserDirectory.ToCsv(await directory.ListAsync())), "text/csv; charset=utf-8",
+                Results.File(Csv.Utf8WithBom(UserDirectory.ToCsv(await directory.ListAsync())), "text/csv; charset=utf-8",
                     $"goldmark-users-{time.GetUtcNow():yyyyMMdd}.csv"))
             .RequireAccess(AccessPolicy.Admin)
             .WithDisplayName("Users: export CSV");

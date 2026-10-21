@@ -1,13 +1,14 @@
 import { Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { useEffect } from 'react';
 
+import { AuditPage } from './pages/AuditPage';
 import { EnrolmentPage } from './pages/EnrolmentPage';
 import { DashboardPage, ForbiddenPage, NotFoundPage } from './pages/SimplePages';
 import { SignInPage } from './pages/SignInPage';
 import { TwoFactorPage } from './pages/TwoFactorPage';
 import { UsersPage } from './pages/UsersPage';
 import { navigate, safeReturnPath, useLocation } from './router';
-import { isAdmin, useSession } from './session';
+import { canReadAudit, isAdmin, useSession } from './session';
 import { AppShell } from './shell/AppShell';
 import { ErrorBar, UnauthenticatedLayout } from './ui/common';
 
@@ -28,8 +29,8 @@ function Redirect({ to }: { to: string }) {
 
 /**
  * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite and /reset
- * (their token in the URL fragment). Signed in, inside the app shell: /, /users (Admin only) and
- * /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and
+ * (their token in the URL fragment). Signed in, inside the app shell: /, /users (Admin only), /audit
+ * (Admin and Auditor) and /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and
  * back afterwards.
  */
 export function App() {
@@ -76,6 +77,12 @@ export function App() {
       <UsersPage />
     ) : (
       <ForbiddenPage title="Users & roles" crumbs={[{ label: 'Administration' }, { label: 'Users & roles' }]} />
+    );
+  } else if (pathname === '/audit') {
+    page = canReadAudit(session.user) ? (
+      <AuditPage />
+    ) : (
+      <ForbiddenPage title="the audit log" crumbs={[{ label: 'Administration' }, { label: 'Audit log' }]} />
     );
   } else if (pathname === '/account/two-factor') {
     page = <TwoFactorPage />;

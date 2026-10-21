@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark audit log page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <header style="height: 48px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--st2)">
+    <button type="button" aria-label="Open navigation" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg></button>
+    <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 4px; background: var(--brand); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">G</span>
+    <span style="font-weight: 600; white-space: nowrap">Goldmark</span>
+    <div style="flex: 1"></div>
+    <button type="button" aria-label="Switch theme" aria-pressed="{{darkPressed}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 12.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 9.5z"></path></svg></button>
+    <button type="button" aria-label="Account: {{me.name}}" aria-haspopup="menu" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{me.initials}}</span><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"></path></svg></button>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <nav aria-label="Main" style="{{navStyle}}">
+      <sc-for list="{{nav}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <sc-if value="{{g.heading}}" hint-placeholder-val="{{true}}"><div style="padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div></sc-if>
+          <a href="#" aria-current="{{g.current}}" aria-label="{{g.aria}}" style="{{g.style}}"><span style="{{g.bar}}"></span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{g.icon}}"></path></svg><sc-if value="{{labels}}" hint-placeholder-val="{{true}}"><span>{{g.item}}</span></sc-if></a>
+        </div>
+      </sc-for>
+    </nav>
+
+    <main style="flex: 1; min-width: 0; position: relative; padding: {{pad}}px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span style="color: var(--fg2)">Administration</span><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">Audit log</span></nav>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <h1 style="margin: 0; flex: 1; font-size: 24px; line-height: 32px; font-weight: 600">Audit log</h1>
+        <div role="toolbar" aria-label="Page actions" style="display: flex; gap: 8px">
+          <button type="button" aria-haspopup="dialog" style="{{exportButton}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 6.5L10 3l3.5 3.5M4 12v4h12v-4"></path></svg>Export CSV…</button>
+        </div>
+      </div>
+
+      <div role="note" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The audit log is append-only: entries can't be edited or deleted. Entries older than 365 days are deleted automatically.</span></div>
+
+      <div role="search" aria-label="Filter the audit log" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-time" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Time range (UTC)</label>
+          <button id="f-time" type="button" aria-haspopup="listbox" style="width: 150px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">{{filters.time}} <span aria-hidden="true">⌄</span></button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-actor" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Actor</label>
+          <span style="width: 180px; height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px"><input id="f-actor" role="combobox" aria-expanded="false" placeholder="Any actor" value="{{filters.actor}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-action" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Action</label>
+          <button id="f-action" type="button" aria-haspopup="listbox" style="width: 190px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">{{filters.action}} <span aria-hidden="true">⌄</span></button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-target" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Person affected</label>
+          <span style="width: 180px; height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px"><input id="f-target" role="combobox" aria-expanded="false" placeholder="Anyone" value="{{filters.target}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-ip" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Source IP</label>
+          <input id="f-ip" placeholder="e.g. 10.20.4." value="{{filters.ip}}" style="width: 140px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font-family: Consolas, 'Courier New', monospace; font-size: 14px">
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <label for="f-outcome" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Outcome</label>
+          <button id="f-outcome" type="button" aria-haspopup="listbox" style="width: 120px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">{{filters.outcome}} <span aria-hidden="true">⌄</span></button>
+        </div>
+        <sc-if value="{{filtered}}" hint-placeholder-val="{{false}}">
+          <button type="button" style="height: 32px; padding: 0 10px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-weight: 600">Clear filters</button>
+        </sc-if>
+      </div>
+
+      <div aria-live="polite" style="font-weight: 600">{{count}}</div>
+
+      <div style="flex: 1; min-height: 0; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: auto">
+        <table style="width: 100%; min-width: {{tableMin}}px; border-collapse: collapse">
+          <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Audit log entries, newest first</caption>
+          <thead>
+            <tr style="text-align: left">
+              <th scope="col" style="width: 44px; height: 44px; border-bottom: 1px solid var(--st1)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Details</span></th>
+              <th scope="col" aria-sort="descending" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1); white-space: nowrap"><button type="button" style="height: 32px; padding: 0; border: none; background: transparent; color: var(--fg1); font: inherit; font-weight: 600">Time (UTC) <span aria-hidden="true">↓</span></button></th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Actor</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Action</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Person affected</th>
+              <sc-if value="{{showIp}}" hint-placeholder-val="{{true}}">
+                <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1); white-space: nowrap"><span style="display: inline-flex; align-items: center; gap: 4px">IP address <button type="button" aria-label="About IP address: the address that connected to Goldmark" style="width: 20px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg3)"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg></button></span></th>
+              </sc-if>
+              <th scope="col" style="padding: 0 16px 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="8">
+              <tr style="{{r.rowStyle}}">
+                <td style="height: 44px; padding: 0 6px; border-bottom: 1px solid var(--st2); text-align: center"><button type="button" aria-expanded="{{r.ariaExpanded}}" aria-label="Show details for the entry at {{r.clock}}" style="{{r.expandButton}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{r.chevron}}"></path></svg></button></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); white-space: nowrap; font-variant-numeric: tabular-nums">{{r.time}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600; white-space: nowrap">{{r.actorType}}</span><sc-if value="{{r.actorIsPerson}}" hint-placeholder-val="{{true}}"><span>{{r.actorName}} <span style="color: var(--fg3)">·</span> <span style="font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">{{r.actorUser}}</span></span></sc-if></span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">{{r.action}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><sc-if value="{{r.hasTarget}}" hint-placeholder-val="{{true}}"><span>{{r.targetName}} <span style="color: var(--fg3)">·</span> <span style="font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">{{r.targetUser}}</span></span></sc-if><sc-if value="{{r.noTarget}}" hint-placeholder-val="{{false}}"><span aria-label="None" style="color: var(--fg3)">—</span></sc-if></td>
+                <sc-if value="{{showIp}}" hint-placeholder-val="{{true}}">
+                  <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">{{r.ip}}</td>
+                </sc-if>
+                <td style="padding: 0 16px 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{r.outcomeStyle}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{r.outcomeIcon}}"></path></svg>{{r.outcome}}</span></td>
+              </tr>
+              <sc-if value="{{r.expanded}}" hint-placeholder-val="{{false}}">
+                <tr>
+                  <td colspan="{{cols}}" style="padding: 0; border-bottom: 1px solid var(--st1)">
+                    <div style="padding: 12px 24px 16px 52px; background: var(--bg2); display: flex; flex-direction: column; gap: 12px">
+                      <dl style="margin: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 150px minmax(0, 1fr); gap: 8px 16px">
+                        <sc-for list="{{r.fields}}" as="f" hint-placeholder-count="8">
+                          <dt style="color: var(--fg3); font-weight: 600">{{f.k}}</dt>
+                          <dd style="margin: 0">{{f.v}}<sc-if value="{{f.hasCode}}" hint-placeholder-val="{{false}}"> <span style="font-family: Consolas, 'Courier New', monospace; font-size: 13px; color: var(--fg2)">{{f.code}}</span></sc-if></dd>
+                        </sc-for>
+                      </dl>
+                      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap">
+                        <sc-if value="{{r.adminLink}}" hint-placeholder-val="{{false}}"><a href="#" style="color: var(--blink)">Show this person in Users &amp; roles</a></sc-if>
+                        <sc-if value="{{r.hasTarget}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 28px; padding: 0 8px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h14l-5.5 6.5V16l-3 1.5v-7z"></path></svg>Show all entries about {{r.targetName}}</button></sc-if>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </sc-if>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 12px; line-height: 16px; color: var(--fg3)">
+        <span>{{showing}}</span>
+        <sc-if value="{{more}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 14px; font-weight: 600">Load more</button></sc-if>
+        <span>Sample data (fictional)</span>
+      </div>
+    </main>
+
+    <sc-if value="{{showDialog}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div role="dialog" aria-modal="true" aria-labelledby="export-title" style="position: absolute; left: 50%; top: 140px; width: 520px; margin-left: -260px; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="export-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Export 1,876 entries?</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 6px 12px">
+          <dt style="color: var(--fg3); font-weight: 600">Filters</dt><dd style="margin: 0">Last 7 days · no other filters</dd>
+          <dt style="color: var(--fg3); font-weight: 600">Columns</dt><dd style="margin: 0">Time (UTC), Actor type, Actor, Action, Action code, Person affected, IP address, Outcome, Details</dd>
+        </dl>
+        <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The export is recorded in the audit log.</span></div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px">
+          <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button>
+          <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600; outline: 2px solid var(--fo); outline-offset: 1px">Export</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":1000},"role":{"editor":"enum","options":["Admin","Auditor"],"default":"Admin"},"view":{"editor":"enum","options":["all","failed"],"default":"all"},"expanded":{"editor":"int","default":48213},"dialog":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--rdfg:#bc2f32;--rdbg:#fdf6f6;--rdbd:#f1bbbc;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--fo:#ffffff;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--orfg:#e9835e;--orbg:#411200;--orbd:#da3b01;--rdfg:#e37d80;--rdbg:#3f1011;--rdbd:#d13438;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 1000;
+    const role = this.props.role ?? 'Admin';
+    const view = this.props.view ?? 'all';
+    const expanded = this.props.expanded ?? 48213;
+    const wide = width >= 1100;
+    const admin = role === 'Admin';
+    const badge = (k) => 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; font-weight: 600; white-space: nowrap';
+    const OUTCOME = {
+      Succeeded: [badge('gn'), 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4'],
+      Failed: [badge('rd'), 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5'],
+      Blocked: [badge('or'), 'M4.5 7.5h7v6h-7zM5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2']
+    };
+    const navItem = (label, heading, item, icon, current) => ({
+      label, heading: heading && wide, item, icon, aria: wide ? null : item,
+      current: current ? 'page' : null,
+      style: 'position: relative; display: flex; align-items: center; gap: 10px; height: 40px; box-sizing: border-box; padding: 0 ' + (wide ? '12px' : '0') + '; justify-content: ' + (wide ? 'flex-start' : 'center') + '; border-radius: 4px; text-decoration: none; ' + (current ? 'background: var(--bbg2); color: var(--fg1); font-weight: 600' : 'color: var(--fg2)'),
+      bar: current ? 'position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--bfg1)' : 'display: none'
+    });
+    const DASH = 'M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z';
+    const PEOPLE = 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5';
+    const LOG = 'M5 2.5h7l3 3v12H5zM12 2.5v3h3M7.5 9h5M7.5 12h5M7.5 15h3';
+    const nav = admin
+      ? [navItem('Overview', true, 'Dashboard', DASH, false), navItem('Administration', true, 'Users & roles', PEOPLE, false), navItem('Administration', false, 'Audit log', LOG, true)]
+      : [navItem('Overview', true, 'Dashboard', DASH, false), navItem('Administration', true, 'Audit log', LOG, true)];
+    const all = [
+      [48221, '2026-10-20 07:58:12', '09:58:12', 'Person', 'Ingrid Martin', 'ingrid.m', 'Signed in', 'auth.sign-in.succeeded', 'Ingrid Martin', 'ingrid.m', '10.20.4.17', 'Succeeded', [['Method', 'Password and authenticator code']]],
+      [48220, '2026-10-20 07:41:03', '09:41:03', 'Not signed in', '', '', 'Sign-in failed', 'auth.sign-in.failed', 'Pat Morgan', 'pat.m', '10.31.2.88', 'Failed', [['Reason', 'Wrong password']]],
+      [48219, '2026-10-20 07:40:55', '09:40:55', 'System', '', '', 'Account locked after failed attempts', 'auth.account.locked-out', 'Pat Morgan', 'pat.m', '—', 'Blocked', [['Locked for', '15 minutes']]],
+      [48213, '2026-10-19 16:03:40', '18:03:40', 'Person', 'Dana Kim', 'dana.k', 'Roles changed', 'user.roles.changed', 'Riley Chen', 'riley.c', '10.20.4.11', 'Succeeded', [['Before', 'Viewer'], ['After', 'Editor, Viewer'], ['Change', 'Added: Editor. Removed: none.']]],
+      [48209, '2026-10-19 15:12:09', '17:12:09', 'Person', 'Dana Kim', 'dana.k', 'Invitation created', 'user.invitation.created', 'Sam Rivera', 'sam.rivera', '10.20.4.11', 'Succeeded', [['Roles', 'Viewer'], ['Link expires', '2026-10-20 15:12 UTC']]],
+      [48190, '2026-10-19 09:02:51', '11:02:51', 'Not signed in', '', '', 'Sign-in failed', 'auth.sign-in.failed', '', '', '10.44.0.9', 'Failed', [['Reason', 'Unknown username (the name typed is not recorded)']]],
+      [48177, '2026-10-19 02:00:00', '04:00:00', 'System', '', '', 'Old entries deleted', 'audit.retention.purged', '', '', '—', 'Succeeded', [['Deleted', '1,240 entries from before 2025-10-19 00:00 UTC'], ['Retention', '365 days']]],
+      [48150, '2026-10-18 17:30:12', '19:30:12', 'Not signed in', '', '', 'Link code wrong', 'user.link.code-failed', 'Riley Chen', 'riley.c', '10.31.2.40', 'Failed', [['For', 'Invitation'], ['Tries left', '3']]],
+      [48102, '2026-10-18 11:20:30', '13:20:30', 'Person', 'Ingrid Martin', 'ingrid.m', 'Audit log exported', 'audit.exported', '', '', '10.20.4.17', 'Succeeded', [['Filters', 'Last 30 days · Outcome: Failed'], ['Entries exported', '312']]]
+    ];
+    const chosen = view === 'failed' ? all.filter((e) => e[11] === 'Failed') : all;
+    const rows = chosen.map(([id, time, local, actorType, actorName, actorUser, action, code, targetName, targetUser, ip, outcome, details]) => {
+      const open = id === expanded;
+      const who = (name, user) => name ? name + ' · ' + user : '—';
+      const fields = [
+        { k: 'Entry number', v: String(id), hasCode: false, code: '' },
+        { k: 'Time (UTC)', v: time + ' UTC · local ' + local + ' (UTC+2)', hasCode: false, code: '' },
+        { k: 'Actor', v: actorType + (actorName ? ' · ' + actorName + ' · ' + actorUser : ''), hasCode: false, code: '' },
+        { k: 'Action', v: action, hasCode: true, code: code },
+        { k: 'Person affected', v: who(targetName, targetUser), hasCode: false, code: '' },
+        { k: 'IP address', v: ip, hasCode: false, code: '' }
+      ].concat(details.map(([k, v]) => ({ k, v, hasCode: false, code: '' })));
+      return {
+        id, time, actorType, actorName, actorUser, action, targetName, targetUser, ip, outcome, fields,
+        clock: time.slice(11),
+        actorIsPerson: actorType === 'Person',
+        hasTarget: !!targetName,
+        noTarget: !targetName,
+        expanded: open,
+        adminLink: open && admin && !!targetName,
+        ariaExpanded: open ? 'true' : 'false',
+        chevron: open ? 'M5 8l5 5 5-5' : 'M8 5l5 5-5 5',
+        rowStyle: open ? 'background: var(--bbg2)' : '',
+        expandButton: 'width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; color: var(--fg2); ' + (open ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : 'background: transparent'),
+        outcomeStyle: OUTCOME[outcome][0],
+        outcomeIcon: OUTCOME[outcome][1]
+      };
+    });
+    const failedView = view === 'failed';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      darkPressed: dark ? 'true' : 'false',
+      me: admin ? { name: 'Dana Kim', initials: 'DK' } : { name: 'Ingrid Martin', initials: 'IM' },
+      labels: wide,
+      pad: width >= 1280 ? 32 : 24,
+      navStyle: 'flex: none; width: ' + (wide ? 260 : 48) + 'px; box-sizing: border-box; padding: 8px ' + (wide ? '8px' : '4px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: 2px',
+      nav,
+      exportButton: 'height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600' + (this.props.dialog ? '; outline: 2px solid var(--fo); outline-offset: 1px' : ''),
+      filters: failedView
+        ? { time: 'Last 7 days', actor: '', action: 'All actions', target: '', ip: '', outcome: 'Failed' }
+        : { time: 'Last 7 days', actor: '', action: 'All actions', target: '', ip: '', outcome: 'Any' },
+      filtered: failedView,
+      count: failedView ? rows.length + ' entries' : '1,876 entries',
+      showing: failedView ? 'Showing ' + rows.length + ' of ' + rows.length + ' entries' : 'Showing 100 of 1,876 entries',
+      more: !failedView,
+      showIp: wide,
+      cols: wide ? 7 : 6,
+      tableMin: wide ? 1000 : 820,
+      rows,
+      showDialog: this.props.dialog ?? false
+    };
+  }
+}
+</script>
+</body>
+</html>

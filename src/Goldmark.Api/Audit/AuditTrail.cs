@@ -45,14 +45,14 @@ internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http)
 
 internal sealed record AuditActor(string Type, Guid? Id)
 {
-    public static readonly AuditActor Anonymous = new("Anonymous", null);
+    public static readonly AuditActor Anonymous = new(AuditActorTypes.Anonymous, null);
 
-    public static readonly AuditActor System = new("System", null);
+    public static readonly AuditActor System = new(AuditActorTypes.System, null);
 
-    public static AuditActor User(Guid id) => new("User", id);
+    public static AuditActor User(Guid id) => new(AuditActorTypes.User, id);
 }
 
-/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9).</summary>
+/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9) and slice 4 (DEC-041); <see cref="AuditCatalog"/> labels each one.</summary>
 internal static class AuditActions
 {
     public const string SetupCompleted = "setup.completed";
@@ -81,4 +81,10 @@ internal static class AuditActions
     public const string ConfirmationFailed = "account.confirmation.failed";
     public const string RecoveryCodesRegenerated = "account.recovery-codes.regenerated";
     public const string AuthenticatorChanged = "account.authenticator.changed";
+
+    // Slice 4 (DEC-041). The last two are written by SQL, not through AuditTrail: the purge by
+    // cmdb.PurgeAuditLog (0004), a retention change by migrate.
+    public const string Exported = "audit.exported";
+    public const string RetentionPurged = "audit.retention.purged";
+    public const string RetentionChanged = "audit.retention.changed";
 }

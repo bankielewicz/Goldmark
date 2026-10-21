@@ -625,7 +625,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   followed by a check that nothing changed.
 - **Done in slice 2b (DEC-031, #4):** auditing grants on other individual objects and
   ownership chains. Audit-log retention (NFR-LOG-3) will need a delete path
-  that is not the runtime login (slice 4).
+  that is not the runtime login (slice 4). Amended by DEC-041: the runtime login may start the
+  bounded purge procedure, but never decides what it deletes.
 
 ## DEC-026 Slice-2 NuGet dependencies: DbUp, Testcontainers
 
@@ -1320,6 +1321,93 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   Net.Codecrete.QrCodeGenerator 3.2.1, both in DEC-038. The integration tests now also reference
   `Microsoft.AspNetCore.Mvc.Testing`, already pinned for the in-process tests. No other package.
 
+## DEC-041 Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited
+
+- **Decision (owner, 2026-10-20, asked in the HANDOFF rule-6 format).**
+  1. **Old entries are deleted by a backend job through a bounded procedure (A).** The owner first
+     asked: "Is the data stored in the database? If so, would a sql job that runs a stored procedure
+     daily be adequate? Or should there be a purge/maintenance windows service? … Sounds like this
+     should be some sort of backend process." After the answers below, they chose "A. Backend job +
+     bounded procedure (Recommended)".
+     - **What is built.** The operator sets the retention period. `migrate` writes it to a one-row
+       table the runtime login can read but cannot change: `DENY INSERT, UPDATE, DELETE`, the
+       `cmdb.Installation` pattern, checked by `migrate`. A migration creates a `dbo`-owned procedure
+       in `cmdb` with static SQL only and **no parameters**: the cutoff comes only from that table.
+       It re-checks the 365-day floor in its own code and deletes older entries in batches (to keep
+       the transaction log small on Express). Each batch commits together with a `System` audit entry
+       giving the cutoff and that batch's count, so no deletion commits without its entry; a run that
+       deletes nothing writes nothing. The procedure manages its own transactions, so it is never
+       called inside another one. `goldmark_runtime` gets `EXECUTE` on that one procedure. A hosted
+       service in `Goldmark.Api` runs it once the database is ready (the readiness check: reachable,
+       at the expected schema version) and then daily, on `TimeProvider`; it is idempotent. No
+       `Goldmark.Jobs` project yet.
+     - **What it amends.** DEC-025 asked for "a delete path that is not the runtime login". The
+       runtime login now **starts** the purge but never **decides** what it deletes: a stolen app
+       credential can only run, early, the deletion the operator already configured. Its rights on
+       the table are unchanged: no `DELETE`, no `UPDATE`.
+     - **Why not a SQL Agent job.** Express, which the bundled stack runs, has no SQL Server Agent.
+       Microsoft's "Editions and supported features of SQL Server 2025" lists "SQL Server Agent:
+       Enterprise Yes, Standard Yes, Express No". On other editions, Goldmark could not create the
+       job: jobs live in `msdb`, and the migration login is `db_owner` of the Goldmark database only
+       (DEC-024). On a full SQL Server a DBA may still schedule the procedure as an extra caller.
+     - **Why not a purge Windows service.** Rule 8 forbids platform-only pieces, so it would need a
+       Docker twin, and slice 4b (DEC-036) already turns the app itself into the Windows service. The
+       same job runs unchanged in Docker, the 4b Windows service and on an external SQL Server.
+     - **Rejected.** An operator-side command run with the migration login (narrowest, but nothing
+       is deleted unless someone runs or schedules it). A maintenance process with its own delete-only
+       login (more moving parts, and that login could delete today's entries).
+     - **To be measured, not assumed (the DEC-025 habit).** The procedure's `DELETE` succeeds through
+       ownership chaining while a direct `DELETE` as the runtime login is still refused. A period
+       under the floor deletes nothing. `migrate`'s runtime check fails in both directions: if
+       `EXECUTE` is granted on anything else or is missing on the procedure, and if the policy
+       table's `DENY` is missing.
+  2. **Retention has a floor of 365 days (A, "A. Floor at 365 days (Recommended)"; NFR-LOG-3).** The
+     setting `Goldmark:Audit:RetentionDays` defaults to 365. A value under 365 is refused with exit 2,
+     naming the setting but not its value; `0` keeps entries indefinitely. `migrate` reads the setting
+     and writes it to the policy table, so it belongs in `db-init`'s environment. A change to it is
+     itself audited (`System`, before and after). The audit screen shows the configured period.
+  3. **Exports are audited, reads are not (A, "A. Exports only (Recommended)").** Each CSV export
+     writes an entry with the filters and the row count. Browsing and filtering on screen write
+     nothing. The export confirmation says the export is recorded.
+  4. **"From where" is the connecting address; trusted proxies are deferred (A, "A. Defer, document,
+     issue (Recommended)").** An entry's IP address is the TCP peer, as for the sign-in rate limit
+     (DEC-040): X-Forwarded-For is not trusted, because any client can send it. Behind a reverse proxy,
+     every entry therefore shows the proxy's address. The README and screen 16 say so. A
+     trusted-proxy setting is #31, for the owner to place in the plan.
+  5. **Screen 16 is approved as is (owner, 2026-10-21, "approved").** This is version 13 of
+     https://claude.ai/artifact/8oEjLkZAiNJ14qTT3ssJjs, copied to `docs/design/screens/slice-4/`. The UI
+     must match it. Changes from the handoff are on its Notes board: expandable rows use Fluent's
+     Table rather than DataGrid; the IP address header has an info Tooltip; one sample entry was added.
+  6. **PR #32 round 1's open items (owner, 2026-10-21, each "A … (Recommended)").**
+     - Both CSV exports (audit log and users) start with the UTF-8 byte-order mark, so Excel on Windows
+       reads non-ASCII names correctly ("A. Fix now, both exports"); in round 2.
+     - The people list and the count read through the whole log; deferred to #33, for slice 24's
+       performance work ("A. Defer to an issue").
+     - An action the catalog doesn't list shows by its code, counts as Succeeded and can't be filtered.
+       This is recorded only ("A. Record it, no code"): readiness refuses a database migrated by a newer
+       build (DEC-023), and a test checks that every action this build writes is in the catalog.
+  7. **Findings after both review rounds (`/code-review` on PR #32; owner, 2026-10-21, each "A …
+     (Recommended)").**
+     - Fixed now, as one change ("A. Fix the bundle now"):
+       - a custom-range year outside 2000 to 9998 is a field message, never a request;
+       - any unexpected failure ends in an error state with Retry;
+       - each expand button names its entry ("Show details for entry 48213: Roles changed at
+         16:03:40"), a change from the board's label so that screen readers can tell entries apart;
+       - the IP prefix pattern ends with `\z`;
+       - one download helper;
+       - `AuditQuery.None` moved into the test.
+     - Deferred:
+       - the retention period checked before `bootstrap-db` changes anything, #34;
+       - strict ISO 8601 times for API callers, #35, slice 8;
+       - end-to-end cancellation of abandoned requests, added to #33 for slice 24. Rewriting the page's
+         tested request counter was declined.
+- **Consequences, noted when decided (side agent, 2026-10-20).**
+  - **Changing retention means running `db-init` (`migrate`) again.** The value belongs to `db-init`'s
+    environment; set on the app, it does nothing.
+  - **The Settings screen (20, P1) cannot edit audit retention** as long as item 1 holds: it can only
+    show the period. Editing it in the UI would need the app to write `cmdb.AuditRetention`, which is
+    exactly what item 1 prevents. Changing that goes back to the owner.
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -1456,3 +1544,27 @@ integration tests (SQL Server 2025), Compose smoke 94 unique checks with Playwri
 | 20 | Rule 7: every UI function is available through `/api/v1` | **Met** | The SPA calls only `/api/v1` (`web/src/api.ts`); `docs/security/endpoint-access.md` lists every endpoint |
 | 21 | NFR-A11Y-1/3: WCAG 2.2 AA, axe checks in Playwright | **Met for slice 3's screens** | `web/e2e/auth.spec.ts`: sign-in, setup, invalid link, dashboard, Users & roles, add-user panel, two-factor page, light and dark; `web/tests/contrast.test.mjs` (51 pairs) |
 | 22 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4 acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine:
+- **2026-10-21:** 371 in-process tests; web 48 policy tests and 56 dist and contrast tests, lint,
+  typecheck and format; Compose smoke, 97 unique checks with Playwright 8/8 inside (Chrome).
+- **2026-10-20:** the full integration suite, 208 tests (SQL Server 2025), on the backend commit.
+  Only `AuditLogApiTests` ran again on 2026-10-21, after the export's entry-count header was added.
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | US-07: see who changed what, when and from where, across sign-ins and admin actions | **Met** for what Goldmark records today (CI, relationship and token events come with their slices, rule 7) | Screen 16 (`AuditPage.tsx`) on `GET /api/v1/audit`; names resolved, removed accounts shown by their recorded user name; `AuditLogApiTests` |
+| 2 | US-07: append-only, no UPDATE/DELETE permission for the app login | **Met**, with the purge as DEC-041 amends DEC-025 | `DENY UPDATE, DELETE` unchanged; `RuntimePermissionTests` (direct DELETE, dynamic SQL, ALTER PROCEDURE, the retention row all refused); `AuditRetentionTests`: the procedure deletes only past the period, never under 365 days |
+| 3 | US-07: filterable | **Met** | Time, actor, action, person affected, IP prefix, outcome; every value validated and passed as a parameter (NFR-SEC-3); `AuditLogTests`, `AuditLogApiTests`; filters in the page address |
+| 4 | US-07: CSV export | **Met** | `POST /api/v1/audit/export`, at most 100,000 entries, formula cells neutralized, audited in the same transaction (DEC-041 item 3); integration and Playwright |
+| 5 | NFR-LOG-3: separate from operational logs, retained at least one year, configurable | **Met** | `cmdb.AuditLog`, not stdout; `Goldmark:Audit:RetentionDays` (365 to 36500, or 0), refused otherwise with exit 2; `AuditRetentionJob` daily; smoke: the runtime login can't change the period and can run the purge |
+| 6 | HANDOFF slice 4: a retention path that is not the runtime login | **Met as amended** (owner, DEC-041 item 1) | The runtime login starts the bounded procedure; the period lives where only `migrate` writes; `migrate` and the principal audit refuse any other grant (`MigrateRefusalTests`, `PrincipalAuditTests`) |
+| 7 | HANDOFF slice 4: audit events for slice 3's sign-ins and admin actions | **Met** (written since slice 3) | `AuditCatalog` labels every action; a test checks that every `AuditActions` constant is in it |
+| 8 | Rule 7: new mutations write audit records, tested | **Met** | `audit.exported`, `audit.retention.purged`, `audit.retention.changed`, each in the change's own transaction; integration tests |
+| 9 | Rule 7: every UI function is available through `/api/v1` | **Met** | The page calls only `/api/v1/audit*`; `docs/security/endpoint-access.md` |
+| 10 | Rule 7 / M6: every new endpoint declares a policy and is in the enumeration test | **Met** | `AuditReader` (Admin or Auditor); `EndpointInventoryTests`; `AccountAndAccessTests` (403 for a Viewer, 401 password-only, 400 without anti-forgery) |
+| 11 | Rule 3: design handoff before UI code | **Met** | Handoff 2026-10-20; boards approved 2026-10-21 (DEC-041 item 5, `docs/design/screens/slice-4/`) |
+| 12 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for screen 16** | `web/e2e/auth.spec.ts` "slice 4 screen": the page, an expanded entry, a filter and the export dialog, light and dark |
+| 13 | CI green | **Not executed** | Runs on the PR |

@@ -420,12 +420,18 @@ check "db-init applied every migration of this build (${applied_scripts:-?}/${ex
 migrator_flags="$(sql_as "${migrator_user}" "${migration_password}" "SELECT CONCAT(IS_MEMBER('db_owner'), IS_SRVROLEMEMBER('sysadmin'), (SELECT COUNT(*) FROM sys.login_token WHERE type = N'SERVER ROLE' AND name <> N'public'));")"
 check "the migration login is db_owner of Goldmark, not sysadmin, no server roles (got ${migrator_flags})" [ "${migrator_flags}" == 100 ]
 runtime_denied() { ! sql_as "${app_user}" "${app_password}" "$1" >/dev/null; }
+runtime_runs() { sql_as "${app_user}" "${app_password}" "$1" >/dev/null; }
 check "runtime login cannot UPDATE the audit log" runtime_denied "UPDATE cmdb.AuditLog SET Action = 'x';"
 check "runtime login cannot DELETE from the audit log" runtime_denied "DELETE FROM cmdb.AuditLog;"
 check "runtime login cannot TRUNCATE the audit log" runtime_denied "TRUNCATE TABLE cmdb.AuditLog;"
 check "runtime login cannot switch off system versioning" runtime_denied "ALTER TABLE cmdb.Ci SET (SYSTEM_VERSIONING = OFF);"
 appended="$(sql_as "${app_user}" "${app_password}" "INSERT INTO cmdb.AuditLog (ActorType, Action) VALUES ('System', 'smoke.append'); SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'smoke.append';")"
 check "runtime login can append to the audit log" [ "${appended}" == 1 ]
+# Slice 4 (DEC-041): the retention period is db-init's; the runtime login only starts the bounded purge.
+check "runtime login cannot change the audit retention period" runtime_denied "UPDATE cmdb.AuditRetention SET RetentionDays = 0;"
+retention="$(sql_as "${app_user}" "${app_password}" "SELECT RetentionDays FROM cmdb.AuditRetention;")"
+check "the audit retention period is db-init's default (got ${retention:-?})" [ "${retention}" == 365 ]
+check "runtime login can run the audit purge" runtime_runs "EXEC cmdb.PurgeAuditLog;"
 same_password="$(db_init -e Goldmark__Migration__User="${migrator_user}" -e Goldmark__Migration__Password="${app_password}")"; same_code=$?
 if [[ ${same_code} -eq 2 && "${same_password}" == *"Goldmark:Migration:Password must differ from Goldmark:Database:Password"* ]]; then
   pass "db-init refuses a migration password equal to the runtime password (exit 2)"

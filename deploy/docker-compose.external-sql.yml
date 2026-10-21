@@ -43,6 +43,8 @@ services:
       Goldmark__Bootstrap__AdoptExistingLogin: ${GOLDMARK_DB_ADOPT_EXISTING_LOGIN:-false}
       Goldmark__Bootstrap__AcceptedFindings: ${GOLDMARK_DB_ACCEPTED_FINDINGS:-}
       Goldmark__Bootstrap__WaitSeconds: ${GOLDMARK_DB_WAIT_SECONDS:-120}
+      # Audit retention (DEC-041): migrate writes it to the database, where the app reads it.
+      Goldmark__Audit__RetentionDays: ${GOLDMARK_AUDIT_RETENTION_DAYS:-365}
     volumes:
       # With no certificate configured, /dev/null is mounted and ignored (no pin is set).
       - ${GOLDMARK_SQL_SERVER_CERT_FILE:-/dev/null}:/run/goldmark/sql-tls/server.crt:ro

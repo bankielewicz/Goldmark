@@ -23,6 +23,7 @@ import {
 import {
   BoardRegular,
   ChevronDownRegular,
+  DocumentBulletListClockRegular,
   NavigationRegular,
   PeopleRegular,
   ShieldCheckmarkRegular,
@@ -35,7 +36,7 @@ import { useEffect, useState, type MouseEvent, type ReactElement, type ReactNode
 import { ApiError } from '../api';
 import { usePreferences } from '../preferences';
 import { followLink, navigate, useLocation } from '../router';
-import { isAdmin, useSession } from '../session';
+import { canReadAudit, isAdmin, useSession } from '../session';
 import { ErrorBar } from '../ui/common';
 
 const wideQuery = '(min-width: 1100px)';
@@ -122,7 +123,8 @@ interface NavEntry {
   icon: ReactElement;
 }
 
-function useWide(): boolean {
+/** True at 1100 px and wider: the inline navigation and the wide page layouts (DEC-039). */
+export function useWide(): boolean {
   const [wide, setWide] = useState(() => window.matchMedia(wideQuery).matches);
   useEffect(() => {
     const query = window.matchMedia(wideQuery);
@@ -162,6 +164,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
     ...(isAdmin(user)
       ? [{ value: 'users', label: 'Users & roles', group: 'Administration', path: '/users', icon: <PeopleRegular /> }]
+      : []),
+    ...(canReadAudit(user)
+      ? [
+          {
+            value: 'audit',
+            label: 'Audit log',
+            group: 'Administration',
+            path: '/audit',
+            icon: <DocumentBulletListClockRegular />,
+          },
+        ]
       : []),
   ];
   const selected =

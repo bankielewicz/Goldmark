@@ -310,7 +310,7 @@ internal static class PrincipalAudit
                     AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT' AND p.state = 'G'))
                 OR EXISTS (SELECT 1 FROM ({OwnedSecurables}) AS o WHERE o.owner = u.principal_id));
 
-        -- goldmark_runtime holds exactly what migration 0002 grants it (keep in step with new
+        -- goldmark_runtime holds exactly what migrations 0002 and 0004 grant it (keep in step with new
         -- migrations, like VerifyRuntimeSql). Its effective rights are checked as the login, but
         -- not on system objects, so explicit grants are compared here (Codex on #17).
         DECLARE @role int = DATABASE_PRINCIPAL_ID(N'goldmark_runtime');
@@ -318,7 +318,8 @@ internal static class PrincipalAudit
         FROM sys.database_permissions AS p
         WHERE @role IS NOT NULL AND p.grantee_principal_id = @role AND p.state IN ('G', 'W')
             AND NOT (p.state = 'G' AND p.class = 3 AND p.major_id = SCHEMA_ID(N'cmdb') AND p.permission_name IN (N'SELECT', N'INSERT', N'UPDATE', N'DELETE'))
-            AND NOT (p.state = 'G' AND p.class = 1 AND p.major_id = OBJECT_ID(N'dbo.SchemaVersions') AND p.minor_id = 0 AND p.permission_name = N'SELECT');
+            AND NOT (p.state = 'G' AND p.class = 1 AND p.major_id = OBJECT_ID(N'dbo.SchemaVersions') AND p.minor_id = 0 AND p.permission_name = N'SELECT')
+            AND NOT (p.state = 'G' AND p.class = 1 AND p.major_id = OBJECT_ID(N'cmdb.PurgeAuditLog') AND p.minor_id = 0 AND p.permission_name = N'EXECUTE');
         SELECT Kind, A, B, C, D FROM @f;
         """;
 
@@ -430,8 +431,9 @@ internal static class PrincipalAudit
         WHERE NOT (e.endpoint_id < 65536 AND f.permission_name = N'CONNECT');
 
         -- Below database scope, for the runtime login only (the migration login is db_owner here).
-        -- Allowed: DML on schema cmdb and its objects, SELECT on the journal. Schemas cmdb and dbo
-        -- and the audit log are also checked by migrate (VerifyRuntimeSql).
+        -- Allowed: DML on schema cmdb and its objects, SELECT on the journal, EXECUTE on the audit
+        -- purge (0004, DEC-041). Schemas cmdb and dbo and the audit log are also checked by migrate
+        -- (VerifyRuntimeSql).
         IF @runtime = 1
         BEGIN
             INSERT @f SELECT N'database-securable', @me, c.class, p.name, f.permission_name
@@ -452,7 +454,8 @@ internal static class PrincipalAudit
                 FROM sys.objects WHERE parent_object_id = 0 AND is_ms_shipped = 0) AS o
             CROSS APPLY sys.fn_my_permissions(o.securable, N'OBJECT') AS f
             WHERE NOT (o.schema_name = N'cmdb' AND f.permission_name IN (N'SELECT', N'INSERT', N'UPDATE', N'DELETE'))
-                AND NOT (o.schema_name = N'dbo' AND o.name = N'SchemaVersions' AND f.permission_name = N'SELECT');
+                AND NOT (o.schema_name = N'dbo' AND o.name = N'SchemaVersions' AND f.permission_name = N'SELECT')
+                AND NOT (o.schema_name = N'cmdb' AND o.name = N'PurgeAuditLog' AND f.permission_name = N'EXECUTE');
 
             -- Other securables are visible only to a principal with a permission on them.
             DECLARE @other TABLE (class nvarchar(64), name nvarchar(256), securable nvarchar(600));

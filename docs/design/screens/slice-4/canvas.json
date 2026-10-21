@@ -1,0 +1,41 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-21T08:00:00Z"},
+  "title": "Goldmark Slice 4 · Audit log",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 1000, "title": "16 · Audit log · Admin · light · entry expanded"},
+    "AdminDark.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 1000, "title": "16 · Audit log · Admin · dark · entry expanded"},
+    "Auditor.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 1000, "title": "16 · Audit log · Auditor · light · filtered"},
+    "AuditorDark.dc.html": {"x": 4560, "y": 0, "w": 1440, "h": 1000, "title": "16 · Audit log · Auditor · dark · filtered"},
+    "Audit1024.dc.html": {"x": 0, "y": 1120, "w": 1024, "h": 768, "title": "16 · Audit log · 1024 · IP address in the details"},
+    "AuditExport.dc.html": {"x": 1104, "y": 1120, "w": 1440, "h": 1000, "title": "16 · Export CSV… · confirmation over the page"},
+    "AuditPage.dc.html": {"x": 2624, "y": 1120, "w": 1440, "h": 1000, "title": "Component · audit log page"},
+    "AuditStates.dc.html": {"x": 0, "y": 2520, "w": 1440, "h": 1320, "title": "16 · States · light"},
+    "AuditStatesDark.dc.html": {"x": 1520, "y": 2520, "w": 1440, "h": 1320, "title": "16 · States · dark"},
+    "AuditDialogs.dc.html": {"x": 3040, "y": 2520, "w": 1440, "h": 980, "title": "16 · Export dialog states · light"},
+    "AuditDialogsDark.dc.html": {"x": 4560, "y": 2520, "w": 1440, "h": 980, "title": "16 · Export dialog states · dark"},
+    "Notes.dc.html": {"x": 0, "y": 4240, "w": 1440, "h": 980, "title": "Notes · Fluent v9 components, changes, build notes"}
+  },
+  "order": [
+    "Main.dc.html",
+    "AdminDark.dc.html",
+    "Auditor.dc.html",
+    "AuditorDark.dc.html",
+    "Audit1024.dc.html",
+    "AuditExport.dc.html",
+    "AuditPage.dc.html",
+    "AuditStates.dc.html",
+    "AuditStatesDark.dc.html",
+    "AuditDialogs.dc.html",
+    "AuditDialogsDark.dc.html",
+    "Notes.dc.html"
+  ],
+  "notes": {
+    "rowAudit": {"x": 0, "y": -280, "text": "Screen 16 · Audit log", "kind": "title1", "maxW": 6000},
+    "rowStates": {"x": 0, "y": 2240, "text": "States and the export dialog", "kind": "title1", "maxW": 6000},
+    "rowNotes": {"x": 0, "y": 3960, "text": "Notes", "kind": "title1", "maxW": 1440}
+  },
+  "designSystems": []
+}

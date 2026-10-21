@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark audit log states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Audit log · states</h1>
+    <p style="margin: 0; color: var(--fg2)">Regions only, without the app shell. Fluent: Skeleton, MessageBar, Text, Button, Link, Tooltip, Badge. Sample data (fictional).</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Loading · Skeleton rows, region busy, filters stay usable</figcaption>
+      <div style="height: 330px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; gap: 8px"><span style="width: 120px; height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px">Last 7 days</span><span style="width: 120px; height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg3)">Any actor</span></div>
+        <div aria-busy="true" aria-label="Loading audit entries" style="flex: 1; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+          <span style="height: 14px; width: 30%; border-radius: 2px; background: var(--bg4)"></span>
+          <sc-for list="{{skeleton}}" as="k" hint-placeholder-count="6"><div style="display: grid; grid-template-columns: 16px 2fr 2fr 2fr 1fr; gap: 10px; align-items: center"><span style="width: 16px; height: 16px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span><span style="height: 12px; border-radius: 2px; background: var(--bg4)"></span></div></sc-for>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Empty · filters at the default</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: center">
+        <p style="margin: 0">No entries in the last 7 days.</p>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Empty · filters set</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; justify-content: center">
+        <p style="margin: 0">No entries match these filters.</p>
+        <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Clear filters</button>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Error · Retry + Reference ID (focus moves to the MessageBar)</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px">
+        <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span><b>Couldn't load the audit log.</b> The server didn't answer in time.</span><span style="font-size: 12px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">7f3a91c2</span> <button type="button" style="height: 20px; padding: 0 6px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Copy</button></span></div><button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button></div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">403 · a Viewer opens /audit (Editors alike)</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+        <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">You don't have access to this page</h2>
+        <p style="margin: 0">Your role, Viewer, can't open the audit log. An administrator can change your role.</p>
+        <a href="#" style="color: var(--blink)">Go to the dashboard</a>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Retention notice · the configured period, or kept indefinitely</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+        <div role="note" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The audit log is append-only: entries can't be edited or deleted. Entries older than 730 days are deleted automatically.</span></div>
+        <div role="note" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The audit log is append-only: entries can't be edited or deleted. Entries are kept indefinitely.</span></div>
+        <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Top: retention set to 730 days. Bottom: retention off (0). The number always comes from the server.</span>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Names · a removed account, an unknown username, System</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: hidden">
+        <table style="width: 100%; border-collapse: collapse">
+          <thead><tr style="text-align: left"><th scope="col" style="height: 40px; padding: 0 8px 0 12px; font-weight: 600; border-bottom: 1px solid var(--st1)">Actor</th><th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Action</th><th scope="col" style="padding: 0 12px 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Person affected</th></tr></thead>
+          <tbody>
+            <tr><td style="height: 56px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--st2)"><span style="{{typeBadge}}">Person</span> Dana Kim</td><td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">Invitation revoked</td><td style="padding: 0 12px 0 8px; border-bottom: 1px solid var(--st2)"><span style="font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">sam.rivera</span> <span style="color: var(--fg3)">(account removed)</span></td></tr>
+            <tr><td style="height: 56px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--st2)"><span style="{{typeBadge}}">Person</span> <span style="color: var(--fg3)">Removed account</span></td><td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">Signed out</td><td style="padding: 0 12px 0 8px; border-bottom: 1px solid var(--st2)"><span aria-label="None" style="color: var(--fg3)">—</span></td></tr>
+            <tr><td style="height: 56px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--st2)"><span style="{{typeBadge}}">Not signed in</span></td><td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">Sign-in failed</td><td style="padding: 0 12px 0 8px; border-bottom: 1px solid var(--st2)"><span aria-label="None" style="color: var(--fg3)">—</span></td></tr>
+            <tr><td style="height: 56px; padding: 0 8px 0 12px; border-bottom: 1px solid var(--st2)"><span style="{{typeBadge}}">System</span></td><td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">Old entries deleted</td><td style="padding: 0 12px 0 8px; border-bottom: 1px solid var(--st2)"><span aria-label="None" style="color: var(--fg3)">—</span></td></tr>
+          </tbody>
+        </table>
+        <p style="margin: 0; padding: 10px 12px; font-size: 12px; line-height: 16px; color: var(--fg3)">No link for a removed account. An unknown username's typed name is never recorded (it may be a password); the reason in its details says so.</p>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Tooltips · IP address header, local time</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; position: relative">
+        <div style="display: flex; gap: 32px; padding-bottom: 8px; border-bottom: 1px solid var(--st1); font-weight: 600"><span>Time (UTC) <span aria-hidden="true">↓</span></span><span style="display: inline-flex; align-items: center; gap: 4px">IP address <button type="button" aria-label="About IP address: the address that connected to Goldmark" aria-describedby="ip-tip" style="width: 20px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: var(--sub); color: var(--fg1); outline: 2px solid var(--fo); outline-offset: 1px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg></button></span></div>
+        <div id="ip-tip" role="tooltip" style="position: absolute; left: 150px; top: 54px; width: 260px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">The address that connected to Goldmark. Behind a reverse proxy, this is the proxy's address.</div>
+        <div style="position: absolute; left: 16px; top: 170px; display: flex; flex-direction: column; gap: 6px">
+          <span style="font-variant-numeric: tabular-nums; text-decoration: underline dotted; text-underline-offset: 3px" aria-describedby="time-tip">2026-10-20 07:58:12</span>
+          <div id="time-tip" role="tooltip" style="width: 240px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">Your local time: 2026-10-20 09:58:12 (UTC+2)</div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Keyboard · expand by Enter or Space; after Load more, focus on the first new row</figcaption>
+      <div style="height: 330px; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; align-items: center; gap: 12px; height: 44px; border-bottom: 1px solid var(--st2)"><button type="button" aria-expanded="false" aria-label="Show details for the entry at 07:58:12" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: var(--sub); color: var(--fg1); outline: 2px solid var(--fo); outline-offset: -2px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 5l5 5-5 5"></path></svg></button><span style="font-variant-numeric: tabular-nums">2026-10-20 07:58:12</span><span>Signed in</span></div>
+        <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Focused, collapsed (aria-expanded="false"). Tab order: skip link, filters, Export CSV…, each row's expand button, its details' link and button, Load more.</span>
+        <div style="display: flex; align-items: center; gap: 12px; height: 44px; margin-top: 8px; border-top: 1px dashed var(--st1); border-bottom: 1px solid var(--st2); outline: 2px solid var(--fo); outline-offset: -2px; padding-left: 4px"><span style="width: 32px"></span><span style="font-variant-numeric: tabular-nums">2026-10-16 22:14:05</span><span>Signed out</span></div>
+        <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Entry 101 after "Load more" takes focus. The polite live region says "Showing 200 of 1,876 entries".</span>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1320}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '--bg1:#ffffff;--bg3:#f5f5f5;--bg4:#f0f0f0;--page:#fafafa;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--blink:#7d5200;--fo:#000000;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);';
+    const D = '--bg1:#292929;--bg3:#141414;--bg4:#0a0a0a;--page:#1f1f1f;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--blink:#c28a2a;--fo:#ffffff;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    return {
+      rootStyle: (dark ? D : L) + 'width: 1440px; height: 1320px; box-sizing: border-box; padding: 40px; background: var(--page); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px',
+      typeBadge: 'display: inline-flex; height: 20px; align-items: center; padding: 0 6px; margin-right: 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600; white-space: nowrap',
+      skeleton: [1, 2, 3, 4, 5, 6]
+    };
+  }
+}
+</script>
+</body>
+</html>
