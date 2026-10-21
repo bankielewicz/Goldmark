@@ -1374,6 +1374,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      (DEC-040): X-Forwarded-For is not trusted, because any client can send it. Behind a reverse proxy,
      every entry therefore shows the proxy's address. The README and screen 16 say so. A
      trusted-proxy setting is #31, for the owner to place in the plan.
+  5. **Screen 16 is approved as is (owner, 2026-10-21, "approved").** This is version 13 of
+     https://claude.ai/artifact/8oEjLkZAiNJ14qTT3ssJjs, copied to `docs/design/screens/slice-4/`. The UI
+     must match it. Changes from the handoff are on its Notes board: expandable rows use Fluent's
+     Table rather than DataGrid; the IP address header has an info Tooltip; one sample entry was added.
 - **Consequences, noted when decided (side agent, 2026-10-20).**
   - **Changing retention means running `db-init` (`migrate`) again.** The value belongs to `db-init`'s
     environment; set on the app, it does nothing.

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark audit log export dialog states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Export CSV… · dialog states</h1>
+    <p style="margin: 0; color: var(--fg2)">Fluent: Dialog (modalType="modal": focus trapped, returned to "Export CSV…" on close), DialogTitle, DialogContent, DialogActions, Spinner size="tiny", MessageBar, Toast, Tooltip. The export is recorded in the audit log.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Confirmation · filters set</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="dialog" aria-label="Export 312 entries?" style="width: 100%; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Export 312 entries?</h3>
+          <dl style="margin: 0; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 6px 10px"><dt style="color: var(--fg3); font-weight: 600">Filters</dt><dd style="margin: 0">Last 30 days · Outcome: Failed</dd><dt style="color: var(--fg3); font-weight: 600">Columns</dt><dd style="margin: 0">Time (UTC), Actor type, Actor, Action, Action code, Person affected, IP address, Outcome, Details</dd></dl>
+          <div style="{{infoBar}}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The export is recorded in the audit log.</span></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="{{secondary}}">Cancel</button><button type="button" style="{{primary}}">Export</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Preparing · Export shows a Spinner and is disabled</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="dialog" aria-label="Export 312 entries?" aria-busy="true" style="width: 100%; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Export 312 entries?</h3>
+          <dl style="margin: 0; display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 6px 10px"><dt style="color: var(--fg3); font-weight: 600">Filters</dt><dd style="margin: 0">Last 30 days · Outcome: Failed</dd><dt style="color: var(--fg3); font-weight: 600">Columns</dt><dd style="margin: 0">Time (UTC), Actor type, Actor, Action, Action code, Person affected, IP address, Outcome, Details</dd></dl>
+          <div style="{{infoBar}}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.8v.2"></path></svg><span>The export is recorded in the audit log.</span></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="{{secondary}}">Cancel</button><button type="button" disabled aria-disabled="true" style="{{disabled}}"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="8" cy="8" r="6" stroke="var(--st2)" stroke-width="2"></circle><path d="M8 2a6 6 0 0 1 6 6" stroke="var(--fgspin)" stroke-width="2" stroke-linecap="round"></path></svg>Preparing…</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Too many · over 100,000 entries, nothing exported or recorded</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="dialog" aria-label="Too many entries to export" style="width: 100%; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Too many entries to export</h3>
+          <p style="margin: 0">That's 214,900 entries. Exports are limited to 100,000; narrow the time range or the filters.</p>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="{{secondary}}">Close</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Error · inside the dialog, Retry + Reference ID</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; align-items: center">
+        <div role="dialog" aria-label="Export 312 entries?" style="width: 100%; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 20px; display: flex; flex-direction: column; gap: 10px">
+          <h3 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Export 312 entries?</h3>
+          <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><div style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span><b>Couldn't export.</b> The server didn't answer in time. Nothing was downloaded.</span><span style="font-size: 12px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">0af76519</span></span></div><button type="button" style="height: 24px; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-size: 12px; font-weight: 600">Retry</button></div>
+          <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" style="{{secondary}}">Cancel</button><button type="button" style="{{primary}}">Export</button></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Done · the browser downloads the file, a Toast confirms (bottom-end, polite)</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end">
+        <div role="status" style="width: 340px; box-sizing: border-box; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); padding: 12px; display: flex; gap: 10px; align-items: flex-start"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mboki)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><div style="flex: 1; display: flex; flex-direction: column; gap: 2px"><b>Exported 1,876 entries</b><span style="font-size: 12px; color: var(--fg2); font-family: Consolas, 'Courier New', monospace">goldmark-audit-20261020.csv</span></div><button type="button" aria-label="Dismiss" style="width: 24px; height: 24px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)">✕</button></div>
+      </div>
+    </figure>
+
+    <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="font-size: 12px; font-weight: 600; color: var(--fg3)">Nothing to export · toolbar button disabled with a reason</figcaption>
+      <div style="height: 380px; box-sizing: border-box; background: var(--bg3); border-radius: 6px; padding: 16px; position: relative">
+        <button type="button" aria-disabled="true" aria-describedby="no-export" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bgdis); border: 1px solid var(--stdis); border-radius: 4px; color: var(--fgdis); font: inherit; font-weight: 600; outline: 2px solid var(--fo); outline-offset: 1px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 6.5L10 3l3.5 3.5M4 12v4h12v-4"></path></svg>Export CSV…</button>
+        <div id="no-export" role="tooltip" style="position: absolute; left: 16px; top: 60px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">No entries to export</div>
+        <span style="position: absolute; left: 16px; bottom: 16px; right: 16px; font-size: 12px; line-height: 16px; color: var(--fg3)">aria-disabled keeps it focusable, so keyboard users get the reason too.</span>
+      </div>
+    </figure>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '--bg1:#ffffff;--bg3:#f5f5f5;--page:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--bgdis:#f0f0f0;--stdis:#e0e0e0;--fgspin:#8a5a00;--st1:#d1d1d1;--st2:#e0e0e0;--brand:#8a5a00;--fo:#000000;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--mboki:#0e700e;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);';
+    const D = '--bg1:#292929;--bg3:#141414;--page:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--bgdis:#141414;--stdis:#424242;--fgspin:#c28a2a;--st1:#666666;--st2:#525252;--brand:#7d5200;--fo:#ffffff;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--mboki:#54b054;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    return {
+      rootStyle: (dark ? D : L) + 'width: 1440px; height: 980px; box-sizing: border-box; padding: 40px; background: var(--page); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px',
+      infoBar: 'display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px',
+      secondary: 'height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600',
+      primary: 'height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600',
+      disabled: 'height: 32px; padding: 0 16px; display: inline-flex; align-items: center; gap: 6px; background: var(--bgdis); border: 1px solid var(--stdis); border-radius: 4px; color: var(--fgdis); font: inherit; font-weight: 600'
+    };
+  }
+}
+</script>
+</body>
+</html>
