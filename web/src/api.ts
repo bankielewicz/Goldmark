@@ -47,6 +47,8 @@ interface RequestOptions {
   ifMatch?: string;
   /** The answer is a file (a CSV export): `data` is its Blob. Errors are still Problem Details. */
   file?: boolean;
+  /** Cancels the request: it then rejects with the signal's reason, never an {@link ApiError}. */
+  signal?: AbortSignal;
 }
 
 type UnauthorizedListener = () => void;
@@ -87,16 +89,24 @@ async function send<T>(
       headers,
       credentials: 'same-origin',
       body: body === undefined ? null : JSON.stringify(body),
+      signal: options.signal ?? null,
     });
-  } catch {
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
     throw new ApiError(0, 'network', 'Couldn’t reach Goldmark.');
   }
 
-  if (response.ok && options.file) {
-    return { data: (await response.blob()) as T, etag: response.headers.get('ETag'), headers: response.headers };
+  // The connection can also drop while the answer is read: that fails like an unreachable server.
+  let text: string;
+  try {
+    if (response.ok && options.file) {
+      return { data: (await response.blob()) as T, etag: response.headers.get('ETag'), headers: response.headers };
+    }
+    text = await response.text();
+  } catch (error) {
+    if (options.signal?.aborted) throw error;
+    throw new ApiError(0, 'network', 'Couldn’t reach Goldmark.');
   }
-
-  const text = await response.text();
   let json: unknown = null;
   if (text.length > 0 && (response.headers.get('Content-Type') ?? '').includes('json')) {
     try {

@@ -8,7 +8,10 @@
 -- therefore start a purge but never decide what it deletes (DEC-041 amends DEC-025).
 
 -- One row: the retention period in days, 0 for "keep indefinitely". The floor of 365 days
--- (NFR-LOG-3) is checked here, by migrate before writing, and again inside the procedure.
+-- (NFR-LOG-3) is checked here, by migrate before writing, and again inside the procedure. No row is
+-- seeded: migrate writes the configured period right after the migrations and audits it, so the
+-- log's first entry about retention is the period an operator chose. Until then the procedure
+-- deletes nothing.
 CREATE TABLE cmdb.AuditRetention
 (
     Id            tinyint      NOT NULL CONSTRAINT PK_AuditRetention PRIMARY KEY
@@ -18,13 +21,13 @@ CREATE TABLE cmdb.AuditRetention
     ChangedAt     datetime2(7) NOT NULL CONSTRAINT DF_AuditRetention_ChangedAt DEFAULT (SYSUTCDATETIME())
 );
 
-INSERT INTO cmdb.AuditRetention (Id, RetentionDays) VALUES (1, 365);
-
 DENY INSERT, UPDATE, DELETE ON OBJECT::cmdb.AuditRetention TO goldmark_runtime;
 GO
 
 -- Deletes the audit entries older than the retention period, counted in whole days back from
--- today's midnight UTC, in batches so that the transaction log stays small on Express. Each batch
+-- today's midnight UTC, in batches so that the transaction log stays small on Express. A batch of
+-- 4,000 stays under the 5,000 locks on one table or index at which SQL Server escalates to a table
+-- lock, so sign-ins and other audit writes are not held up while a purge runs. Each batch
 -- commits together with a System entry naming the cutoff and that batch's count, so no deletion
 -- commits without its entry; a run that deletes nothing writes nothing. It manages its own
 -- transactions and refuses to run inside a caller's (a joined transaction would turn each COMMIT
@@ -56,7 +59,7 @@ BEGIN
     WHILE @batch > 0
     BEGIN
         BEGIN TRANSACTION;
-        DELETE TOP (50000) FROM cmdb.AuditLog WHERE At < @before;
+        DELETE TOP (4000) FROM cmdb.AuditLog WHERE At < @before;
         SET @batch = @@ROWCOUNT;
         IF @batch > 0
             INSERT INTO cmdb.AuditLog (ActorType, Action, Details)

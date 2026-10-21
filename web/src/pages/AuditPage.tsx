@@ -237,7 +237,7 @@ const defaults: Filters = {
 function readFilters(search: URLSearchParams): Filters {
   const range = search.get('range');
   return {
-    range: range === 'custom' || (range !== null && range in presets) ? (range as Range) : defaults.range,
+    range: range === 'custom' || (range !== null && Object.hasOwn(presets, range)) ? (range as Range) : defaults.range,
     from: search.get('from') ?? '',
     to: search.get('to') ?? '',
     actor: search.get('actor') ?? '',
@@ -316,24 +316,45 @@ function personText(party: Party): string {
   return '';
 }
 
-function peopleName(id: string, people: Person[]): string {
+/**
+ * A person's name: from the people list or, for a removed account (no longer on it), from a loaded
+ * entry about them; their id if neither knows them.
+ */
+function peopleName(id: string, people: Person[], entries: readonly Entry[] = []): string {
   const person = people.find((p) => p.id === id);
-  return person ? person.displayName : id;
+  if (person) return person.displayName;
+  const party = entries.flatMap((e) => [e.actor, e.target]).find((p) => p?.id === id);
+  return (party && personText(party)) || id;
+}
+
+/** The picker option for the person a filter names when the people list doesn't have them (a removed account). */
+function unlistedPerson(id: string, people: Person[], entries: readonly Entry[]): { key: string; text: string }[] {
+  if (!id || Object.hasOwn(actorTypes, id) || people.some((p) => p.id === id)) return [];
+  return [{ key: id, text: peopleName(id, people, entries) }];
 }
 
 /** The filters in words, for the export dialog: "Last 7 days · Outcome: Failed". */
-function describeFilters(filters: Filters, catalog: Catalog | null, people: Person[]): string {
+function describeFilters(
+  filters: Filters,
+  catalog: Catalog | null,
+  people: Person[],
+  entries: readonly Entry[],
+): string {
   const parts = [
     filters.range === 'custom'
       ? `${filters.from.replace('T', ' ')} to ${filters.to.replace('T', ' ')} UTC`
       : presets[filters.range].label,
   ];
-  if (filters.actor) parts.push(`Actor: ${actorTypes[filters.actor] ?? peopleName(filters.actor, people)}`);
+  if (filters.actor) {
+    parts.push(
+      `Actor: ${Object.hasOwn(actorTypes, filters.actor) ? actorTypes[filters.actor] : peopleName(filters.actor, people, entries)}`,
+    );
+  }
   if (filters.actions.length > 0) {
     const labels = filters.actions.map((code) => catalog?.actions.find((a) => a.code === code)?.label ?? code);
     parts.push(`Action: ${labels.join(', ')}`);
   }
-  if (filters.target) parts.push(`Person affected: ${peopleName(filters.target, people)}`);
+  if (filters.target) parts.push(`Person affected: ${peopleName(filters.target, people, entries)}`);
   if (filters.ip) parts.push(`Source IP: ${filters.ip}`);
   if (filters.outcome) parts.push(`Outcome: ${filters.outcome}`);
   return parts.length === 1 ? `${parts[0]} · no other filters` : parts.join(' · ');
@@ -503,8 +524,12 @@ export function AuditPage() {
   const [ipText, setIpText] = useState(filters.ip);
   // After "Load more": the first new entry, whose expand button takes focus.
   const [focusEntry, setFocusEntry] = useState<number | null>(null);
-  // The API query behind the entries shown, so "Load more" continues the same list.
+  // The API query behind the entries shown, so "Load more" and the export continue the same list, and
+  // the number of the latest first-page request: an answer to an older one is dropped.
   const shownQuery = useRef('');
+  const listRequest = useRef(0);
+  // Cancels the export in progress (its Cancel stays available, as on the board).
+  const exportAbort = useRef<AbortController | null>(null);
   const problem = rangeProblem(filters);
 
   const apply = (next: Filters) => navigate(`/audit${pageQuery(next)}`, { replace: true });
@@ -533,12 +558,13 @@ export function AuditPage() {
     }
     setPage(null);
     const query = apiQuery(filters).toString();
+    const request = ++listRequest.current;
     shownQuery.current = query;
     try {
       const { data } = await api<EntriesPage>('GET', `/api/v1/audit?${query}`);
-      if (shownQuery.current === query) setPage(data);
+      if (listRequest.current === request) setPage(data);
     } catch (error) {
-      if (error instanceof ApiError) setFailure(error);
+      if (listRequest.current === request && error instanceof ApiError) setFailure(error);
     }
   }, [filters]);
 
@@ -552,6 +578,8 @@ export function AuditPage() {
 
   useEffect(() => setIpText(filters.ip), [filters.ip]);
 
+  useEffect(() => () => exportAbort.current?.abort(), []);
+
   useEffect(() => {
     if (focusEntry !== null) {
       document.getElementById(`audit-entry-${focusEntry}`)?.focus();
@@ -561,14 +589,17 @@ export function AuditPage() {
 
   const loadMore = async () => {
     if (!page?.next) return;
+    const request = listRequest.current;
     setLoadingMore(true);
     setFailure(null);
     try {
       const { data } = await api<EntriesPage>('GET', `/api/v1/audit?${shownQuery.current}&cursor=${page.next}`);
-      setPage({ entries: [...page.entries, ...data.entries], total: data.total, next: data.next });
+      // The filters changed meanwhile: these entries belong to the list that was replaced.
+      if (listRequest.current !== request) return;
+      setPage((shown) => shown && { entries: [...shown.entries, ...data.entries], total: data.total, next: data.next });
       setFocusEntry(data.entries[0]?.id ?? null);
     } catch (error) {
-      if (error instanceof ApiError) setFailure(error);
+      if (listRequest.current === request && error instanceof ApiError) setFailure(error);
     } finally {
       setLoadingMore(false);
     }
@@ -595,14 +626,21 @@ export function AuditPage() {
   };
 
   const runExport = async () => {
+    const abort = new AbortController();
+    exportAbort.current = abort;
     setExportState({ kind: 'preparing' });
     try {
+      // The list shown, not a new "last 7 days" counted from now: the export is what the dialog confirmed.
       const { data, headers } = await api<Blob>(
         'POST',
-        `/api/v1/audit/export?${apiQuery(filters).toString()}`,
+        `/api/v1/audit/export?${shownQuery.current}`,
         {},
-        { file: true },
+        {
+          file: true,
+          signal: abort.signal,
+        },
       );
+      if (abort.signal.aborted) return;
       const entries = Number(headers.get('X-Goldmark-Entries') ?? page?.total ?? 0);
       const fileName = `goldmark-audit-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`;
       const url = URL.createObjectURL(data);
@@ -622,12 +660,19 @@ export function AuditPage() {
         { intent: 'success', politeness: 'polite' },
       );
     } catch (error) {
+      if (abort.signal.aborted) return;
       if (error instanceof ApiError && error.code === 'export-too-large') {
         setExportState({ kind: 'too-many', entries: Number(error.body.entries ?? 0) });
       } else if (error instanceof ApiError) {
         setExportState({ kind: 'failed', error });
       }
     }
+  };
+
+  const closeExport = () => {
+    exportAbort.current?.abort();
+    exportAbort.current = null;
+    setExportState(null);
   };
 
   const retention =
@@ -637,17 +682,22 @@ export function AuditPage() {
         ? 'Entries are kept indefinitely.'
         : `Entries older than ${catalog.retentionDays.toLocaleString('en-US')} days are deleted automatically.`;
 
+  const shownEntries = page?.entries;
   const actorOptions = useMemo(
     () => [
       { key: 'System', text: 'System' },
       { key: 'Anonymous', text: 'Not signed in' },
       ...people.map((p) => ({ key: p.id, text: `${p.displayName} (${p.userName})` })),
+      ...unlistedPerson(filters.actor, people, shownEntries ?? []),
     ],
-    [people],
+    [people, filters.actor, shownEntries],
   );
   const targetOptions = useMemo(
-    () => people.map((p) => ({ key: p.id, text: `${p.displayName} (${p.userName})` })),
-    [people],
+    () => [
+      ...people.map((p) => ({ key: p.id, text: `${p.displayName} (${p.userName})` })),
+      ...unlistedPerson(filters.target, people, shownEntries ?? []),
+    ],
+    [people, filters.target, shownEntries],
   );
   const groups = useMemo(() => {
     const byGroup = new Map<string, CatalogAction[]>();
@@ -970,9 +1020,9 @@ export function AuditPage() {
         <ExportDialog
           state={exportState}
           total={page?.total ?? 0}
-          filters={describeFilters(filters, catalog, people)}
+          filters={describeFilters(filters, catalog, people, page?.entries ?? [])}
           onExport={() => void runExport()}
-          onClose={() => setExportState(null)}
+          onClose={closeExport}
         />
       ) : null}
     </>
@@ -1168,7 +1218,7 @@ function ExportDialog({
   }
   const preparing = state.kind === 'preparing';
   return (
-    <Dialog open modalType="modal" onOpenChange={(_, data) => (data.open || preparing ? undefined : onClose())}>
+    <Dialog open modalType="modal" onOpenChange={(_, data) => (data.open ? undefined : onClose())}>
       <DialogSurface aria-busy={preparing}>
         <DialogBody>
           <DialogTitle>Export {count(total, 'entry', 'entries')}?</DialogTitle>
@@ -1189,9 +1239,7 @@ function ExportDialog({
             </MessageBar>
           </DialogContent>
           <DialogActions>
-            <Button onClick={onClose} disabled={preparing}>
-              Cancel
-            </Button>
+            <Button onClick={onClose}>Cancel</Button>
             <Button
               appearance="primary"
               disabled={preparing}

@@ -1,5 +1,9 @@
+using Goldmark.Api.Audit;
 using Goldmark.Api.IntegrationTests.Infrastructure;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Serilog.Events;
 
 namespace Goldmark.Api.IntegrationTests;
 
@@ -40,6 +44,28 @@ public sealed class AuditRetentionTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task The_apps_daily_job_purges_in_batches_of_4000_and_logs_the_total()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        await sql.AsAdminAsync(scenario.Installation.Database, """
+            INSERT INTO cmdb.AuditLog (At, ActorType, Action)
+            SELECT TOP (4001) DATEADD(day, -400, SYSUTCDATETIME()), 'System', 'it.old' FROM sys.all_columns AS a CROSS JOIN sys.all_columns AS b;
+            """);
+        var job = scenario.App.Services.GetServices<IHostedService>().OfType<AuditRetentionJob>().Single();
+
+        Assert.True(await job.RunOnceAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, await CountAsync(scenario.Installation, "Action = 'it.old'"));
+        Assert.Equal("4000,1", await sql.AdminScalarAsync<string>(scenario.Installation.Database, """
+            SELECT STRING_AGG(JSON_VALUE(Details, '$.deleted'), ',') WITHIN GROUP (ORDER BY Id)
+            FROM cmdb.AuditLog WHERE Action = 'audit.retention.purged';
+            """));
+        var purged = Assert.Single(scenario.App.Logs.Events, e => GoldmarkApp.IsEvent(e, 4001));
+        Assert.Equal(4001, ((ScalarValue)purged.Properties["Deleted"]).Value);
+        Assert.Equal(365, ((ScalarValue)purged.Properties["RetentionDays"]).Value);
+    }
+
+    [Fact]
     public async Task The_procedure_keeps_the_365_day_floor_even_when_the_period_row_says_less()
     {
         var (installation, _) = await sql.ProvisionAsync();
@@ -72,10 +98,14 @@ public sealed class AuditRetentionTests(SqlServerFixture sql)
     [Fact]
     public async Task Migrate_writes_the_configured_period_and_audits_each_change()
     {
+        // The first run sets the period: recorded with no earlier one, since none was ever configured.
         var (installation, provisioned) = await sql.ProvisionAsync();
-        Assert.Contains("migrate: audit retention 365 days", provisioned.Output, StringComparison.Ordinal);
+        Assert.Contains("migrate: audit retention set to 365 days", provisioned.Output, StringComparison.Ordinal);
         Assert.Equal(365, await PeriodAsync(installation));
-        Assert.Equal(0, await CountAsync(installation, "Action = 'audit.retention.changed'"));
+        Assert.Equal(1, await CountAsync(installation, """
+            Action = 'audit.retention.changed' AND ActorType = 'System'
+                AND JSON_PATH_EXISTS(Details, '$.before') = 0 AND JSON_VALUE(Details, '$.after') = '365'
+            """));
 
         var longer = await sql.RunAsync(installation, ["migrate"], Retention("730"));
         Assert.True(longer.Code == 0, longer.ToString());
@@ -89,7 +119,7 @@ public sealed class AuditRetentionTests(SqlServerFixture sql)
         // The same value again changes nothing and writes nothing.
         var same = await sql.RunAsync(installation, ["migrate"], Retention("730"));
         Assert.Contains("migrate: audit retention 730 days", same.Output, StringComparison.Ordinal);
-        Assert.Equal(1, await CountAsync(installation, "Action = 'audit.retention.changed'"));
+        Assert.Equal(2, await CountAsync(installation, "Action = 'audit.retention.changed'"));
 
         // 0 keeps entries indefinitely: the purge deletes nothing.
         Assert.Equal(0, (await sql.RunAsync(installation, ["migrate"], Retention("0"))).Code);
@@ -101,7 +131,7 @@ public sealed class AuditRetentionTests(SqlServerFixture sql)
         // Without the setting, the default comes back, and that is audited too.
         Assert.Equal(0, (await sql.RunAsync(installation, ["migrate"])).Code);
         Assert.Equal(365, await PeriodAsync(installation));
-        Assert.Equal(3, await CountAsync(installation, "Action = 'audit.retention.changed'"));
+        Assert.Equal(4, await CountAsync(installation, "Action = 'audit.retention.changed'"));
     }
 
     [Theory]

@@ -4,6 +4,7 @@ using Goldmark.Api.Audit;
 using Goldmark.Api.Commands;
 using Goldmark.Api.Configuration;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -125,10 +126,22 @@ public sealed class AuditLogTests
     [InlineData("cursor", "-1")]
     public void Page_parameters_are_bounded(string name, string value)
     {
-        var (_, _, problem) = AuditQuery.Page(Query((name, value)));
+        var (_, _, _, problem) = AuditQuery.ParsePage(Query((name, value)));
 
         Assert.NotNull(problem);
-        Assert.Equal((AuditQuery.DefaultLimit, (long?)null, (IResult?)null), AuditQuery.Page(Query()));
+        var (query, limit, cursor, none) = AuditQuery.ParsePage(Query());
+        Assert.NotNull(query);
+        Assert.Equal((AuditQuery.DefaultLimit, (long?)null, (IResult?)null), (limit, cursor, none));
+    }
+
+    [Fact]
+    public void A_page_request_names_every_bad_filter_and_page_parameter_at_once()
+    {
+        var (query, _, _, problem) = AuditQuery.ParsePage(Query(("outcome", "Maybe"), ("limit", "0")));
+
+        Assert.Null(query);
+        var details = Assert.IsType<HttpValidationProblemDetails>(Assert.IsType<ProblemHttpResult>(problem).ProblemDetails);
+        Assert.Equal(["limit", "outcome"], details.Errors.Keys.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -172,6 +185,16 @@ public sealed class AuditLogTests
 
         await job.StopAsync(TestContext.Current.CancellationToken);
         Assert.True(job.ExecuteTask!.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task A_purge_that_fails_with_any_error_is_retried_instead_of_stopping_the_host()
+    {
+        var health = new CountingHealthChecks(HealthStatus.Healthy);
+        await using var services = new ServiceCollection().BuildServiceProvider(); // no AuditRetention: resolving it throws
+        using var job = new AuditRetentionJob(services.GetRequiredService<IServiceScopeFactory>(), health, TimeProvider.System, NullLogger<AuditRetentionJob>.Instance);
+
+        Assert.False(await job.RunOnceAsync(TestContext.Current.CancellationToken));
     }
 
     private static QueryCollection Query(params (string Name, string Value)[] values) =>

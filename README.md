@@ -86,7 +86,7 @@ Keep at least two administrators: Goldmark cannot yet reset a forgotten password
 users.
 
 The audit log keeps each entry for 365 days by default
-(`GOLDMARK_AUDIT_RETENTION_DAYS`: 365 or more, or 0 to keep entries
+(`GOLDMARK_AUDIT_RETENTION_DAYS`: 365 to 36500, or 0 to keep entries
 indefinitely). `db-init` writes the period to the database on every start, and the
 app deletes older entries once a day through a procedure that can never delete
 anything younger than 365 days; each deletion is itself recorded in the log

@@ -30,6 +30,24 @@ internal sealed partial record AuditQuery(
     public static (AuditQuery? Query, IResult? Problem) Parse(IQueryCollection query)
     {
         var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var filters = Filters(query, errors);
+        return errors.Count > 0 ? (null, Problem(errors)) : (filters, null);
+    }
+
+    /// <summary>
+    /// The query, the page size and the cursor (the last entry number seen), or one validation problem
+    /// naming every bad parameter, filters and page alike.
+    /// </summary>
+    public static (AuditQuery? Query, int Limit, long? Cursor, IResult? Problem) ParsePage(IQueryCollection query)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var filters = Filters(query, errors);
+        var (limit, cursor) = Page(query, errors);
+        return errors.Count > 0 ? (null, 0, null, Problem(errors)) : (filters, limit, cursor, null);
+    }
+
+    private static AuditQuery Filters(IQueryCollection query, Dictionary<string, string[]> errors)
+    {
         var from = Time(query, "from", errors);
         var to = Time(query, "to", errors);
         if (from is not null && to is not null && from >= to)
@@ -92,18 +110,11 @@ internal sealed partial record AuditQuery(
             errors["order"] = ["InvalidOrder"];
         }
 
-        if (errors.Count > 0)
-        {
-            return (null, Problem(errors));
-        }
-
-        return (new AuditQuery(from, to, actorType, actorId, targetId, actions, outcome, ip, order == "oldest"), null);
+        return new AuditQuery(from, to, actorType, actorId, targetId, actions, outcome, ip, order == "oldest");
     }
 
-    /// <summary>The page size and the cursor (the last entry number seen) for the list.</summary>
-    public static (int Limit, long? Cursor, IResult? Problem) Page(IQueryCollection query)
+    private static (int Limit, long? Cursor) Page(IQueryCollection query, Dictionary<string, string[]> errors)
     {
-        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var limit = DefaultLimit;
         if (Single(query, "limit") is { } text && (!int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > MaxLimit))
         {
@@ -123,7 +134,7 @@ internal sealed partial record AuditQuery(
             }
         }
 
-        return errors.Count > 0 ? (0, null, Problem(errors)) : (limit, cursor, null);
+        return (limit, cursor);
     }
 
     /// <summary>

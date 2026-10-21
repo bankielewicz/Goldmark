@@ -235,5 +235,10 @@ test.describe('slice 4 screen', () => {
 
     await page.goto('/audit');
     await expect(page.getByRole('row', { name: /Audit log exported/ }).first()).toBeVisible();
+
+    // An unknown range in the address, even an Object property name, falls back to the default.
+    await page.goto('/audit?range=constructor');
+    await expect(page.getByRole('heading', { level: 1, name: 'Audit log' })).toBeVisible();
+    await expect(page.getByText(/^Showing \d+ of [\d,]+ entr(y|ies)$/)).toBeVisible();
   });
 });

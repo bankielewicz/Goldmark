@@ -78,9 +78,12 @@ internal sealed class AuditLog(DbSession db)
         return (entries, rows.Count > limit ? entries[^1].Id : null);
     }
 
-    /// <summary>Up to <see cref="ExportLimit"/> entries, in the query's order.</summary>
+    /// <summary>
+    /// The entries in the query's order, up to one more than <see cref="ExportLimit"/>: more than the
+    /// limit means too many to export.
+    /// </summary>
     public async Task<IReadOnlyList<AuditEntry>> ExportAsync(AuditQuery query) =>
-        [.. (await db.QueryAsync<Row>(PageSql, Parameters(query, ExportLimit, cursor: null))).Select(Entry)];
+        [.. (await db.QueryAsync<Row>(PageSql, Parameters(query, ExportLimit + 1, cursor: null))).Select(Entry)];
 
     public Task<IReadOnlyList<AuditPerson>> PeopleAsync() => db.QueryAsync<AuditPerson>(PeopleSql);
 

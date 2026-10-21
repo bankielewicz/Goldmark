@@ -38,11 +38,10 @@ internal static class AuditEndpoints
 
     private static async Task<IResult> ListAsync(HttpRequest request, AuditLog log)
     {
-        var (query, problem) = AuditQuery.Parse(request.Query);
-        var (limit, cursor, pageProblem) = AuditQuery.Page(request.Query);
-        if ((problem ?? pageProblem) is { } invalid)
+        var (query, limit, cursor, problem) = AuditQuery.ParsePage(request.Query);
+        if (problem is not null)
         {
-            return invalid;
+            return problem;
         }
 
         var (entries, next) = await log.PageAsync(query!, limit, cursor);
@@ -60,22 +59,38 @@ internal static class AuditEndpoints
             return problem;
         }
 
+        // The count refuses a large export before reading it. Entries written since can still take the
+        // read past the limit, so the read takes one more than the limit and refuses too: an export is
+        // never cut short.
         var count = await log.CountAsync(query!);
         if (count > AuditLog.ExportLimit)
         {
-            return ApiProblems.Problem(StatusCodes.Status422UnprocessableEntity, "export-too-large",
-                "Too many entries to export; narrow the time range or the filters.",
-                new Dictionary<string, object?> { ["entries"] = count, ["limit"] = AuditLog.ExportLimit });
+            return TooLarge(count);
         }
 
         var entries = await db.InTransactionAsync(async () =>
         {
             var exported = await log.ExportAsync(query!);
+            if (exported.Count > AuditLog.ExportLimit)
+            {
+                return null;
+            }
+
             await audit.WriteAsync(AuditActions.Exported, details: new { filters = query!.Describe(), entries = exported.Count });
             return exported;
         });
+        if (entries is null)
+        {
+            return TooLarge(await log.CountAsync(query!));
+        }
+
         request.HttpContext.Response.Headers[EntriesHeader] = entries.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return Results.File(System.Text.Encoding.UTF8.GetBytes(AuditLog.ToCsv(entries)), "text/csv; charset=utf-8",
             $"goldmark-audit-{time.GetUtcNow():yyyyMMdd}.csv");
     }
+
+    private static IResult TooLarge(long count) =>
+        ApiProblems.Problem(StatusCodes.Status422UnprocessableEntity, "export-too-large",
+            "Too many entries to export; narrow the time range or the filters.",
+            new Dictionary<string, object?> { ["entries"] = count, ["limit"] = AuditLog.ExportLimit });
 }

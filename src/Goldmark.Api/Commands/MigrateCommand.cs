@@ -260,7 +260,9 @@ internal static class MigrateCommand
             var before = await ScalarAsync(connection, ApplyRetentionSql, new SqlParameter("@days", System.Data.SqlDbType.Int) { Value = audit.RetentionDays });
             await output.WriteLineAsync(before == audit.RetentionDays
                 ? $"{Name}: audit retention {Describe(audit.RetentionDays)}"
-                : $"{Name}: audit retention changed to {Describe(audit.RetentionDays)}{(before < 0 ? "" : $" (was {Describe(before)})")}");
+                : before < 0
+                    ? $"{Name}: audit retention set to {Describe(audit.RetentionDays)}"
+                    : $"{Name}: audit retention changed to {Describe(audit.RetentionDays)} (was {Describe(before)})");
 
             // 3. The runtime login gets its rights only through goldmark_runtime.
             switch (await ScalarTextAsync(connection, EnsureRuntimeMemberSql, db.User))

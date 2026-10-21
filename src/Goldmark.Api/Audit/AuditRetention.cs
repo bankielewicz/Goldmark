@@ -59,9 +59,9 @@ internal sealed partial class AuditRetentionJob(
                 await Task.Delay(await RunOnceAsync(stoppingToken) ? Interval : RetryInterval, time, stoppingToken);
             }
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (Exception) when (stoppingToken.IsCancellationRequested)
         {
-            // The host is stopping.
+            // The host is stopping; SqlClient can report a purge cancelled by it as a SqlException.
         }
     }
 
@@ -95,6 +95,12 @@ internal sealed partial class AuditRetentionJob(
             LogFailed(logger, ex.Number, RetryInterval.TotalMinutes);
             return false;
         }
+        catch (Exception ex) when (ex is not OperationCanceledException && !cancellationToken.IsCancellationRequested)
+        {
+            // Anything else (a pool timeout, a socket error) must not stop the host either.
+            LogFailedOther(logger, ex.GetType().Name, RetryInterval.TotalMinutes);
+            return false;
+        }
     }
 
     [LoggerMessage(EventId = 4001, Level = LogLevel.Information,
@@ -109,4 +115,7 @@ internal sealed partial class AuditRetentionJob(
 
     [LoggerMessage(EventId = 4004, Level = LogLevel.Warning, Message = "Audit retention: the purge failed (SQL error {SqlErrorNumber}); trying again in {RetryMinutes} minutes")]
     private static partial void LogFailed(ILogger logger, int sqlErrorNumber, double retryMinutes);
+
+    [LoggerMessage(EventId = 4005, Level = LogLevel.Warning, Message = "Audit retention: the purge failed ({ErrorType}); trying again in {RetryMinutes} minutes")]
+    private static partial void LogFailedOther(ILogger logger, string errorType, double retryMinutes);
 }
