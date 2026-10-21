@@ -39,10 +39,16 @@ internal sealed class GoldmarkUser
 
     public DateTime? LastSignInAt { get; set; }
 
+    /// <summary>When an administrator reset the password (DEC-042); the old one is refused until the person chooses a new one.</summary>
+    public DateTime? PasswordResetAt { get; set; }
+
     /// <summary>An invited person who has not redeemed the invitation yet.</summary>
     public bool IsPending => PasswordHash is null;
 
     public bool HasAuthenticator => AuthenticatorKey is not null;
+
+    /// <summary>The password was reset and a new one not yet chosen: the old one no longer signs in.</summary>
+    public bool IsPasswordResetPending => PasswordResetAt is not null;
 
     /// <summary>Locked by an administrator until unlocked, as opposed to an automatic lockout.</summary>
     public bool IsLockedByAdministrator => LockoutEnd == DateTimeOffset.MaxValue;

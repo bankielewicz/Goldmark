@@ -28,7 +28,8 @@ internal sealed partial class UserStore(DbSession db, IPasswordHasher<GoldmarkUs
 
     private const string Columns = """
         Id, UserName, NormalizedUserName, DisplayName, PasswordHash, SecurityStamp, ConcurrencyStamp, LockoutEnd,
-        AccessFailedCount, AuthenticatorKey, AuthenticatorSetUpAt, LastTotpTimeStep, IsDisabled, CreatedAt, CreatedBy, LastSignInAt
+        AccessFailedCount, AuthenticatorKey, AuthenticatorSetUpAt, LastTotpTimeStep, IsDisabled, CreatedAt, CreatedBy, LastSignInAt,
+        PasswordResetAt
         """;
 
     private const string FindByIdSql = "SELECT " + Columns + " FROM cmdb.UserAccount WHERE Id = @id;";
@@ -50,10 +51,10 @@ internal sealed partial class UserStore(DbSession db, IPasswordHasher<GoldmarkUs
         await db.ExecuteAsync("""
             INSERT INTO cmdb.UserAccount (Id, UserName, NormalizedUserName, DisplayName, PasswordHash, SecurityStamp,
                 ConcurrencyStamp, LockoutEnd, AccessFailedCount, AuthenticatorKey, AuthenticatorSetUpAt, LastTotpTimeStep,
-                IsDisabled, CreatedAt, CreatedBy, LastSignInAt)
+                IsDisabled, CreatedAt, CreatedBy, LastSignInAt, PasswordResetAt)
             VALUES (@Id, @UserName, @NormalizedUserName, @DisplayName, @PasswordHash, @SecurityStamp,
                 @ConcurrencyStamp, @LockoutEnd, @AccessFailedCount, @AuthenticatorKey, @AuthenticatorSetUpAt, @LastTotpTimeStep,
-                @IsDisabled, @CreatedAt, @CreatedBy, @LastSignInAt);
+                @IsDisabled, @CreatedAt, @CreatedBy, @LastSignInAt, @PasswordResetAt);
             """, user, cancellationToken);
         return IdentityResult.Success;
     }
@@ -70,7 +71,8 @@ internal sealed partial class UserStore(DbSession db, IPasswordHasher<GoldmarkUs
             SET UserName = @UserName, NormalizedUserName = @NormalizedUserName, DisplayName = @DisplayName,
                 PasswordHash = @PasswordHash, SecurityStamp = @SecurityStamp, LockoutEnd = @LockoutEnd,
                 AccessFailedCount = @AccessFailedCount, AuthenticatorKey = @AuthenticatorKey,
-                AuthenticatorSetUpAt = @AuthenticatorSetUpAt, IsDisabled = @IsDisabled, ConcurrencyStamp = @Next
+                AuthenticatorSetUpAt = @AuthenticatorSetUpAt, IsDisabled = @IsDisabled, PasswordResetAt = @PasswordResetAt,
+                ConcurrencyStamp = @Next
             WHERE Id = @Id AND ConcurrencyStamp = @ConcurrencyStamp;
             """,
             new
@@ -86,6 +88,7 @@ internal sealed partial class UserStore(DbSession db, IPasswordHasher<GoldmarkUs
                 user.AuthenticatorKey,
                 user.AuthenticatorSetUpAt,
                 user.IsDisabled,
+                user.PasswordResetAt,
                 user.ConcurrencyStamp,
                 Next = next,
             },

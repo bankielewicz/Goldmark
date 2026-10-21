@@ -145,7 +145,7 @@ internal static class EnrolmentEndpoints
         }
 
         var code = LinkSecrets.NormalizeCode(request.Code);
-        if (code is null || !LinkSecrets.Matches(link.CodeHash, LinkSecrets.HashCode(request.Token!, code)))
+        if (code is null || !links.CodeMatches(link, request.Token!, code))
         {
             return await db.InTransactionAsync(async () =>
             {
