@@ -217,7 +217,7 @@ test.describe('slice 4 screen', () => {
     await expect(page.getByText(/^Showing \d+ of [\d,]+ entr(y|ies)$/)).toBeVisible();
 
     // This sign-in is the newest entry; its details open by keyboard-reachable button.
-    const first = page.getByRole('button', { name: /^Show details for the entry at/ }).first();
+    const first = page.getByRole('button', { name: /^Show details for entry \d+: Signed in at / }).first();
     await first.click();
     await expect(first).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByText('Entry number')).toBeVisible();
@@ -251,6 +251,12 @@ test.describe('slice 4 screen', () => {
     await page.goto('/audit?range=constructor');
     await expect(page.getByRole('heading', { level: 1, name: 'Audit log' })).toBeVisible();
     await expect(page.getByText(/^Showing \d+ of [\d,]+ entr(y|ies)$/)).toBeVisible();
+
+    // A year the server refuses, as a date field passes through while a year is typed: the field
+    // says so and nothing is requested (no error bar).
+    await page.goto('/audit?range=custom&from=0202-10-01T00:00&to=2026-10-02T00:00');
+    await expect(page.getByText('Use a year from 2000 to 9998.')).toBeVisible();
+    await expect(page.getByText('Couldn’t load the audit log.')).toHaveCount(0);
   });
 
   test('an answer for a replaced list never reaches the new one', async ({ page }) => {

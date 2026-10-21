@@ -85,8 +85,9 @@ public sealed class AuditLogTests
 
         var filters = query.Describe();
         Assert.Equal(["from", "to", "actor", "actions", "outcome", "ip", "order"], filters.Keys);
-        Assert.Null(AuditQuery.None.ActionsJson());
-        Assert.Equal(["order"], AuditQuery.None.Describe().Keys);
+        var none = new AuditQuery(null, null, null, null, null, [], null, null, false);
+        Assert.Null(none.ActionsJson());
+        Assert.Equal(["order"], none.Describe().Keys);
     }
 
     [Theory]
@@ -104,6 +105,7 @@ public sealed class AuditLogTests
     [InlineData("ip", "10.20.%")]
     [InlineData("ip", "10.20.4_")]
     [InlineData("ip", "10.20.4.17' OR 1=1")]
+    [InlineData("ip", "10.20.4.\n")]
     [InlineData("action", "auth.sign-in.failed' OR 1=1")]
     [InlineData("actor", "user")]
     [InlineData("outcome", "failed")]

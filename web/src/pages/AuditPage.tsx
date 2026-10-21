@@ -55,7 +55,7 @@ import { followLink, navigate, useLocation } from '../router';
 import { isAdmin, useSession } from '../session';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
-import { ErrorBar } from '../ui/common';
+import { downloadBlob, ErrorBar } from '../ui/common';
 
 const useStyles = makeStyles({
   filters: { display: 'flex', gap: tokens.spacingHorizontalM, flexWrap: 'wrap', alignItems: 'flex-end' },
@@ -271,17 +271,29 @@ function isDefault(filters: Filters): boolean {
   return pageQuery({ ...filters, oldest: false }) === '';
 }
 
+/**
+ * A custom-range time as the API takes it, or null. The years are the server's (2000 to 9998,
+ * `AuditQuery`): a browser's date field passes through years like 0002 and 0202 while one is typed.
+ */
 function customTime(value: string): string | null {
-  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) ? `${value}:00Z` : null;
+  const match = /^(\d{4})-\d{2}-\d{2}T\d{2}:\d{2}$/.exec(value);
+  const year = Number(match?.[1]);
+  return match && year >= 2000 && year <= 9998 ? `${value}:00Z` : null;
 }
 
-/** The custom range's problem, if any: both ends are needed, and From comes before To. */
+/** The custom range's problem, if any: both ends are needed, in years Goldmark accepts, From before To. */
 function rangeProblem(filters: Filters): string | null {
   if (filters.range !== 'custom') return null;
+  if (!filters.from || !filters.to) return 'Enter both times.';
   const from = customTime(filters.from);
   const to = customTime(filters.to);
-  if (!from || !to) return 'Enter both times.';
+  if (!from || !to) return 'Use a year from 2000 to 9998.';
   return from < to ? null : 'From must be before To.';
+}
+
+/** Any failure as an `ApiError`, so an unexpected one still ends in an error state with Retry. */
+function asApiError(error: unknown): ApiError {
+  return error instanceof ApiError ? error : new ApiError(0, 'unexpected', 'Something went wrong on this page.');
 }
 
 /** The API's query for these filters; preset ranges count back from now. */
@@ -545,7 +557,7 @@ export function AuditPage() {
       setCatalog(catalogResponse.data);
       setPeople(peopleResponse.data.people);
     } catch (error) {
-      if (error instanceof ApiError) setReferenceFailure(error);
+      setReferenceFailure(asApiError(error));
     }
   }, []);
 
@@ -568,7 +580,7 @@ export function AuditPage() {
       const { data } = await api<EntriesPage>('GET', `/api/v1/audit?${query}`);
       if (listRequest.current === request) setPage(data);
     } catch (error) {
-      if (listRequest.current === request && error instanceof ApiError) setFailure(error);
+      if (listRequest.current === request) setFailure(asApiError(error));
     }
   }, [filters]);
 
@@ -603,7 +615,7 @@ export function AuditPage() {
       setPage((shown) => shown && { entries: [...shown.entries, ...data.entries], total: data.total, next: data.next });
       setFocusEntry(data.entries[0]?.id ?? null);
     } catch (error) {
-      if (listRequest.current === request && error instanceof ApiError) setFailure(error);
+      if (listRequest.current === request) setFailure(asApiError(error));
     } finally {
       // Only for this list: a replaced list's continuation must not touch the new one's button.
       if (listRequest.current === request) setLoadingMore(false);
@@ -648,14 +660,7 @@ export function AuditPage() {
       if (abort.signal.aborted) return;
       const entries = Number(headers.get('X-Goldmark-Entries') ?? page?.total ?? 0);
       const fileName = `goldmark-audit-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.csv`;
-      const url = URL.createObjectURL(data);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = fileName;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      downloadBlob(data, fileName);
       setExportState(null);
       dispatchToast(
         <Toast>
@@ -668,8 +673,8 @@ export function AuditPage() {
       if (abort.signal.aborted) return;
       if (error instanceof ApiError && error.code === 'export-too-large') {
         setExportState({ kind: 'too-many', entries: Number(error.body.entries ?? 0) });
-      } else if (error instanceof ApiError) {
-        setExportState({ kind: 'failed', error });
+      } else {
+        setExportState({ kind: 'failed', error: asApiError(error) });
       }
     }
   };
@@ -801,7 +806,7 @@ export function AuditPage() {
                       appearance="subtle"
                       icon={open ? <ChevronDownRegular /> : <ChevronRightRegular />}
                       aria-expanded={open}
-                      aria-label={`Show details for the entry at ${utc.slice(11)}`}
+                      aria-label={`Show details for entry ${entry.id}: ${entry.label} at ${utc.slice(11)}`}
                       onClick={() => toggle(entry.id)}
                     />
                   </TableCell>

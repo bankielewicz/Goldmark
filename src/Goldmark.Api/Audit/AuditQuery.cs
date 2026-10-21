@@ -24,8 +24,6 @@ internal sealed partial record AuditQuery(
     public const int DefaultLimit = 100;
     public const int MaxLimit = 500;
 
-    public static readonly AuditQuery None = new(null, null, null, null, null, [], null, null, false);
-
     /// <summary>The query, or a validation problem naming each bad parameter (never echoing its value).</summary>
     public static (AuditQuery? Query, IResult? Problem) Parse(IQueryCollection query)
     {
@@ -223,7 +221,8 @@ internal sealed partial record AuditQuery(
     private static IResult Problem(Dictionary<string, string[]> errors) =>
         Results.ValidationProblem(errors, title: "Some values are not valid.", extensions: new Dictionary<string, object?> { ["code"] = "validation" });
 
-    [GeneratedRegex("^[0-9A-Fa-f.:]{1,45}$", RegexOptions.CultureInvariant)]
+    // \z, not $: in .NET, $ also matches before a final newline.
+    [GeneratedRegex(@"^[0-9A-Fa-f.:]{1,45}\z", RegexOptions.CultureInvariant)]
     private static partial Regex IpPrefixPattern();
 }
 
