@@ -550,15 +550,19 @@ export function AuditPage() {
   }, []);
 
   const load = useCallback(async () => {
+    // A new list starts, even an empty one for an incomplete custom range: answers to the list it
+    // replaces, first page or "Load more", fail the request-number check and are dropped (Codex, PR #32).
+    const request = ++listRequest.current;
     setFailure(null);
     setExpanded(new Set());
+    setLoadingMore(false);
     if (rangeProblem(filters)) {
+      shownQuery.current = '';
       setPage({ entries: [], total: 0, next: null });
       return;
     }
     setPage(null);
     const query = apiQuery(filters).toString();
-    const request = ++listRequest.current;
     shownQuery.current = query;
     try {
       const { data } = await api<EntriesPage>('GET', `/api/v1/audit?${query}`);
@@ -601,7 +605,8 @@ export function AuditPage() {
     } catch (error) {
       if (listRequest.current === request && error instanceof ApiError) setFailure(error);
     } finally {
-      setLoadingMore(false);
+      // Only for this list: a replaced list's continuation must not touch the new one's button.
+      if (listRequest.current === request) setLoadingMore(false);
     }
   };
 

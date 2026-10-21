@@ -71,15 +71,24 @@ async function expectAccessible(page: Page, what: string) {
   expect(await page.evaluate(() => window.__cspViolations), `${what}: CSP`).toEqual([]);
 }
 
+// The newest time step a sign-in in this run used. The server accepts a step once, and only newer
+// ones after it, so the next sign-in starts after it.
+let lastStep = 0;
+
 async function signIn(page: Page) {
   await page.goto('/sign-in');
   await page.getByRole('textbox', { name: 'Username' }).fill(admin.userName);
   await page.getByRole('textbox', { name: 'Password', exact: true }).fill(admin.password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Two-factor authentication' })).toBeVisible();
-  // The current step, or the next if that code was already used (a code works once).
-  const now = Math.floor(Date.now() / 30000);
-  for (const step of [now, now + 1]) {
+  // The current step or a newer one than the last sign-in used. The server accepts one step either
+  // side of its own, so a step two ahead waits for the next 30-second boundary.
+  const first = Math.max(Math.floor(Date.now() / 30000), lastStep + 1);
+  const wait = (first - 1) * 30000 - Date.now();
+  if (wait > 0) await page.waitForTimeout(wait + 500);
+  // That step, or the next if the setup through the API already used it (a code works once).
+  for (const step of [first, first + 1]) {
+    lastStep = step;
     await page.getByRole('textbox', { name: '6-digit code' }).fill(totp(admin.totpKey, step));
     await page.getByRole('button', { name: 'Verify' }).click();
     const outcome = await Promise.race([
@@ -194,6 +203,8 @@ test.describe('slice 3 screens', () => {
 
 test.describe('slice 4 screen', () => {
   test.use({ reducedMotion: 'reduce', acceptDownloads: true });
+  // A sign-in may wait up to 30 seconds for a TOTP step newer than the previous test's.
+  test.describe.configure({ timeout: 120_000 });
   test.skip(!admin.userName || !admin.password || !admin.totpKey, 'needs GOLDMARK_E2E_ADMIN_* from compose-smoke.sh');
 
   test('the administrator reads, filters and exports the audit log', async ({ page }) => {
@@ -241,4 +252,83 @@ test.describe('slice 4 screen', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Audit log' })).toBeVisible();
     await expect(page.getByText(/^Showing \d+ of [\d,]+ entr(y|ies)$/)).toBeVisible();
   });
+
+  test('an answer for a replaced list never reaches the new one', async ({ page }) => {
+    // Codex, PR #32: list answers are held and fulfilled with sample entries, so the races are exact.
+    await signIn(page);
+    const entry = (id: number, label: string) => ({
+      id,
+      at: '2026-10-20T07:58:12Z',
+      actor: { type: 'System', id: null, userName: null, displayName: null, removed: false },
+      action: 'audit.retention.purged',
+      label,
+      outcome: 'Succeeded',
+      target: null,
+      ip: null,
+      details: null,
+    });
+    const isList = (url: URL) => url.pathname === '/api/v1/audit';
+
+    // 1. A first page still in flight must not replace the empty state of an incomplete custom range.
+    const firstArrived = deferred();
+    const firstHeld = deferred();
+    await page.route(isList, async (route) => {
+      firstArrived.resolve();
+      await firstHeld.promise;
+      await route.fulfill({ json: { entries: [entry(9001, 'Stale entry')], total: 1, next: null } });
+    });
+    await page.goto('/audit');
+    await firstArrived.promise;
+    await page.getByRole('combobox', { name: 'Time range (UTC)' }).click();
+    await page.getByRole('option', { name: 'Custom range…' }).click();
+    await page.getByLabel('From (UTC)').fill('2026-10-01T00:00');
+    await expect(page.getByText('No entries match these filters.')).toBeVisible();
+    const stale = page.waitForResponse((response) => isList(new URL(response.url())));
+    firstHeld.resolve();
+    await stale;
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('row', { name: /Stale entry/ })).toHaveCount(0);
+    await expect(page.getByText('No entries match these filters.')).toBeVisible();
+    await page.unroute(isList);
+
+    // 2. A "Load more" still in flight belongs to the list it continued: the new list's button works.
+    const moreArrived = deferred();
+    const moreHeld = deferred();
+    await page.route(isList, async (route) => {
+      const query = new URL(route.request().url()).searchParams;
+      if (query.has('cursor')) {
+        moreArrived.resolve();
+        await moreHeld.promise;
+        await route.fulfill({ json: { entries: [entry(8001, 'Stale continuation')], total: 2, next: null } });
+      } else if (query.get('outcome') === 'Failed') {
+        await route.fulfill({ json: { entries: [entry(7002, 'New list entry')], total: 2, next: 7002 } });
+      } else {
+        await route.fulfill({ json: { entries: [entry(7001, 'Old list entry')], total: 2, next: 7001 } });
+      }
+    });
+    await page.goto('/audit');
+    await expect(page.getByRole('row', { name: /Old list entry/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Load more' }).click();
+    await moreArrived.promise;
+    await page.getByRole('combobox', { name: 'Outcome' }).click();
+    await page.getByRole('option', { name: 'Failed' }).click();
+    await expect(page.getByRole('row', { name: /New list entry/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Load more' })).toBeEnabled();
+    const continuation = page.waitForResponse((response) => new URL(response.url()).searchParams.has('cursor'));
+    moreHeld.resolve();
+    await continuation;
+    await page.waitForTimeout(500);
+    await expect(page.getByRole('row', { name: /Stale continuation/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Load more' })).toBeEnabled();
+    await page.unroute(isList);
+  });
 });
+
+/** A promise the test resolves itself, to hold a request until the page is in the state under test. */
+function deferred() {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve: () => resolve() };
+}
