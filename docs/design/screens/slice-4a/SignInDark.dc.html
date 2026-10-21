@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark sign-in, dark, old password after a reset</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; padding: 72px 24px 24px; background: #141414; color: #ffffff; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; align-items: center; gap: 24px">
+  <div style="display: flex; align-items: center; gap: 10px">
+    <span aria-hidden="true" style="width: 32px; height: 32px; border-radius: 6px; background: #7d5200; color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700">G</span>
+    <div style="display: flex; flex-direction: column"><span style="font-size: 16px; line-height: 22px; font-weight: 600">Goldmark</span><span style="font-size: 12px; line-height: 16px; color: #adadad">SAMPLE Contoso Infrastructure</span></div>
+  </div>
+  <dc-import name="SignInCard" dark="{{true}}" state="badCredentials" hint-size="400px,560px"></dc-import>
+  <p style="margin: 0; max-width: 400px; font-size: 12px; line-height: 16px; color: #adadad; text-align: center">After a password reset, the old password gets the usual answer: no new state, so the page never says a reset is pending.</p>
+  <div style="flex: 1"></div>
+  <footer style="font-size: 12px; line-height: 16px; color: #adadad">Goldmark 0.4.0 · Sample data (fictional)</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark password reset states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 1880px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Password reset · states</h1>
+    <p style="margin: 0; color: #424242">Link expired, link no longer valid, wrong link code and too many wrong codes use the approved invitation states unchanged. Wrong authenticator codes and recovery codes count toward the lockout, as at sign-in; a lockout doesn't end the link.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" flow="password" step="{{c.step}}" state="{{c.state}}" recovery="{{c.recovery}}" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const card = (label, step, state, recovery) => ({ label, step, state, recovery: !!recovery });
+    return {
+      cards: [
+        card('Step 3 · wrong authenticator code', '3', 'wrongTotp'),
+        card('Step 3 · wrong recovery code', '3', 'wrongRecovery', true),
+        card('Step 3 · locked after 5 failed attempts (the link keeps working)', '3', 'locked'),
+        card('Step 3 · account disabled or link revoked meanwhile', '3', 'invalid'),
+        card('Step 3 · checking (loading)', '3', 'loading'),
+        card('Step 3 · network error, with Retry and Reference ID', '3', 'network')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

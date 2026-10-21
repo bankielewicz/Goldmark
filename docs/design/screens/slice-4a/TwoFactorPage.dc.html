@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark account page with the account menu</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <header style="height: 48px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--st2)">
+    <button type="button" aria-label="Open navigation" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg></button>
+    <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 4px; background: var(--brand); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">G</span>
+    <span style="font-weight: 600; white-space: nowrap">Goldmark</span>
+    <div style="flex: 1"></div>
+    <button type="button" aria-label="Switch theme" aria-pressed="{{darkPressed}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 12.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 9.5z"></path></svg></button>
+    <button type="button" aria-label="Account: Dana Kowalski" aria-haspopup="menu" aria-expanded="{{menuExpanded}}" style="{{accountButton}}"><span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">DK</span><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"></path></svg></button>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <nav aria-label="Main" style="{{navStyle}}">
+      <sc-for list="{{nav}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <sc-if value="{{g.heading}}" hint-placeholder-val="{{true}}"><div style="padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div></sc-if>
+          <a href="#" aria-label="{{g.aria}}" style="{{g.style}}"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{g.icon}}"></path></svg><sc-if value="{{wide}}" hint-placeholder-val="{{true}}"><span>{{g.item}}</span></sc-if></a>
+        </div>
+      </sc-for>
+    </nav>
+
+    <main style="flex: 1; min-width: 0; padding: {{pad}}px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span>Account</span><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">Two-factor authentication</span></nav>
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">Two-factor authentication</h1>
+      <section style="max-width: 760px; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap"><h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Two-factor authentication is on</h2><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--gnbd); background: var(--gnbg); color: var(--gnfg); font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg>On</span></div>
+        <dl style="margin: 0; display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 8px 16px">
+          <dt style="color: var(--fg3)">Authenticator app</dt><dd style="margin: 0">Set up on 2026-10-01</dd>
+          <dt style="color: var(--fg3)">Recovery codes</dt><dd style="margin: 0">7 of 10 left</dd>
+        </dl>
+        <p style="margin: 0; font-size: 12px; line-height: 16px; color: var(--fg3)">Two-factor authentication is required for every account and can't be turned off.</p>
+      </section>
+      <div style="max-width: 760px; display: grid; grid-template-columns: {{actionColumns}}; gap: 16px">
+        <section style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Recovery codes</h2>
+          <p style="margin: 0; color: var(--fg2)">Make a new set if you've used some or think they were seen. The old codes stop working.</p>
+          <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Generate new recovery codes</button>
+        </section>
+        <section style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start">
+          <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">Authenticator app</h2>
+          <p style="margin: 0; color: var(--fg2)">Moving to a new phone? Set up the new app here; the old one stops working.</p>
+          <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Set up a new authenticator</button>
+        </section>
+      </div>
+    </main>
+
+    <sc-if value="{{accountMenu}}" hint-placeholder-val="{{false}}">
+      <div role="menu" aria-label="Account" style="position: absolute; top: 4px; right: 12px; width: 260px; padding: 4px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+        <div style="padding: 8px 10px; display: flex; flex-direction: column; border-bottom: 1px solid var(--st2); margin-bottom: 4px"><b>Dana Kowalski</b><span style="font-family: Consolas, 'Courier New', monospace; font-size: 12px; line-height: 16px; color: var(--fg3)">dana</span></div>
+        <a role="menuitem" href="#" aria-haspopup="dialog" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none; background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px">Change password…</a>
+        <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Two-factor authentication</a>
+        <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">{{themeItem}}</a>
+        <label role="menuitemcheckbox" aria-checked="false" style="height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 4px">Compact density<span aria-hidden="true" style="width: 32px; height: 16px; border-radius: 8px; border: 1px solid var(--stacc); box-sizing: border-box; position: relative"><span style="position: absolute; left: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--fg2)"></span></span></label>
+        <div role="separator" style="height: 1px; margin: 4px 0; background: var(--st2)"></div>
+        <a role="menuitem" href="#" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; color: var(--fg1); text-decoration: none">Sign out</a>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{hasDialog}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div style="position: absolute; left: 50%; top: 48px; width: 480px; margin-left: -240px">
+        <dc-import name="ChangePasswordDialog" dark="{{dark}}" state="{{state}}" hint-size="480px,600px"></dc-import>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{toast}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="position: absolute; right: 16px; bottom: 16px; width: 360px; box-sizing: border-box; padding: 12px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; gap: 8px; align-items: flex-start"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--gnfg)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><span style="flex: 1">Password changed. You're signed out on your other devices.</span></div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"dialog":{"editor":"boolean","default":false},"state":{"editor":"enum","options":["none","wrongCurrent","ruleErrors","loading","locked","network"],"default":"none"},"accountMenu":{"editor":"boolean","default":false},"toast":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--fo:#ffffff;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 900;
+    const menu = this.props.accountMenu ?? false;
+    const toast = this.props.toast ?? false;
+    const wide = width >= 1100;
+    const item = (label, heading, name, icon) => ({
+      label, heading: heading && wide, item: name, icon, aria: wide ? null : name,
+      style: 'display: flex; align-items: center; gap: 10px; height: 40px; box-sizing: border-box; padding: 0 ' + (wide ? '12px' : '0') + '; justify-content: ' + (wide ? 'flex-start' : 'center') + '; border-radius: 4px; text-decoration: none; color: var(--fg2)'
+    });
+    // After the dialog closes, focus is back on the account button (the Toast board shows it).
+    const focusAccount = menu || toast;
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      dark,
+      darkPressed: dark ? 'true' : 'false',
+      wide,
+      pad: width >= 1280 ? 32 : 24,
+      actionColumns: wide ? 'repeat(2, minmax(0, 1fr))' : 'minmax(0, 1fr)',
+      navStyle: 'flex: none; width: ' + (wide ? 260 : 48) + 'px; box-sizing: border-box; padding: 8px ' + (wide ? '8px' : '4px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: 2px',
+      nav: [
+        item('Overview', true, 'Dashboard', 'M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z'),
+        item('Administration', true, 'Users & roles', 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5'),
+        item('Administration', false, 'Audit log', 'M5 2.5h7l3 3v12H5zM12 2.5v3h3M7.5 9h5M7.5 12h5M7.5 15h3')
+      ],
+      accountMenu: menu,
+      menuExpanded: menu ? 'true' : 'false',
+      accountButton: 'height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; color: var(--fg2); ' + (focusAccount ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: 0' : 'background: transparent'),
+      themeItem: dark ? 'Switch to light theme' : 'Switch to dark theme',
+      hasDialog: this.props.dialog ?? false,
+      state: this.props.state ?? 'none',
+      toast
+    };
+  }
+}
+</script>
+</body>
+</html>

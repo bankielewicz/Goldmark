@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark users and roles page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <header style="height: 48px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--st2)">
+    <button type="button" aria-label="Open navigation" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg></button>
+    <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 4px; background: var(--brand); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">G</span>
+    <span style="font-weight: 600; white-space: nowrap">Goldmark</span>
+    <div style="flex: 1"></div>
+    <button type="button" aria-label="Switch theme" aria-pressed="{{darkPressed}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 12.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 9.5z"></path></svg></button>
+    <button type="button" aria-label="Account: {{me.name}}" aria-haspopup="menu" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">{{me.initials}}</span><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"></path></svg></button>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <nav aria-label="Main" style="{{navStyle}}">
+      <sc-for list="{{nav}}" as="g" hint-placeholder-count="3">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <sc-if value="{{g.heading}}" hint-placeholder-val="{{true}}"><div style="padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div></sc-if>
+          <a href="#" aria-current="{{g.current}}" aria-label="{{g.aria}}" style="{{g.style}}"><span style="{{g.bar}}"></span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{g.icon}}"></path></svg><sc-if value="{{labels}}" hint-placeholder-val="{{true}}"><span>{{g.item}}</span></sc-if></a>
+        </div>
+      </sc-for>
+    </nav>
+
+    <main style="flex: 1; min-width: 0; position: relative; padding: {{pad}}px; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span style="color: var(--fg2)">Administration</span><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">Users &amp; roles</span></nav>
+      <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+        <h1 style="margin: 0; flex: 1; font-size: 24px; line-height: 32px; font-weight: 600">Users &amp; roles</h1>
+        <div role="toolbar" aria-label="Page actions" style="display: flex; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Export CSV</button>
+          <button type="button" style="height: 32px; padding: 0 12px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Add user</button>
+        </div>
+      </div>
+      <sc-if value="{{approvals.show}}" hint-placeholder-val="{{false}}">
+        <div role="status" style="height: 40px; box-sizing: border-box; flex: none; display: flex; gap: 8px; align-items: center; padding: 0 8px 0 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 4.5V8l2.5 1.5"></path></svg><span style="flex: 1">{{approvals.text}}</span><button type="button" style="height: 28px; padding: 0 8px; border: none; border-radius: 4px; background: transparent; color: var(--blink); font: inherit; font-weight: 600">Show them</button></div>
+      </sc-if>
+      <div role="toolbar" aria-label="Filters" style="display: flex; gap: 8px; flex-wrap: wrap">
+        <label style="display: flex; align-items: center; gap: 6px; width: 260px; height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg3)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input aria-label="Filter by name or username" placeholder="Filter by name or username" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></label>
+        <button type="button" aria-haspopup="listbox" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">Role: All <span aria-hidden="true">⌄</span></button>
+        <button type="button" aria-haspopup="listbox" style="height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">Account: All <span aria-hidden="true">⌄</span></button>
+      </div>
+      <div style="flex: 1; min-height: 0; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: auto">
+        <table style="width: 100%; min-width: 900px; border-collapse: collapse">
+          <thead>
+            <tr style="text-align: left">
+              <th scope="col" aria-sort="ascending" style="height: 44px; padding: 0 8px 0 16px; font-weight: 600; border-bottom: 1px solid var(--st1)">Name <span aria-hidden="true">↑</span></th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Username</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Roles</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Two-factor</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Account</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Last sign-in (UTC)</th>
+              <th scope="col" style="width: 44px; border-bottom: 1px solid var(--st1)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{users}}" as="u" hint-placeholder-count="7">
+              <tr style="{{u.rowStyle}}">
+                <td style="height: 44px; padding: 0 8px 0 16px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 8px"><span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 50%; background: var(--inbg); color: var(--fg2); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600">{{u.initials}}</span>{{u.name}}<sc-if value="{{u.you}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; color: var(--fg3)">(you)</span></sc-if></span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); font-family: Consolas, 'Courier New', monospace">{{u.username}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; gap: 4px; flex-wrap: wrap"><sc-for list="{{u.roles}}" as="r" hint-placeholder-count="1"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{r}}</span></sc-for></span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{u.mfaStyle}}"><sc-if value="{{u.mfaOn}}" hint-placeholder-val="{{true}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg></sc-if>{{u.mfa}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="{{u.stateStyle}}"><sc-if value="{{u.locked}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4.5 7.5h7v6h-7zM5.5 7.5V5.5a2.5 2.5 0 0 1 5 0v2"></path></svg></sc-if>{{u.state}}</span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); color: var(--fg2)">{{u.last}}</td>
+                <td style="padding: 0 6px; border-bottom: 1px solid var(--st2)"><button type="button" aria-label="Actions for {{u.name}}" aria-haspopup="menu" aria-expanded="{{u.menuOpen}}" style="{{u.menuButton}}">⋯</button></td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--fg3)"><span aria-live="polite">{{count}}</span><span>Sample data (fictional)</span></div>
+
+      <sc-if value="{{menu.show}}" hint-placeholder-val="{{false}}">
+        <div role="menu" aria-label="Actions for {{menu.name}}" style="position: absolute; right: 48px; top: {{menu.top}}px; width: 220px; padding: 4px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+          <sc-for list="{{menu.items}}" as="m" hint-placeholder-count="5">
+            <sc-if value="{{m.divider}}" hint-placeholder-val="{{false}}"><div role="separator" style="height: 1px; margin: 4px 0; background: var(--st2)"></div></sc-if>
+            <a role="menuitem" href="#" aria-disabled="{{m.ariaDisabled}}" style="{{m.style}}">{{m.label}}</a>
+          </sc-for>
+        </div>
+        <sc-if value="{{menu.tip}}" hint-placeholder-val="{{false}}">
+          <div role="tooltip" style="position: absolute; right: 276px; top: {{menu.tipTop}}px; width: 220px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">{{menu.tipText}}</div>
+        </sc-if>
+      </sc-if>
+    </main>
+
+    <sc-if value="{{inlinePanel}}" hint-placeholder-val="{{false}}">
+      <aside aria-labelledby="panel-title" style="width: 400px; flex: none; box-sizing: border-box; border-left: 1px solid var(--st2); background: var(--bg1); display: flex; flex-direction: column">
+        <dc-import name="UsersPanel" panel="{{panelKind}}" dark="{{dark}}" height="{{panelHeight}}" hint-size="400px,{{panelHeight}}px"></dc-import>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{overlayPanel}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <aside role="dialog" aria-modal="true" aria-labelledby="panel-title" style="position: absolute; top: 0; right: 0; bottom: 0; width: 400px; box-sizing: border-box; background: var(--bg1); box-shadow: var(--sh64); display: flex; flex-direction: column">
+        <dc-import name="UsersPanel" panel="{{panelKind}}" dark="{{dark}}" height="{{panelHeight}}" hint-size="400px,{{panelHeight}}px"></dc-import>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{dialog.show}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="ud-title" aria-describedby="ud-body" style="position: absolute; left: 50%; top: 120px; width: 480px; margin-left: -240px; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="ud-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">{{dialog.title}}</h2>
+        <div id="ud-body" style="display: flex; flex-direction: column; gap: 12px">
+          <sc-for list="{{dialog.paras}}" as="p" hint-placeholder-count="2"><p style="margin: 0">{{p}}</p></sc-for>
+        </div>
+        <sc-if value="{{dialog.roles.show}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap"><span style="color: var(--fg2)">Roles they get:</span><sc-for list="{{dialog.roles.list}}" as="r" hint-placeholder-count="1"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{r}}</span></sc-for></div>
+        </sc-if>
+        <sc-if value="{{dialog.box.show}}" hint-placeholder-val="{{false}}">
+          <div style="position: relative">
+            <label style="{{dialog.box.labelStyle}}"><input type="checkbox" checked="{{dialog.box.checked}}" disabled="{{dialog.box.disabled}}" aria-describedby="{{dialog.box.describedBy}}" style="width: 16px; height: 16px; margin-top: 2px; accent-color: var(--cbrand)">{{dialog.box.label}}</label>
+            <sc-if value="{{dialog.box.tip}}" hint-placeholder-val="{{false}}">
+              <div id="ud-box-tip" role="tooltip" style="position: absolute; left: 24px; top: 40px; width: 260px; padding: 6px 8px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh8); font-size: 12px; line-height: 16px">Remove Admin first; add it again after their first sign-in.</div>
+            </sc-if>
+          </div>
+        </sc-if>
+        <div style="{{dialog.footer}}">
+          <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600; outline: 2px solid var(--fo); outline-offset: 1px">Cancel</button>
+          <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">{{dialog.button}}</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"panel":{"editor":"enum","options":["none","menu","menuSelf","states","pwConfirm","pwConfirmBoth","pwResult","pwTfResult","adminTarget","inviteRequest","inviteSingle","awaiting","approverMenu","requesterMenu","approve","approveCode","decline"],"default":"none"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--orfg:#e9835e;--orbg:#411200;--orbd:#da3b01;--infg:#adadad;--inbg:#0a0a0a;--inbd:#525252;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 900;
+    const panel = this.props.panel ?? 'none';
+    const wide = width >= 1100;
+    const badge = (k) => 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; font-weight: 600; white-space: nowrap';
+    const plain = 'font-size: 14px; color: var(--fg1)';
+    const navItem = (label, heading, item, icon, current) => ({
+      label, heading: heading && wide, item, icon, aria: wide ? null : item,
+      current: current ? 'page' : null,
+      style: 'position: relative; display: flex; align-items: center; gap: 10px; height: 40px; box-sizing: border-box; padding: 0 ' + (wide ? '12px' : '0') + '; justify-content: ' + (wide ? 'flex-start' : 'center') + '; border-radius: 4px; text-decoration: none; ' + (current ? 'background: var(--bbg2); color: var(--fg1); font-weight: 600' : 'color: var(--fg2)'),
+      bar: current ? 'position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--bfg1)' : 'display: none'
+    });
+
+    // Who is looking: Dana asks; Morgan, the other Admin, approves.
+    const morganViews = ['awaiting', 'approverMenu', 'approve', 'approveCode', 'decline'];
+    const viewer = morganViews.includes(panel) ? 'morgan' : 'dana';
+    const awaitingInvite = 'Invitation awaiting approval · asked by Dana Kowalski';
+    const awaitingReset = 'Password reset awaiting approval · asked by Dana Kowalski';
+
+    // [initials, name, username, roles, two-factor on, account, account style, last sign-in, locked]
+    const P = {
+      alex: ['AM', 'Alex Moreau', 'alex', ['Editor'], true, 'Active · password reset link expired', plain, '2026-10-17 09:30', false],
+      dana: ['DK', 'Dana Kowalski', 'dana', ['Admin'], true, 'Active', plain, '2026-10-21 08:12', false],
+      ingrid: ['IB', 'Ingrid Berg', 'ingrid', ['Auditor'], true, 'Locked until 14:17', badge('or'), '2026-10-20 13:58', true],
+      jordan: ['JP', 'Jordan Park', 'jordan', ['Viewer'], false, 'Active · password reset link expires in 23 h', plain, '2026-10-19 11:05', false],
+      morgan: ['MO', 'Morgan Okafor', 'morgan', ['Admin'], true, 'Active', plain, '2026-10-21 07:55', false],
+      pat: ['PL', 'Pat Lee', 'pat', ['Viewer'], true, 'Disabled', badge('in'), '2026-09-02 14:55', false],
+      riley: ['RC', 'Riley Chen', 'riley', ['Viewer'], false, 'Invitation pending · expires in 20 h', badge('in'), 'Never', false],
+      sam: ['SR', 'Sam Rivera', 'sam', ['Editor', 'Auditor'], true, 'Active', plain, '2026-10-19 17:40', false],
+      taylor: ['TN', 'Taylor Ng', 'taylor', ['Editor'], false, 'Invitation expired', badge('in'), 'Never', false]
+    };
+    const set = (key, account, style, twoFactor) => {
+      P[key] = P[key].slice();
+      P[key][5] = account;
+      if (style) P[key][6] = style;
+      if (twoFactor !== undefined) P[key][4] = twoFactor;
+    };
+    let order = ['dana', 'ingrid', 'morgan', 'pat', 'riley', 'sam', 'taylor'];
+    if (panel === 'states') {
+      order = ['alex', 'dana', 'ingrid', 'jordan', 'morgan', 'pat', 'riley', 'sam'];
+      set('ingrid', 'Active · two-factor reset link expires in 6 h', plain, false);
+      set('sam', 'Active · password reset link expires in 20 h');
+      set('riley', awaitingInvite);
+    } else if (panel === 'pwResult') {
+      set('sam', 'Active · password reset link expires in 24 h');
+    } else if (panel === 'pwTfResult') {
+      set('sam', awaitingReset, badge('in'));
+    } else if (panel === 'inviteRequest') {
+      set('riley', awaitingInvite);
+    } else if (panel === 'inviteSingle') {
+      order = ['dana', 'ingrid', 'pat', 'riley', 'sam', 'taylor'];
+      set('riley', 'Invitation pending · expires in 24 h');
+    } else if (panel === 'approveCode') {
+      set('riley', 'Invitation pending · expires in 24 h');
+      set('sam', awaitingReset, badge('in'));
+    } else if (['awaiting', 'approverMenu', 'requesterMenu', 'approve', 'decline'].includes(panel)) {
+      set('riley', awaitingInvite);
+      set('sam', awaitingReset, badge('in'));
+    }
+
+    const requests = ['awaiting', 'approverMenu', 'approve', 'decline'].includes(panel) ? 2 : panel === 'approveCode' ? 1 : 0;
+    const barShift = requests > 0 ? 56 : 0;
+    const menuOn = { menu: 'sam', menuSelf: 'dana', states: 'pat', approverMenu: 'riley', requesterMenu: 'riley' }[panel] || null;
+    const highlight = {
+      pwConfirm: 'sam', pwConfirmBoth: 'sam', pwResult: 'sam', pwTfResult: 'sam', adminTarget: 'morgan',
+      inviteRequest: 'riley', inviteSingle: 'riley', approve: 'riley', approveCode: 'riley', decline: 'riley'
+    }[panel] || null;
+    const users = order.map((key) => {
+      const [initials, name, username, roles, mfaOn, state, stateStyle, last, locked] = P[key];
+      const open = menuOn === key;
+      return {
+        initials, name, username, roles, locked, last, state, stateStyle, mfaOn,
+        you: key === viewer,
+        mfa: mfaOn ? 'Enrolled' : 'Not enrolled',
+        mfaStyle: badge(mfaOn ? 'gn' : 'in'),
+        rowStyle: highlight === key ? 'background: var(--bbg2)' : '',
+        menuOpen: open ? 'true' : 'false',
+        menuButton: 'width: 32px; height: 32px; border: none; border-radius: 4px; color: var(--fg2); font-size: 18px; line-height: 1; ' + (open ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : 'background: transparent')
+      };
+    });
+
+    const itemStyle = (state) => 'height: 32px; display: flex; align-items: center; padding: 0 10px; border-radius: 4px; text-decoration: none; ' + (state === 'off' ? 'color: var(--fgdis)' : state === 'hover' ? 'color: var(--fg1); background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : 'color: var(--fg1)');
+    const it = (label, state, divider) => ({ label, divider: !!divider, ariaDisabled: state === 'off' ? 'true' : null, style: itemStyle(state) });
+    // tipAt: the item's offset from the menu's top (4 px padding, 32 px items, 9 px divider).
+    const menus = {
+      menu: { name: 'Sam Rivera', items: [it('Edit roles…'), it('Lock…'), it('Disable…'), it('Reset password…', 'hover', true), it('Reset two-factor…')] },
+      menuSelf: { name: 'Dana Kowalski', items: [it('Edit roles…'), it('Lock…', 'off'), it('Disable…', 'off'), it('Reset password…', 'off', true), it('Reset two-factor…', 'off')], tipAt: 109, tipText: 'You can’t reset your own password here. Use Change password in your account menu.' },
+      states: { name: 'Pat Lee', items: [it('Edit roles…'), it('Lock…'), it('Enable…'), it('Reset password…', 'off', true), it('Reset two-factor…')], tipAt: 109, tipText: 'Enable the account first. A disabled account can’t use the link.' },
+      approverMenu: { name: 'Riley Chen', items: [it('Approve…', 'hover'), it('Decline…')] },
+      requesterMenu: { name: 'Riley Chen', items: [it('Approve…', 'off'), it('Cancel request…')], tipAt: 4, tipText: 'Another Admin approves requests you make.' }
+    };
+    const mm = menus[panel];
+    // Rows start 209 px below the top of main (padding, breadcrumb, header, filters, table header), plus the
+    // approvals bar when it shows; each row is 44 px.
+    const menuTop = mm ? 209 + barShift + 44 * (order.indexOf(menuOn) + 1) : 0;
+
+    const dialogs = {
+      pwConfirm: {
+        title: 'Reset the password for Sam Rivera?',
+        paras: ['This signs Sam out everywhere, and their current password stops working now.', 'Next you get a link and a code. Sam needs both, and their authenticator app, to choose a new password before the link expires. Their two-factor and roles stay.'],
+        box: { label: 'Also reset two-factor (Sam lost their authenticator)', checked: false, disabled: false }, button: 'Reset password'
+      },
+      pwConfirmBoth: {
+        title: 'Reset the password for Sam Rivera?',
+        paras: ['Another Admin must approve this. When they do, Sam is signed out everywhere, their current password stops working, and their authenticator and recovery codes are removed.', 'You get the link now; the approving Admin gets the code. Sam needs both to choose a new password and set up two-factor again. Their roles stay.'],
+        box: { label: 'Also reset two-factor (Sam lost their authenticator)', checked: true, disabled: false }, button: 'Ask for approval'
+      },
+      adminTarget: {
+        title: 'Reset the password for Morgan Okafor?',
+        paras: ['This signs Morgan out everywhere, and their current password stops working now.', 'Next you get a link and a code. Morgan needs both, and their authenticator app, to choose a new password before the link expires. Their two-factor and roles stay.'],
+        box: { label: 'Also reset two-factor (Morgan lost their authenticator)', checked: false, disabled: true, tip: true }, button: 'Reset password'
+      },
+      approve: {
+        title: 'Approve the invitation for Riley Chen?',
+        paras: ['Dana Kowalski asked for this at 14:02 UTC and has the link. You get the code and tell Riley by phone or in person.', 'Check that you’re talking to Riley before you do.'],
+        roles: ['Viewer'], button: 'Approve and show the code'
+      },
+      decline: {
+        title: 'Decline the invitation for Riley Chen?',
+        paras: ['The link stops working and Dana Kowalski sees that you declined.'],
+        button: 'Decline'
+      }
+    };
+    const d = dialogs[panel];
+    const boxLabel = (box) => 'display: flex; align-items: flex-start; gap: 8px; padding: 8px 0; color: ' + (box.disabled ? 'var(--fgdis)' : 'var(--fg1)');
+    const panelKinds = { pwResult: 'pwResult', pwTfResult: 'pwTfResult', inviteRequest: 'inviteRequest', inviteSingle: 'inviteSingle', approveCode: 'approverCode' };
+    const panelKind = panelKinds[panel] || null;
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      dark,
+      darkPressed: dark ? 'true' : 'false',
+      me: viewer === 'morgan' ? { name: 'Morgan Okafor', initials: 'MO' } : { name: 'Dana Kowalski', initials: 'DK' },
+      labels: wide,
+      pad: width >= 1280 ? 32 : 24,
+      navStyle: 'flex: none; width: ' + (wide ? 260 : 48) + 'px; box-sizing: border-box; padding: 8px ' + (wide ? '8px' : '4px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: 2px',
+      nav: [
+        navItem('Overview', true, 'Dashboard', 'M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z', false),
+        navItem('Administration', true, 'Users & roles', 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5', true),
+        navItem('Administration', false, 'Audit log', 'M5 2.5h7l3 3v12H5zM12 2.5v3h3M7.5 9h5M7.5 12h5M7.5 15h3', false)
+      ],
+      approvals: requests > 0
+        ? { show: true, text: requests === 1 ? '1 request needs another Admin’s approval.' : requests + ' requests need another Admin’s approval.' }
+        : { show: false },
+      users,
+      count: users.length + ' people',
+      menu: mm
+        ? { show: true, name: mm.name, top: menuTop, items: mm.items, tip: mm.tipAt !== undefined, tipText: mm.tipText || '', tipTop: menuTop + (mm.tipAt || 0) }
+        : { show: false, items: [], tip: false },
+      panelKind,
+      inlinePanel: !!panelKind && wide,
+      overlayPanel: !!panelKind && !wide,
+      dialog: d
+        ? {
+            show: true,
+            title: d.title,
+            paras: d.paras,
+            roles: d.roles ? { show: true, list: d.roles } : { show: false, list: [] },
+            box: d.box
+              ? { show: true, label: d.box.label, checked: d.box.checked, disabled: d.box.disabled, tip: !!d.box.tip, describedBy: d.box.tip ? 'ud-box-tip' : null, labelStyle: boxLabel(d.box) }
+              : { show: false },
+            footer: 'display: flex; justify-content: flex-end; gap: 8px; padding-top: ' + (d.box && d.box.tip ? '44px' : '4px'),
+            button: d.button
+          }
+        : { show: false, paras: [] },
+      panelHeight: height - 48
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slice 4a screens: components, decisions and notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1600px; box-sizing: border-box; padding: 48px; background: #ffffff; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 28px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Slice 4a screens · components, decisions and notes</h1>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Fluent v9 components</h2>
+    <dl style="margin: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 8px 24px">
+      <sc-for list="{{components}}" as="c" hint-placeholder-count="7">
+        <dt style="font-weight: 600">{{c.k}}</dt>
+        <dd style="margin: 0; color: #424242">{{c.v}}</dd>
+      </sc-for>
+    </dl>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the design system</h2>
+    <p style="margin: 0; color: #424242">None. Every colour, type step, radius and shadow is a token from the approved system (DEC-039); the screens reuse the slice-3 components.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Decided by the owner (2026-10-21)</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{decided}}" as="d" hint-placeholder-count="6"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Settled on these boards, open to veto</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{settled}}" as="s" hint-placeholder-count="10"><li>{{s}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Notes for the build</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{build}}" as="b" hint-placeholder-count="6"><li>{{b}}</li></sc-for>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1600}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      components: [
+        { k: '17 Users & roles · reset', v: 'Menu with MenuItem (disabled, aria-disabled + Tooltip) · Dialog modalType="alert" · Checkbox (disabled for an Admin, with Tooltip) · InlineDrawer / OverlayDrawer below 1100 px · MessageBar (warning: shown once) · Badge tint informative' },
+        { k: '17 Users & roles · dual control', v: 'MessageBar warning with an action Button (requests waiting) · Menu (Approve…, Decline…, Cancel request…) · Dialog modalType="alert" with role Badges · InlineDrawer with the code (Text font="monospace") · MessageBar info (only one Admin) · Toast' },
+        { k: '1b Link page', v: 'Card · progress as an ordered list (aria-current="step"; three or four steps) · Field · Input (new-password, one-time-code) · Link (recovery-code switch) · Button · MessageBar (warning: locked; info: not active yet, recovery code used; success: done)' },
+        { k: '1 Sign-in', v: 'Card · Caption1 in secondary text for "Forgot your password?"' },
+        { k: 'Account menu', v: 'Menu · MenuItem "Change password…" (opens a Dialog) · MenuItemCheckbox (Compact density)' },
+        { k: 'Change password', v: 'Dialog · Field · Input type="password" with a show/hide Button (contentAfter, aria-pressed) · the live rules list · MessageBar · Spinner in the Button · Toast' },
+        { k: '16 Audit log', v: 'Unchanged; new catalog entries and details only' }
+      ],
+      decided: [
+        'Reset password… on the row menu, with "Also reset two-factor" for a person who lost their authenticator too.',
+        'The combined reset is never offered for an Admin: "Remove Admin first; add it again after their first sign-in."',
+        'The password-only reset proves the person’s authenticator (or a recovery code) before the new password takes effect, then signs them in (ASVS 5.0 6.4.3).',
+        'The old password stops working at once; the person is signed out everywhere.',
+        'Change password for signed-in people (ASVS 5.0 6.2.2, 6.2.3).',
+        'Dual control for invitations and the combined reset: the asking Admin gets the link, another Admin approves and gets the code. With no other Admin, the asker gets both (audited).'
+      ],
+      settled: [
+        'The shell on these boards is the sparse nav as built (no search box, no As-of control; Audit log added in slice 4), not the slice-3 boards’ shell.',
+        'The approving Admin in the samples is Morgan Okafor; the invitee is Riley Chen.',
+        'With dual control, a combined reset changes nothing on the account until another Admin approves; then the person is signed out and their password and authenticator stop working.',
+        'The request waits up to 24 hours for approval; the link’s 24 hours count from the approval.',
+        'Issuing a reset ends a lockout from failed attempts; an administrator’s lock stays until Unlock.',
+        'Sign-in caption: "Forgot your password? Ask an administrator to reset it." (text, not a link: there is no self-service reset).',
+        'The Account column names the kind of reset: "two-factor reset link" or "password reset link".',
+        'A lockout in the Change password dialog keeps the person signed in, as on the two-factor page.',
+        'The greeting on the link page appears from step 2, after the code (as built since slice 3).',
+        'Recovery codes show in the backend’s format, XXXXX-XXXXX.',
+        'The audit action codes on the boards are samples; the backend names them.'
+      ],
+      build: [
+        'Both password flows open /password-reset#t=…; the token stays in the URL fragment, so it never reaches a server log.',
+        'With dual control the code is made at approval, when the server no longer has the token: its hash is keyed from the Data Protection key ring, and the code is never stored (DEC-042).',
+        'Before approval a link has no code, so nothing counts as a wrong try; the page says the link isn’t active yet.',
+        'recover-admin (server command, no screen) always issues the password-and-two-factor link for an enabled Admin and prints the path and code to the operator’s terminal only; audited as System, "a command run on the server".',
+        'Every new action writes an audit row; every new endpoint declares an access policy and joins the enumeration test (rule 7).',
+        'Sample data (fictional), *.corp.example.'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

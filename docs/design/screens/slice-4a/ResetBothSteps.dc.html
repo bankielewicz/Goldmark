@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark password and two-factor reset steps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 1880px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Password and two-factor reset · steps</h1>
+    <p style="margin: 0; color: #424242">The invitation's steps with the reset's wording: confirm code → new password → new authenticator → recovery codes. The link works only after another Admin has approved it (or at once when there is only one Admin).</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" dark="{{c.dark}}" flow="passwordTwoFactor" step="{{c.step}}" state="none" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":1880}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const card = (label, step, dark) => ({ label, step, dark: !!dark });
+    return {
+      cards: [
+        card('Step 1 · confirm code, four steps', '1'),
+        card('Dark · step 1', '1', true),
+        card('Step 2 · choose a new password', '2'),
+        card('Step 3 · set up two-factor', '3'),
+        card('Step 4 · recovery codes', '4'),
+        card('Done · signed in', 'done')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
