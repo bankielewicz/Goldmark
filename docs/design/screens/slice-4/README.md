@@ -32,5 +32,14 @@ Changes from the handoff, all on the Notes board:
 
 As for slice 3, the shell's search box and As-of control stay absent until slices 5 and 7.
 
+Where the built UI (`web/src/pages/AuditPage.tsx`) differs from the boards, and why:
+
+- **The actor-type badge is Fluent's `Badge appearance="tint" color="subtle"`.** That is the look the
+  boards draw, the same as the role badges on screen 17; the Notes board's "outline" was a slip in
+  naming the component.
+- **The custom time range uses the browser's own date-and-time fields**, read as UTC, because Fluent v9's
+  core has no date picker; a date-picker package would be a new dependency.
+- **"Show this person in Users & roles" opens screen 17 filtered by that username** (`/users?q=`).
+
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.

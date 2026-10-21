@@ -49,6 +49,9 @@ internal static class AuditEndpoints
         return Results.Ok(new { entries, total = await log.CountAsync(query!), next });
     }
 
+    /// <summary>The number of entries in an export, for the page's confirmation (the CSV has one row per entry).</summary>
+    public const string EntriesHeader = "X-Goldmark-Entries";
+
     private static async Task<IResult> ExportAsync(HttpRequest request, AuditLog log, DbSession db, AuditTrail audit, TimeProvider time)
     {
         var (query, problem) = AuditQuery.Parse(request.Query);
@@ -71,6 +74,7 @@ internal static class AuditEndpoints
             await audit.WriteAsync(AuditActions.Exported, details: new { filters = query!.Describe(), entries = exported.Count });
             return exported;
         });
+        request.HttpContext.Response.Headers[EntriesHeader] = entries.Count.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return Results.File(System.Text.Encoding.UTF8.GetBytes(AuditLog.ToCsv(entries)), "text/csv; charset=utf-8",
             $"goldmark-audit-{time.GetUtcNow():yyyyMMdd}.csv");
     }

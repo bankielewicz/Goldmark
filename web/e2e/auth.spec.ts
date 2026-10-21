@@ -191,3 +191,49 @@ test.describe('slice 3 screens', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
   });
 });
+
+test.describe('slice 4 screen', () => {
+  test.use({ reducedMotion: 'reduce', acceptDownloads: true });
+  test.skip(!admin.userName || !admin.password || !admin.totpKey, 'needs GOLDMARK_E2E_ADMIN_* from compose-smoke.sh');
+
+  test('the administrator reads, filters and exports the audit log', async ({ page }) => {
+    await recordViolations(page);
+    await signIn(page);
+
+    await page.getByRole('link', { name: 'Audit log' }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Audit log' })).toBeVisible();
+    await expect(page.getByText(/The audit log is append-only/)).toBeVisible();
+    await expect(page.getByText(/^Showing \d+ of [\d,]+ entr(y|ies)$/)).toBeVisible();
+
+    // This sign-in is the newest entry; its details open by keyboard-reachable button.
+    const first = page.getByRole('button', { name: /^Show details for the entry at/ }).first();
+    await first.click();
+    await expect(first).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByText('Entry number')).toBeVisible();
+    await expect(page.getByText('auth.sign-in.succeeded').first()).toBeVisible();
+    await expectAccessible(page, 'audit log');
+
+    // Filters live in the page address.
+    await page.getByRole('combobox', { name: 'Action' }).click();
+    // A multiselect Dropdown lists its options as menu item checkboxes.
+    await page.getByRole('menuitemcheckbox', { name: 'Signed in', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/action=auth\.sign-in\.succeeded/);
+    await expect(page.getByRole('button', { name: 'Clear filters' })).toBeVisible();
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await expectAccessible(page, 'audit log, filtered (dark)');
+
+    // An export downloads the CSV and is recorded in the log itself.
+    await page.getByRole('button', { name: 'Export CSV…' }).click();
+    await expect(page.getByRole('dialog', { name: /^Export [\d,]+ entr(y|ies)\?$/ })).toBeVisible();
+    await expect(page.getByText('The export is recorded in the audit log.')).toBeVisible();
+    await expectAccessible(page, 'export dialog (dark)');
+    const download = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    expect((await download).suggestedFilename()).toMatch(/^goldmark-audit-\d{8}\.csv$/);
+    await expect(page.getByText(/^Exported [\d,]+ entr(y|ies)$/)).toBeVisible();
+
+    await page.goto('/audit');
+    await expect(page.getByRole('row', { name: /Audit log exported/ }).first()).toBeVisible();
+  });
+});

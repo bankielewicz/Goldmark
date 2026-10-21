@@ -73,7 +73,7 @@ state-changing endpoint 400 without the anti-forgery token.
 | `GET /api/v1/audit` | AuditReader | Screen 16: audit entries, newest first, filtered by time, actor, person affected, action, outcome and IP prefix, paged by entry number; every filter is validated and passed as a parameter. Reading writes nothing |
 | `GET /api/v1/audit/catalog` | AuditReader | The actions with their group, label and outcome, and the retention period `migrate` set (DEC-041) |
 | `GET /api/v1/audit/people` | AuditReader | Only the people who appear in the log as actor or person affected (for the filters), not the user directory, which only an Admin sees |
-| `POST /api/v1/audit/export` | AuditReader | CSV of the filtered entries, at most 100,000 (422 `export-too-large` beyond, with nothing recorded); writes an `audit.exported` entry with the filters and the count in the same transaction; formula cells neutralized |
+| `POST /api/v1/audit/export` | AuditReader | CSV of the filtered entries, at most 100,000 (422 `export-too-large` beyond, with nothing recorded); writes an `audit.exported` entry with the filters and the count in the same transaction; the count is also in the `X-Goldmark-Entries` header; formula cells neutralized |
 
 If a richer health report is ever needed (component status, versions), it goes on a separate
 endpoint that requires the Admin role.

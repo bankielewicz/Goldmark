@@ -36,6 +36,11 @@ export function isAdmin(user: SessionUser | null): boolean {
   return user?.roles.includes('Admin') ?? false;
 }
 
+/** Admins and Auditors read the audit log (US-04, US-07; the API's AuditReader policy). */
+export function canReadAudit(user: SessionUser | null): boolean {
+  return isAdmin(user) || (user?.roles.includes('Auditor') ?? false);
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<ApiError | null>(null);

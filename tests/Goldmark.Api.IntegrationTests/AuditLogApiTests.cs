@@ -117,6 +117,7 @@ public sealed class AuditLogApiTests(SqlServerFixture sql)
 
         Assert.True(csv.Status == HttpStatusCode.OK, csv.ToString());
         Assert.StartsWith("text/csv", csv.ContentType, StringComparison.Ordinal);
+        Assert.Equal("1", csv.Headers[AuditEndpoints.EntriesHeader]);
         var lines = csv.Text.Split("\r\n", StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal("Time (UTC),Actor type,Actor,Action,Action code,Person affected,IP address,Outcome,Details", lines[0]);
         var row = Assert.Single(lines.Skip(1));

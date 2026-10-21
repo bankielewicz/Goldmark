@@ -1521,3 +1521,25 @@ integration tests (SQL Server 2025), Compose smoke 94 unique checks with Playwri
 | 20 | Rule 7: every UI function is available through `/api/v1` | **Met** | The SPA calls only `/api/v1` (`web/src/api.ts`); `docs/security/endpoint-access.md` lists every endpoint |
 | 21 | NFR-A11Y-1/3: WCAG 2.2 AA, axe checks in Playwright | **Met for slice 3's screens** | `web/e2e/auth.spec.ts`: sign-in, setup, invalid link, dashboard, Users & roles, add-user panel, two-factor page, light and dark; `web/tests/contrast.test.mjs` (51 pairs) |
 | 22 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4 acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine, 2026-10-21: 371 in-process
+tests, 208 integration tests (SQL Server 2025), web 48 policy tests and 56 dist and contrast tests,
+lint, typecheck and format; Compose smoke 97 unique checks with Playwright 8/8 inside (Chrome).
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | US-07: see who changed what, when and from where, across sign-ins and admin actions | **Met** for what Goldmark records today (CI, relationship and token events come with their slices, rule 7) | Screen 16 (`AuditPage.tsx`) on `GET /api/v1/audit`; names resolved, removed accounts shown by their recorded user name; `AuditLogApiTests` |
+| 2 | US-07: append-only, no UPDATE/DELETE permission for the app login | **Met**, with the purge as DEC-041 amends DEC-025 | `DENY UPDATE, DELETE` unchanged; `RuntimePermissionTests` (direct DELETE, dynamic SQL, ALTER PROCEDURE, the retention row all refused); `AuditRetentionTests`: the procedure deletes only past the period, never under 365 days |
+| 3 | US-07: filterable | **Met** | Time, actor, action, person affected, IP prefix, outcome; every value validated and passed as a parameter (NFR-SEC-3); `AuditLogTests`, `AuditLogApiTests`; filters in the page address |
+| 4 | US-07: CSV export | **Met** | `POST /api/v1/audit/export`, at most 100,000 entries, formula cells neutralized, audited in the same transaction (DEC-041 item 3); integration and Playwright |
+| 5 | NFR-LOG-3: separate from operational logs, retained at least one year, configurable | **Met** | `cmdb.AuditLog`, not stdout; `Goldmark:Audit:RetentionDays` (365 or more, or 0), refused below with exit 2; `AuditRetentionJob` daily; smoke: the runtime login can't change the period and can run the purge |
+| 6 | HANDOFF slice 4: a retention path that is not the runtime login | **Met as amended** (owner, DEC-041 item 1) | The runtime login starts the bounded procedure; the period lives where only `migrate` writes; `migrate` and the principal audit refuse any other grant (`MigrateRefusalTests`, `PrincipalAuditTests`) |
+| 7 | HANDOFF slice 4: audit events for slice 3's sign-ins and admin actions | **Met** (written since slice 3) | `AuditCatalog` labels every action; a test checks that every `AuditActions` constant is in it |
+| 8 | Rule 7: new mutations write audit records, tested | **Met** | `audit.exported`, `audit.retention.purged`, `audit.retention.changed`, each in the change's own transaction; integration tests |
+| 9 | Rule 7: every UI function is available through `/api/v1` | **Met** | The page calls only `/api/v1/audit*`; `docs/security/endpoint-access.md` |
+| 10 | Rule 7 / M6: every new endpoint declares a policy and is in the enumeration test | **Met** | `AuditReader` (Admin or Auditor); `EndpointInventoryTests`; `AccountAndAccessTests` (403 for a Viewer, 401 password-only, 400 without anti-forgery) |
+| 11 | Rule 3: design handoff before UI code | **Met** | Handoff 2026-10-20; boards approved 2026-10-21 (DEC-041 item 5, `docs/design/screens/slice-4/`) |
+| 12 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for screen 16** | `web/e2e/auth.spec.ts` "slice 4 screen": the page, an expanded entry, a filter and the export dialog, light and dark |
+| 13 | CI green | **Not executed** | Runs on the PR |

@@ -40,10 +40,13 @@ export class ApiError extends Error {
 export interface ApiResponse<T> {
   data: T;
   etag: string | null;
+  headers: Headers;
 }
 
 interface RequestOptions {
   ifMatch?: string;
+  /** The answer is a file (a CSV export): `data` is its Blob. Errors are still Problem Details. */
+  file?: boolean;
 }
 
 type UnauthorizedListener = () => void;
@@ -89,6 +92,10 @@ async function send<T>(
     throw new ApiError(0, 'network', 'Couldn’t reach Goldmark.');
   }
 
+  if (response.ok && options.file) {
+    return { data: (await response.blob()) as T, etag: response.headers.get('ETag'), headers: response.headers };
+  }
+
   const text = await response.text();
   let json: unknown = null;
   if (text.length > 0 && (response.headers.get('Content-Type') ?? '').includes('json')) {
@@ -106,7 +113,7 @@ async function send<T>(
     throw new ApiError(response.status, code, title, problem);
   }
 
-  return { data: json as T, etag: response.headers.get('ETag') };
+  return { data: json as T, etag: response.headers.get('ETag'), headers: response.headers };
 }
 
 function isAntiforgeryRefusal(error: unknown): boolean {
