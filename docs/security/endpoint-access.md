@@ -65,6 +65,7 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/account/two-factor/recovery-codes` | SignedIn | Needs the password and a current code; returns 10 new codes once |
 | `POST /api/v1/account/two-factor/authenticator` | SignedIn | Needs the password and a current code or a recovery code; starts the new-authenticator enrolment |
 | `POST /api/v1/account/two-factor/authenticator/verify` | SignedIn | Installs the new authenticator; other sessions end, this one continues |
+| `POST /api/v1/account/password` | SignedIn | Own password change (DEC-042; ASVS 5.0 6.2.2, 6.2.3): the current password (failures count toward lockout) and a new one under the policy; other sessions end, this one continues |
 | `GET /api/v1/users`, `GET /api/v1/users/{id}`, `GET /api/v1/users/export` | Admin | Screen 17's list, one person (with ETag), CSV export (formula cells neutralized) |
 | `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once. Under dual control (another Admin could approve, DEC-042) the link only: the approver gets the code |
 | `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in, and not while a password-and-two-factor reset is open; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |

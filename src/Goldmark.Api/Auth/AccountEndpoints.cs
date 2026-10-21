@@ -12,7 +12,7 @@ namespace Goldmark.Api.Auth;
 /// The signed-in person's own two-factor page (DEC-038 item 9): status, new recovery codes, and a new
 /// authenticator. Each action is confirmed with the password and a current code (a recovery code is
 /// accepted for a new authenticator, when the old phone is gone); wrong answers count toward lockout,
-/// as at sign-in. Two-factor cannot be turned off.
+/// as at sign-in. Two-factor cannot be turned off. Also the person's own password change (DEC-042).
 /// </summary>
 internal static class AccountEndpoints
 {
@@ -39,10 +39,67 @@ internal static class AccountEndpoints
             .RequireRateLimiting(RateLimits.Credentials)
             .WithDisplayName("Account: verify the new authenticator");
 
+        api.MapPost("/account/password", ChangePasswordAsync)
+            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireRateLimiting(RateLimits.Credentials)
+            .WithDisplayName("Account: change password");
+
         return account;
     }
 
     internal sealed record ConfirmRequest(string? Password, string? Code, string? RecoveryCode);
+
+    internal sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
+
+    /// <summary>
+    /// The person's own password change (ASVS 5.0 6.2.2 and 6.2.3; DEC-042): the current password (a wrong
+    /// one counts toward lockout, as at sign-in) and a new one that meets the policy. Every other session
+    /// ends; this one continues with the new security stamp, in the same transaction.
+    /// </summary>
+    private static async Task<IResult> ChangePasswordAsync(ChangePasswordRequest request, HttpContext context, GoldmarkUserManager users,
+        DbSession db, AuditTrail audit, IOptions<AuthOptions> options)
+    {
+        var user = await SignedInUserAsync(context, users);
+        if (context.User.FindFirstValue(GoldmarkClaims.Session) is not { } session)
+        {
+            return ApiProblems.Problem(StatusCodes.Status401Unauthorized, "session-expired", "Your session expired. Sign in again.");
+        }
+
+        return await db.InTransactionAsync(async () =>
+        {
+            if (await users.IsLockedOutAsync(user))
+            {
+                return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
+                    $"This account is locked for {options.Value.LockoutMinutes} minutes after {options.Value.LockoutThreshold} failed attempts.");
+            }
+
+            if (!await users.CheckPasswordAsync(user, request.CurrentPassword ?? ""))
+            {
+                return await AuthEndpoints.FailAsync(users, audit, user, "password", options.Value,
+                    () => ApiProblems.Field("currentPassword", "PasswordIncorrect"), AuditActor.User(user.Id), AuditActions.ConfirmationFailed);
+            }
+
+            var newPassword = request.NewPassword ?? "";
+            var policy = await users.CheckPasswordPolicyAsync(user, newPassword);
+            if (!policy.Succeeded)
+            {
+                return ApiProblems.Validation(policy);
+            }
+
+            await users.ResetAccessFailedCountAsync(user);
+            if (!(await users.SetPasswordHashAsync(user, users.PasswordHasher.HashPassword(user, newPassword))).Succeeded)
+            {
+                throw new InvalidOperationException("The account changed meanwhile.");
+            }
+
+            var ended = await SessionTicketStore.EndOthersAsync(db, user.Id, session);
+            await audit.WriteAsync(AuditActions.PasswordChanged, "User", user.Id, new { otherSessionsEnded = ended });
+            // The new security stamp goes into this session's stored ticket in the same transaction, so it stays valid.
+            await context.SignInAsync(AuthSchemes.Session, AuthSetup.StoredSessionPrincipal(user),
+                new AuthenticationProperties { IsPersistent = false, AllowRefresh = false });
+            return Results.Ok(new { otherSessionsEnded = ended });
+        });
+    }
 
     private static async Task<IResult> StatusAsync(HttpContext context, GoldmarkUserManager users)
     {

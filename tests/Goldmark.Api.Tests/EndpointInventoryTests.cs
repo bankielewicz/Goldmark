@@ -53,6 +53,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Account: new recovery codes"] = ("POST", "/api/v1/account/two-factor/recovery-codes", AccessPolicy.SignedIn),
             ["Account: start a new authenticator"] = ("POST", "/api/v1/account/two-factor/authenticator", AccessPolicy.SignedIn),
             ["Account: verify the new authenticator"] = ("POST", "/api/v1/account/two-factor/authenticator/verify", AccessPolicy.SignedIn),
+            ["Account: change password"] = ("POST", "/api/v1/account/password", AccessPolicy.SignedIn),
 
             ["Users: list"] = ("GET", "/api/v1/users", AccessPolicy.Admin),
             ["Users: export CSV"] = ("GET", "/api/v1/users/export", AccessPolicy.Admin),
