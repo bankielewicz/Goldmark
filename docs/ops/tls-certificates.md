@@ -103,7 +103,9 @@ followed by intermediate CA certificates; Goldmark sends the chain to clients.
 
 With your own certificate, HSTS turns on automatically; read
 [hsts.md](hsts.md) first. To renew, replace the files and restart the app
-container. An expired certificate is logged as an error at start-up.
+container. An expired certificate is logged as an error at start-up. The Windows
+service reads copies the installer made: see
+[windows-service.md](windows-service.md#renewing-certificates).
 
 ## The SQL Server certificate
 

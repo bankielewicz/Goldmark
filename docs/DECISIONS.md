@@ -1642,6 +1642,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        `group-database-access`, which an operator can accept by ID like guest access; a user for the account itself
        stays `database-access`, never acceptable. The check runs at every start, so a later grant to a broad group
        stops Goldmark at its next restart until it is accepted or reverted.
+     - The installer copies an operator's HTTPS certificate and key into `tls\`, and the pinned SQL Server certificate
+       into `settings\` (Codex on #39: the originals may sit where others can read them). Owner, 2026-10-22: "A. Copy,
+       document renewal (Recommended)": a renewal replaces the copies (installer again with the paths, or copy and
+       restart from a renewal script); `docs/ops/windows-service.md` "Renewing certificates".
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**

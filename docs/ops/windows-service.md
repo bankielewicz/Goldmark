@@ -132,6 +132,26 @@ stops the service, replaces the program, migrates the database as you, and start
 isn't asked for again (Windows keeps it); give `-ServiceAccountPassword` only when it changed. Changing the
 service account isn't supported yet (#41): the installer refuses before it changes anything.
 
+## Renewing certificates
+
+The installer copies your HTTPS certificate and key to `tls\operator.crt` and `tls\operator.key`, and the pinned
+SQL Server certificate to `settings\sql-server.crt`; the service reads only those copies, and only at start (#5).
+Renewing the originals changes nothing until the copies are replaced (owner, 2026-10-22, DEC-043 item 11):
+
+- **By hand:** run `.\Install-Goldmark.ps1` again with `-CertificatePath` and `-KeyPath` (or `-SqlCertificatePath`)
+  naming the new files. A run without them keeps the old copies.
+- **From a renewal tool's script**, which may run as SYSTEM and can't set up the database: copy the new files over
+  the copies, then restart.
+
+  ```powershell
+  Copy-Item C:\certs\cert.pem "$env:ProgramData\Goldmark\tls\operator.crt" -Force
+  Copy-Item C:\certs\key.pem "$env:ProgramData\Goldmark\tls\operator.key" -Force
+  Restart-Service Goldmark
+  ```
+
+  A pinned SQL Server certificate goes to `settings\sql-server.crt` the same way. Pin the new one before SQL Server
+  starts using it, or Goldmark can't connect until it is replaced.
+
 ## Rotating database passwords
 
 Only a SQL login has one (`-Authentication Sql`); under Windows authentication there is nothing to rotate, and a
