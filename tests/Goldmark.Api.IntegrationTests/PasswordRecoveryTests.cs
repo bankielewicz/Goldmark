@@ -215,6 +215,17 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         Assert.True(AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true }))
             .Body.GetProperty("link").GetProperty("awaitingApproval").GetBoolean());
         Assert.Equal(1, Waiting(AuthScenario.Ok(await morgan.GetAsync("/api/v1/users/approvals"))));
+
+        // An invitation's request that ended is asked again the same way ("Ask again…" sends a new link).
+        var created = await pat.PostAsync("/api/v1/users", new { displayName = "Riley Chen", userName = "riley.chen", roles = EditorOnly });
+        var rileyId = created.Body.GetProperty("user").GetProperty("id").GetGuid();
+        await sql.AsAdminAsync(scenario.Installation.Database,
+            $"UPDATE cmdb.UserInvitation SET ExpiresAt = DATEADD(MINUTE, -1, SYSUTCDATETIME()) WHERE UserId = '{rileyId:D}' AND RevokedAt IS NULL;");
+        Assert.Equal(1, Waiting(AuthScenario.Ok(await morgan.GetAsync("/api/v1/users/approvals"))));
+        var again = AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{rileyId:D}/invitation")).Body.GetProperty("link");
+        Assert.True(again.GetProperty("awaitingApproval").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, again.GetProperty("code").ValueKind);
+        Assert.Equal(2, Waiting(AuthScenario.Ok(await morgan.GetAsync("/api/v1/users/approvals"))));
     }
 
     [Fact]
