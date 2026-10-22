@@ -45,8 +45,8 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/auth/sign-in` | Sign-in step 1: the password is the credential | Only "incorrect", "locked" or "next: two-factor". Unknown, disabled and not-yet-set-up accounts answer exactly like a wrong password, including the lockout; a person locked by an administrator, or whose two-factor was reset, learns it only with the right password |
 | `GET /api/v1/setup` | The SPA must know whether first-run setup is needed | `required`, `complete` or `unknown` |
 | `POST /api/v1/setup/token` | First-run setup step 1: the setup token from the log is the credential | Whether the token is this process's; nothing once setup is complete (409) |
-| `POST /api/v1/links/check` | An invitation or reset link's token is the credential | Whether the link is valid, expired or no longer valid (used and revoked look the same), its purpose and the tries left |
-| `POST /api/v1/links/redeem` | The token plus its separate code are the credential; 5 wrong codes revoke the link | With the right code: the person's user name, display name and roles |
+| `POST /api/v1/links/check` | An invitation or reset link's token is the credential | Whether the link is valid, expired, no longer valid (used and revoked look the same) or not active yet (awaiting another administrator's approval, DEC-042), its purpose and the tries left |
+| `POST /api/v1/links/redeem` | The token plus its separate code are the credential; 5 wrong codes revoke the link | With the right code: the person's user name, display name and roles. A link awaiting approval has no code: 409 `link-pending`, and nothing counts as a wrong try |
 
 ## Requiring a policy
 
@@ -56,20 +56,26 @@ state-changing endpoint 400 without the anti-forgery token.
 | `POST /api/v1/auth/sign-out` | SignedIn | Ends the session on the server |
 | `GET /api/v1/enrolment` | Enrolment | The enrolment's next step and whose it is |
 | `POST /api/v1/enrolment/account` | Enrolment | Setup only: the first administrator's user name, display name and password |
-| `POST /api/v1/enrolment/password` | Enrolment | Invitation: a new password; reset: the current one (failures count toward lockout) |
+| `POST /api/v1/enrolment/password` | Enrolment | Invitation and password resets: a new password; two-factor reset: the current one (failures count toward lockout) |
 | `POST /api/v1/enrolment/authenticator` | Enrolment | A new authenticator key, kept in the enrolment until a code proves it |
 | `GET /api/v1/enrolment/authenticator.svg` | Enrolment | The QR code, SVG, `no-store`, only to the person enrolling |
-| `POST /api/v1/enrolment/complete` | Enrolment | Verifies a code and commits the setup, invitation or reset in one transaction; returns 10 recovery codes once and signs in (a new session) |
+| `POST /api/v1/enrolment/complete` | Enrolment | Verifies a code and commits the setup, invitation or reset in one transaction; returns 10 recovery codes once and signs in (a new session). Refused for a password reset, which keeps its authenticator |
+| `POST /api/v1/enrolment/confirm` | Enrolment | Password reset only (DEC-042): a code from the person's own authenticator, or a recovery code (failures count toward lockout), then the new password, the used link and a new session commit together |
 | `GET /api/v1/account/two-factor` | SignedIn | Own status: set up since, recovery codes remaining |
 | `POST /api/v1/account/two-factor/recovery-codes` | SignedIn | Needs the password and a current code; returns 10 new codes once |
 | `POST /api/v1/account/two-factor/authenticator` | SignedIn | Needs the password and a current code or a recovery code; starts the new-authenticator enrolment |
 | `POST /api/v1/account/two-factor/authenticator/verify` | SignedIn | Installs the new authenticator; other sessions end, this one continues |
+| `POST /api/v1/account/password` | SignedIn | Own password change (DEC-042; ASVS 5.0 6.2.2, 6.2.3): the current password (failures count toward lockout) and a new one under the policy; other sessions end, this one continues |
 | `GET /api/v1/users`, `GET /api/v1/users/{id}`, `GET /api/v1/users/export` | Admin | Screen 17's list, one person (with ETag), CSV export (formula cells neutralized) |
-| `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once |
-| `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |
+| `POST /api/v1/users` | Admin | Creates an invitation (Editor, Viewer or Auditor only); the link token and code are shown once. Under dual control (another Admin could approve, DEC-042) the link only: the approver gets the code |
+| `PUT /api/v1/users/{id}/roles` | Admin | Needs If-Match (428 without, 412 when stale); Admin only for someone who has signed in, and not while a password-and-two-factor reset is open; nobody removes their own Admin; the last enabled Admin keeps it; Collector is refused |
 | `POST /api/v1/users/{id}/lock`, `/unlock`, `/disable`, `/enable` | Admin | Not on yourself; the last enabled Admin cannot be disabled; lock and disable end the person's sessions |
-| `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself; clears the authenticator and recovery codes, ends sessions, issues a link and code |
-| `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working); revoke, which removes the unused account |
+| `POST /api/v1/users/{id}/two-factor-reset` | Admin | Not on yourself, nor while a password reset or a request waits; clears the authenticator and recovery codes, ends sessions, issues a link and code |
+| `POST /api/v1/users/{id}/invitation`, `DELETE /api/v1/users/{id}/invitation` | Admin | A new invitation link (the old one stops working; under dual control a new request); revoke, which removes the unused account |
+| `POST /api/v1/users/{id}/password-reset` | Admin | DEC-042. Not on yourself, nor on a disabled or not-yet-set-up account, nor while a request waits. Password only: the old password stops working, sessions end, a link and code are shown once. With `alsoTwoFactor` (never for an Admin): under dual control a request (link only) that changes nothing until approved; with no other Admin, the password and authenticator are cleared and the link and code shown |
+| `POST /api/v1/users/{id}/request/approve` | Admin | Another Admin approves a waiting request (not their own, not about themselves): the code is made and shown once; a password-and-two-factor reset takes effect then |
+| `POST /api/v1/users/{id}/request/decline`, `/request/cancel` | Admin | Decline (another Admin) or cancel (the one who asked) a waiting request; an invitation's unused account is removed |
+| `GET /api/v1/users/approvals` | Admin | How many requests the caller could approve now, for the nav count |
 | `GET /api/v1/audit` | AuditReader | Screen 16: audit entries, newest first, filtered by time, actor, person affected, action, outcome and IP prefix, paged by entry number; every filter is validated and passed as a parameter. Reading writes nothing |
 | `GET /api/v1/audit/catalog` | AuditReader | The actions with their group, label and outcome, and the retention period `migrate` set (DEC-041) |
 | `GET /api/v1/audit/people` | AuditReader | Only the people who appear in the log as actor or person affected (for the filters), not the user directory, which only an Admin sees |

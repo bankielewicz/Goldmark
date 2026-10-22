@@ -5,14 +5,14 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-20:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22) and **3 (PR #24)**
-are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+**As of 2026-10-21:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24) and **4
+(PR #32)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
-screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). **Slice 4**
-(audit log, approved 2026-10-20) is in progress on `slice/04-audit-log`: the owner's decisions are
-DEC-041, the backend is built, and screen 16 is approved (`docs/design/screens/slice-4/`). Notes in
-§3. The owner placed the Windows
+screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
+the audit log and screen 16 (DEC-041). **Slice 4a** (password recovery, #25, approved 2026-10-21) is
+in progress on `slice/04a-password-recovery`: the owner's decisions are DEC-042, the backend is
+built, and its screens are approved (`docs/design/screens/slice-4a/`). The owner placed the Windows
 service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
 the first distribution, not the target deployment (DEC-030, rule 8).
 
@@ -30,8 +30,9 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2b | **done** (PR #17) | `slice/02b-existing-sql` | US-01 "use an existing SQL Server" (`docker-compose.external-sql.yml`); audit of adopted/shared-instance principals (#2, #3, #4), run whenever a principal is adopted or revalidated, in **both** bundled and external deployments; Mode `Existing` for logins a DBA creates; no `sa` as administrator outside the bundled stack; #15. DEC-030…DEC-033 | US-01 existing-SQL criteria; #2–#4 and #15 closed | — |
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | **done** (PR #24) | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); merged by PR #24 after two review rounds | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
-| 4 | **in progress** (backend and screen 16 built, DEC-041; PR #32, review round 2, the last) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
-| 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3 and 4 store (sign-in keys, audit log output). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
+| 4 | **done** (PR #32, merged as `ecd7796`, DEC-041) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
+| 4a | **in progress** (approved 2026-10-21, DEC-042; built, screens approved, PR #38) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
+| 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
@@ -52,8 +53,10 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 21 | pending | `slice/21-csv-import` | CSV import wizard + quickstart sample dataset | US-25; M5 | 13 |
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
 | 23 | pending | `slice/23-data-quality-history` | Data quality + global change history, dashboard data-quality counts and recent-changes feed | Screens 11, 15 and the dashboard additions | 3 (counts, recent changes), 11, 15 |
-| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6; relative-link check (#12) | US-60, NFR-SEC-7; #5, #6 and the #12 link check closed | — |
+| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6; relative-link check (#12); trusted reverse proxies (#31, DEC-042 item 1); #33 | US-60, NFR-SEC-7; #5, #6, #31 and the #12 link check closed | — |
 | 25 | pending (P1) | `slice/25-oidc` | OIDC sign-in (Entra) + group→role mapping | US-05 | 1 (Microsoft sign-in), 17 (group mappings) |
+| 25b | pending (P1) | `slice/25b-windows-sign-in` | Windows sign-in for domain users on the Windows service: Kerberos only, Goldmark's code still asked, accounts from mapped AD groups, self-service linking (#36, the owner's decisions there) | #36's acceptance criteria | 1, 1b, 17, account page |
+| 25c | pending (P1) | `slice/25c-ldap-sign-in` | LDAP sign-in: a directory password over LDAPS, Active Directory and LDAPv3, every distribution, the #36 account model (#37) | #37's acceptance criteria | 1, 17, account page |
 | 26 | pending (P1) | `slice/26-ethernet-neighbors` | Ethernet neighbor links (ID-CDP) + NetworkDevice placeholders, non-switch neighbor summary | US-36; M3 | 11 (CDP summary) |
 | 27 | pending (P1) | `slice/27-fc-hba-rdm` | FC HBA inventory + RDM→VM links | US-37 | — |
 | 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52; NFR-SEC-6 pseudonymized export (keyed HMAC, as in the readiness probe) | 7 (saved scenarios), 19 (replay) |
@@ -127,8 +130,43 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4** (`slice/04-audit-log`, approved 2026-10-20) is **in progress**. The owner's decisions
-(DEC-041):
+Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **in progress**: built
+and tested locally, PR #38. The decisions are DEC-042, with the owner's words.
+
+**What it adds:**
+- **Reset password** on Users & roles: the old password stops working at once and every session ends;
+  the person gets the link and separate code and confirms the new password with their own
+  authenticator or a recovery code. "Also reset two-factor" runs the invitation's steps instead,
+  never for an Admin.
+- **Dual control** for invitations and the password-and-two-factor reset: the Admin who asks gets the
+  link, another enabled Admin approves and gets the code (made then, hashed under a per-link key
+  encrypted with Data Protection, scheme 2). With no other Admin the one who asks gets both,
+  audited "only-admin". Waiting requests show as a count on the nav item, a MessageBar for
+  approvers, and the requester's time left; an ended request can be asked again.
+- **Change password** from the account menu (`POST /api/v1/account/password`); other sessions end.
+- **The recovery setting** in place of an operator command: `GOLDMARK_RECOVER_ADMIN` and the
+  operator's `GOLDMARK_RECOVER_CODE`, then a restart, log a one-hour link's path (event 3004; never
+  the code). Every start ends any unused recovery link. The README prescribes an
+  emergency Admin not tied to a person.
+- Migration **0005**: `UserAccount.PasswordResetAt`, link purposes `PasswordReset` and
+  `CombinedReset`, nullable `CreatedBy` (only a recovery link has none), approval and code-key columns.
+
+**For the slices that follow:**
+- Never null `PasswordHash` to reset: `IsPending` is `PasswordHash is null`. Use `PasswordResetAt`.
+- A request that ended unapproved stays an open row (`RevokedAt` null): check `links.IsExpired` or
+  `WaitingRequestAsync`, or a guard blocks for good.
+- Under dual control `POST /api/v1/users` returns no code, so `AuthScenario.InviteAsync` only works
+  with one Admin.
+- Dual control counts an approver only if they can sign in (no unfinished password reset, an
+  authenticator, not locked by an administrator; the automatic lockout never counts). With none, a
+  request is refused with the reasons (owner, 2026-10-22, "C. Refuse, say why").
+- The SPA must not poll: every request counts as activity, so a timer would keep an idle session
+  alive past `SessionIdleMinutes`.
+- Stopping a background integration run leaves its SQL Server container (no reaper, DEC-027):
+  `docker ps -a --filter label=org.testcontainers=true`.
+
+Slice **4** (`slice/04-audit-log`, approved 2026-10-20) is **merged** (PR #32). The owner's
+decisions (DEC-041):
 - old entries are deleted by a daily backend job through a bounded procedure (A);
 - retention has a floor of 365 days (A);
 - exports are audited, reads are not (A).
@@ -288,10 +326,12 @@ And for slice 24:
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
 | #33 audit log: the people list and the count scan the whole log; abandoned requests aren't cancelled (DEC-041 items 6, 7) | 24 |
-| #34 db-init: the audit retention period is range-checked only by `migrate`, after `bootstrap-db` has run (DEC-041 item 7) | owner: place in the plan |
+| #34 db-init: the audit retention period is range-checked only by `migrate`, after `bootstrap-db` has run (DEC-041 item 7) | 4b (DEC-042 item 1) |
 | #35 audit API: `from` and `to` are parsed leniently, not as strict ISO 8601 (DEC-041 item 7) | 8 |
-| #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | owner: place in the plan |
-| #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | owner: place in the plan |
+| #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | 24 (DEC-042 item 1) |
+| #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | 4a (DEC-042), PR #38; the command became the recovery setting (item 6) |
+| #36 Windows sign-in (Kerberos) for domain users on the Windows service | 25b (owner, 2026-10-21; DEC-042 item 12) |
+| #37 LDAP sign-in: a directory password over LDAPS, every distribution | 25c (owner, 2026-10-21; DEC-042 item 12) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |

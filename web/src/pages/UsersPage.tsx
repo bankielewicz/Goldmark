@@ -30,6 +30,7 @@ import {
   MenuPopover,
   MenuTrigger,
   MessageBar,
+  MessageBarActions,
   MessageBarBody,
   Option,
   OverlayDrawer,
@@ -65,7 +66,7 @@ import { formatRemaining, formatUtc, formatUtcTime, initialsOf } from '../format
 import { usePreferences } from '../preferences';
 import { useLocation } from '../router';
 import { useSession } from '../session';
-import { useWide } from '../shell/AppShell';
+import { approvalsChanged, useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
 import { CopyButton, ErrorBar } from '../ui/common';
 import { describeFieldError } from './EnrolmentPage';
@@ -137,6 +138,15 @@ const useStyles = makeStyles({
     gap: tokens.spacingVerticalS,
   },
   legend: { fontWeight: tokens.fontWeightSemibold, marginBottom: tokens.spacingVerticalXS },
+  dialogBody: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalM },
+  paragraph: { margin: 0 },
+  rolesLine: {
+    display: 'flex',
+    gap: tokens.spacingHorizontalXS,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    color: tokens.colorNeutralForeground2,
+  },
   srOnly: {
     position: 'absolute',
     width: '1px',
@@ -155,10 +165,16 @@ const roleText: Record<string, string> = {
   Auditor: 'Read only, plus the audit log.',
 };
 
+type LinkPurpose = 'invitation' | 'two-factor-reset' | 'password-reset' | 'combined-reset';
+
 interface OpenLink {
-  purpose: 'invitation' | 'two-factor-reset';
+  purpose: LinkPurpose;
+  /** When the link, or a request still awaiting approval, ends. */
   expiresAt: string;
   expired: boolean;
+  /** Under dual control: no code yet until another Admin approves (DEC-042). */
+  awaitingApproval: boolean;
+  requestedBy: { id: string; displayName: string; askedAt: string } | null;
 }
 
 interface UserRow {
@@ -171,6 +187,8 @@ interface UserRow {
     state: 'active' | 'locked' | 'disabled' | 'invitation-pending' | 'invitation-expired';
     lockedUntil: string | null;
     link: OpenLink | null;
+    /** An administrator reset the password, and the person hasn't chosen a new one yet. */
+    passwordResetPending: boolean;
   };
   lastSignInAt: string | null;
   createdAt: string;
@@ -179,9 +197,21 @@ interface UserRow {
 
 interface IssuedLink {
   token: string;
-  code: string;
+  /** Null while the request awaits another Admin's approval: the approving Admin gets the code (DEC-042). */
+  code: string | null;
   expiresAt: string;
   /** The configured limits (Goldmark:Auth:LinkExpiryHours, LinkCodeAttempts). */
+  expiryHours: number;
+  codeAttempts: number;
+  awaitingApproval: boolean;
+  /** No other Admin could approve, so the one who asked got both values. */
+  onlyAdmin: boolean;
+}
+
+/** The code an approving Admin gets, shown once (DEC-042). */
+interface ApprovedCode {
+  code: string;
+  expiresAt: string;
   expiryHours: number;
   codeAttempts: number;
 }
@@ -189,11 +219,37 @@ interface IssuedLink {
 type Panel =
   | { kind: 'add' }
   | { kind: 'roles'; user: UserRow }
-  | { kind: 'secret'; purpose: 'invitation' | 'two-factor-reset'; user: UserRow; link: IssuedLink };
+  | { kind: 'secret'; purpose: LinkPurpose; user: UserRow; link: IssuedLink }
+  | { kind: 'code'; user: UserRow; code: ApprovedCode; askedBy: string };
 
-type Confirm = { action: 'lock' | 'unlock' | 'disable' | 'enable' | 'reset' | 'revoke' | 'reissue'; user: UserRow };
+type Confirm = {
+  action:
+    | 'lock'
+    | 'unlock'
+    | 'disable'
+    | 'enable'
+    | 'reset'
+    | 'revoke'
+    | 'reissue'
+    | 'password-reset'
+    | 'approve'
+    | 'decline'
+    | 'cancel-request'
+    | 'ask-again';
+  user: UserRow;
+  /** Admins other than you and the person who could approve a request about them. */
+  approvers: number;
+};
 
-const accountFilters = ['All', 'Active', 'Locked', 'Disabled', 'Invitation pending', 'Invitation expired'] as const;
+const accountFilters = [
+  'All',
+  'Active',
+  'Locked',
+  'Disabled',
+  'Invitation pending',
+  'Invitation expired',
+  'Awaiting approval',
+] as const;
 const stateOfFilter: Record<string, UserRow['account']['state']> = {
   Active: 'active',
   Locked: 'locked',
@@ -204,6 +260,22 @@ const stateOfFilter: Record<string, UserRow['account']['state']> = {
 
 function isPending(user: UserRow) {
   return user.account.state === 'invitation-pending' || user.account.state === 'invitation-expired';
+}
+
+/** Your own request about this person that ended without approval: you can ask again (DEC-042 item 9). */
+function endedRequest(user: UserRow, me: string | undefined): OpenLink | null {
+  const link = user.account.link;
+  return link?.awaitingApproval && link.expired && link.requestedBy?.id === me ? link : null;
+}
+
+/** A request about this person that waits for another Admin's approval and hasn't ended (DEC-042). */
+function waitingRequest(user: UserRow): OpenLink | null {
+  const link = user.account.link;
+  return link?.awaitingApproval && !link.expired ? link : null;
+}
+
+function firstName(name: string): string {
+  return name.split(' ')[0] ?? name;
 }
 
 /** Screen 17 (US-04): every person, their roles and account state; invitations; the admin's actions. */
@@ -229,6 +301,8 @@ export function UsersPage() {
     setFailure(null);
     try {
       setUsers((await api<{ users: UserRow[] }>('GET', '/api/v1/users')).data.users);
+      // The nav's approvals count follows what this page now shows (DEC-042 item 9).
+      window.dispatchEvent(new Event(approvalsChanged));
     } catch (error) {
       if (error instanceof ApiError) setFailure(error);
     }
@@ -249,9 +323,21 @@ export function UsersPage() {
     [dispatchToast],
   );
 
-  const enabledAdmins = (users ?? []).filter(
-    (u) => u.roles.includes('Admin') && u.account.state !== 'disabled' && !isPending(u),
-  ).length;
+  const admins = useMemo(
+    () => (users ?? []).filter((u) => u.roles.includes('Admin') && u.account.state !== 'disabled' && !isPending(u)),
+    [users],
+  );
+  const enabledAdmins = admins.length;
+  /** Who could approve a request you make about this person: another enabled Admin, not them (DEC-042). */
+  const approversFor = useCallback(
+    (target: string | null) => admins.filter((a) => a.id !== me && a.id !== target).length,
+    [admins, me],
+  );
+  // Requests you could approve: not yours, not about you, not for a disabled account.
+  const approvals = (users ?? []).filter((u) => {
+    const request = waitingRequest(u);
+    return request !== null && u.id !== me && u.account.state !== 'disabled' && request.requestedBy?.id !== me;
+  }).length;
 
   const visible = useMemo(() => {
     const text = filter.trim().toLowerCase();
@@ -259,7 +345,8 @@ export function UsersPage() {
       (u) =>
         (text === '' || u.displayName.toLowerCase().includes(text) || u.userName.toLowerCase().includes(text)) &&
         (role === 'All' || u.roles.includes(role)) &&
-        (account === 'All' || u.account.state === stateOfFilter[account]),
+        (account === 'All' ||
+          (account === 'Awaiting approval' ? waitingRequest(u) !== null : u.account.state === stateOfFilter[account])),
     );
   }, [users, filter, role, account]);
 
@@ -312,7 +399,7 @@ export function UsersPage() {
       createTableColumn<UserRow>({
         columnId: 'account',
         renderHeaderCell: () => 'Account',
-        renderCell: (u) => <AccountState user={u} />,
+        renderCell: (u) => <AccountState user={u} me={me} />,
       }),
       createTableColumn<UserRow>({
         columnId: 'lastSignIn',
@@ -327,14 +414,16 @@ export function UsersPage() {
           <RowActions
             user={u}
             self={u.id === me}
+            ownRequest={waitingRequest(u)?.requestedBy?.id === me}
+            ended={u.id !== me && u.account.state !== 'disabled' && endedRequest(u, me) !== null}
             lastAdmin={u.roles.includes('Admin') && enabledAdmins <= 1}
             onEditRoles={() => setPanel({ kind: 'roles', user: u })}
-            onConfirm={(action) => setConfirm({ action, user: u })}
+            onConfirm={(action) => setConfirm({ action, user: u, approvers: approversFor(u.id) })}
           />
         ),
       }),
     ],
-    [styles, me, enabledAdmins],
+    [styles, me, enabledAdmins, approversFor],
   );
 
   const body: ReactNode =
@@ -383,6 +472,7 @@ export function UsersPage() {
   const panelContent = panel ? (
     <UserPanel
       panel={panel}
+      dualControl={approversFor(null) > 0}
       onClose={closePanel}
       onCreated={(user, link) => {
         void load();
@@ -417,6 +507,21 @@ export function UsersPage() {
           </>
         }
       />
+      {approvals > 0 ? (
+        // Goldmark sends no email, so every other Admin sees waiting requests here (DEC-042 item 9).
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            {approvals === 1
+              ? '1 request needs another Admin’s approval.'
+              : `${approvals} requests need another Admin’s approval.`}
+          </MessageBarBody>
+          <MessageBarActions>
+            <Button size="small" onClick={() => setAccount('Awaiting approval')}>
+              Show them
+            </Button>
+          </MessageBarActions>
+        </MessageBar>
+      ) : null}
       <div role="toolbar" aria-label="Filters" className={styles.filters}>
         <SearchBox
           className={styles.search}
@@ -476,7 +581,24 @@ export function UsersPage() {
           {panelContent}
         </OverlayDrawer>
       ) : null}
-      {confirm ? (
+      {confirm?.action === 'password-reset' || confirm?.action === 'ask-again' ? (
+        <ResetPasswordDialog
+          user={confirm.user}
+          approvers={confirm.approvers}
+          initialAlsoTwoFactor={confirm.action === 'ask-again'}
+          onCancel={() => setConfirm(null)}
+          onDone={(link, alsoTwoFactor) => {
+            setConfirm(null);
+            void load();
+            setPanel({
+              kind: 'secret',
+              purpose: alsoTwoFactor ? 'combined-reset' : 'password-reset',
+              user: confirm.user,
+              link,
+            });
+          }}
+        />
+      ) : confirm ? (
         <ConfirmDialog
           confirm={confirm}
           onCancel={() => setConfirm(null)}
@@ -489,6 +611,13 @@ export function UsersPage() {
                 purpose: confirm.action === 'reset' ? 'two-factor-reset' : 'invitation',
                 user: confirm.user,
                 link: result.link,
+              });
+            } else if (result.code) {
+              setPanel({
+                kind: 'code',
+                user: confirm.user,
+                code: result.code,
+                askedBy: confirm.user.account.link?.requestedBy?.displayName ?? 'The Admin who asked',
               });
             } else if (result.message) {
               toast(result.message);
@@ -506,17 +635,27 @@ function joinRoles(roles: string[]): string {
     : `${roles.slice(0, -1).join(', ')} and ${roles[roles.length - 1]}`;
 }
 
-function AccountState({ user }: { user: UserRow }) {
-  const { state, lockedUntil, link } = user.account;
+function AccountState({ user, me }: { user: UserRow; me: string | undefined }) {
+  const { state, lockedUntil, link, passwordResetPending } = user.account;
+  const request = waitingRequest(user) ?? endedRequest(user, me);
+  if (request && state !== 'disabled') {
+    // Nothing changed on the account yet: only the request shows (DEC-042); the one who asked sees
+    // its time left, then that it ended (item 9), everyone else who asked.
+    const kind = request.purpose === 'invitation' ? 'Invitation' : 'Password reset';
+    const asker = request.requestedBy;
+    return (
+      <Badge appearance="tint" color="informative">
+        {request.expired
+          ? `${kind} approval request ended`
+          : asker?.id === me
+            ? `${kind} awaiting approval · ends in ${formatRemaining(request.expiresAt)}`
+            : `${kind} awaiting approval${asker ? ` · asked by ${asker.displayName}` : ''}`}
+      </Badge>
+    );
+  }
   switch (state) {
     case 'active':
-      return (
-        <Text>
-          {link?.purpose === 'two-factor-reset' && !link.expired
-            ? `Active · reset link expires in ${formatRemaining(link.expiresAt)}`
-            : 'Active'}
-        </Text>
-      );
+      return <Text>{activeText(link, passwordResetPending)}</Text>;
     case 'locked':
       return (
         <Badge appearance="tint" color="severe" icon={<LockClosedRegular />}>
@@ -544,6 +683,21 @@ function AccountState({ user }: { user: UserRow }) {
   }
 }
 
+function activeText(link: OpenLink | null, passwordResetPending: boolean): string {
+  if (link && !link.awaitingApproval && (link.purpose === 'password-reset' || link.purpose === 'combined-reset')) {
+    return link.expired
+      ? 'Active · password reset link expired'
+      : `Active · password reset link expires in ${formatRemaining(link.expiresAt)}`;
+  }
+  if (passwordResetPending) {
+    // The link expired or stopped working: the person can't sign in until an Admin resets again.
+    return 'Active · password reset link expired';
+  }
+  return link?.purpose === 'two-factor-reset' && !link.expired
+    ? `Active · two-factor reset link expires in ${formatRemaining(link.expiresAt)}`
+    : 'Active';
+}
+
 /** A menu item that stays focusable when unavailable and says why (aria-disabled + Tooltip). */
 function GuardedItem({
   reason,
@@ -567,12 +721,17 @@ function GuardedItem({
 function RowActions({
   user,
   self,
+  ownRequest,
+  ended,
   lastAdmin,
   onEditRoles,
   onConfirm,
 }: {
   user: UserRow;
   self: boolean;
+  ownRequest: boolean;
+  /** Your own request about them ended without approval: "Ask again…" comes first (DEC-042 item 9). */
+  ended: boolean;
   lastAdmin: boolean;
   onEditRoles: () => void;
   onConfirm: (action: Confirm['action']) => void;
@@ -580,6 +739,24 @@ function RowActions({
   const pending = isPending(user);
   const locked = user.account.state === 'locked';
   const disabled = user.account.state === 'disabled';
+  const request = self ? null : waitingRequest(user);
+  const waiting = request ? 'A request for this person is waiting for another Admin’s approval.' : null;
+  // Under dual control (DEC-042): another Admin approves or declines; the one who asked can cancel.
+  const requestItems = request ? (
+    <>
+      <GuardedItem
+        reason={ownRequest ? 'Another Admin approves requests you make.' : null}
+        onClick={() => onConfirm('approve')}
+      >
+        Approve…
+      </GuardedItem>
+      {ownRequest ? (
+        <MenuItem onClick={() => onConfirm('cancel-request')}>Cancel request…</MenuItem>
+      ) : (
+        <MenuItem onClick={() => onConfirm('decline')}>Decline…</MenuItem>
+      )}
+    </>
+  ) : null;
   return (
     <Menu>
       <MenuTrigger disableButtonEnhancement>
@@ -587,13 +764,31 @@ function RowActions({
       </MenuTrigger>
       <MenuPopover>
         <MenuList>
-          {pending ? (
+          {pending && requestItems ? (
+            requestItems
+          ) : pending && ended ? (
+            <>
+              <MenuItem onClick={() => onConfirm('reissue')}>Ask again…</MenuItem>
+              <MenuItem onClick={() => onConfirm('revoke')}>Revoke invitation…</MenuItem>
+            </>
+          ) : pending ? (
             <>
               <MenuItem onClick={() => onConfirm('reissue')}>Copy new link…</MenuItem>
               <MenuItem onClick={() => onConfirm('revoke')}>Revoke invitation…</MenuItem>
             </>
           ) : (
             <>
+              {requestItems ? (
+                <>
+                  {requestItems}
+                  <MenuDivider />
+                </>
+              ) : ended ? (
+                <>
+                  <MenuItem onClick={() => onConfirm('ask-again')}>Ask again…</MenuItem>
+                  <MenuDivider />
+                </>
+              ) : null}
               <MenuItem onClick={onEditRoles}>Edit roles…</MenuItem>
               {locked ? (
                 <MenuItem onClick={() => onConfirm('unlock')}>Unlock…</MenuItem>
@@ -622,8 +817,31 @@ function RowActions({
                 </GuardedItem>
               )}
               <MenuDivider />
+              {ended ? null : (
+                // After an ended request, "Ask again…" above takes its place (the addendum board).
+                <GuardedItem
+                  reason={
+                    self
+                      ? 'You can’t reset your own password here. Use Change password in your account menu.'
+                      : disabled
+                        ? 'Enable the account first. A disabled account can’t use the link.'
+                        : user.roles.includes('Admin') && !user.twoFactorEnrolled
+                          ? 'This Admin has no authenticator to confirm a new password with. Remove Admin first, or let them finish setting up two-factor.'
+                          : waiting
+                  }
+                  onClick={() => onConfirm('password-reset')}
+                >
+                  Reset password…
+                </GuardedItem>
+              )}
               <GuardedItem
-                reason={self ? 'You can’t reset your own two-factor here. Use your two-factor page.' : null}
+                reason={
+                  self
+                    ? 'You can’t reset your own two-factor here. Use your two-factor page.'
+                    : user.account.passwordResetPending
+                      ? 'Their password was reset. Use Reset password with “Also reset two-factor” instead.'
+                      : waiting
+                }
                 onClick={() => onConfirm('reset')}
               >
                 Reset two-factor…
@@ -636,9 +854,25 @@ function RowActions({
   );
 }
 
-function confirmText(confirm: Confirm): { title: string; body: string; button: string; destructive: boolean } {
+interface ConfirmText {
+  title: string;
+  body: string;
+  /** A second paragraph. */
+  more?: string;
+  /** "Roles they get", for approving an invitation. */
+  roles?: string[];
+  button: string;
+  /** The dismiss button's label, when "Cancel" would be ambiguous. */
+  dismiss?: string;
+  destructive: boolean;
+}
+
+function confirmText(confirm: Confirm): ConfirmText {
   const name = confirm.user.displayName;
-  const first = name.split(' ')[0] ?? name;
+  const first = firstName(name);
+  const request = confirm.user.account.link;
+  const invitation = request?.purpose === 'invitation';
+  const asker = request?.requestedBy?.displayName ?? 'The Admin who asked';
   switch (confirm.action) {
     case 'lock':
       return {
@@ -682,13 +916,56 @@ function confirmText(confirm: Confirm): { title: string; body: string; button: s
         button: 'Revoke',
         destructive: true,
       };
-    default:
+    case 'approve': {
+      const at = request?.requestedBy ? ` at ${formatUtcTime(request.requestedBy.askedAt)} UTC` : '';
       return {
-        title: `New link for ${name}?`,
-        body: 'This issues a new link and code; the old ones stop working.',
-        button: 'Create new link',
+        title: invitation
+          ? `Approve the invitation for ${name}?`
+          : `Approve the password and two-factor reset for ${name}?`,
+        body: `${asker} asked for this${at} and has the link. You get the code and tell ${first} by phone or in person.`,
+        more: invitation
+          ? `Check that you’re talking to ${first} before you do.`
+          : `When you approve, ${first} is signed out everywhere, their current password stops working, and their authenticator and recovery codes are removed. Check that you’re talking to ${first} before you do.`,
+        ...(invitation ? { roles: confirm.user.roles } : {}),
+        button: 'Approve and show the code',
         destructive: false,
       };
+    }
+    case 'decline':
+      return {
+        title: invitation
+          ? `Decline the invitation for ${name}?`
+          : `Decline the password and two-factor reset for ${name}?`,
+        body: `The link stops working and ${asker} sees that you declined.`,
+        button: 'Decline',
+        destructive: false,
+      };
+    case 'cancel-request':
+      return {
+        title: invitation
+          ? `Cancel the request for ${name}’s invitation?`
+          : `Cancel the password and two-factor reset for ${name}?`,
+        body: invitation
+          ? 'The link stops working and the invitation is removed.'
+          : `The link stops working. Nothing changed on ${first}’s account.`,
+        button: 'Cancel request',
+        dismiss: 'Keep request',
+        destructive: false,
+      };
+    default:
+      return confirm.approvers > 0
+        ? {
+            title: `New link for ${name}?`,
+            body: 'This makes a new link, and the old one stops working. Another Admin approves it and gets the code.',
+            button: 'Ask for approval',
+            destructive: false,
+          }
+        : {
+            title: `New link for ${name}?`,
+            body: 'This issues a new link and code; the old ones stop working.',
+            button: 'Create new link',
+            destructive: false,
+          };
   }
 }
 
@@ -699,8 +976,9 @@ function ConfirmDialog({
 }: {
   confirm: Confirm;
   onCancel: () => void;
-  onDone: (result: { message?: string; link?: IssuedLink }) => void;
+  onDone: (result: { message?: string; link?: IssuedLink; code?: ApprovedCode }) => void;
 }) {
+  const styles = useStyles();
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<ApiError | null>(null);
   const text = confirmText(confirm);
@@ -722,6 +1000,23 @@ function ConfirmDialog({
         case 'revoke':
           await api('DELETE', `/api/v1/users/${id}/invitation`);
           onDone({ message: 'Invitation revoked' });
+          return;
+        case 'approve': {
+          const { data } = await api<{ code: ApprovedCode }>('POST', `/api/v1/users/${id}/request/approve`, {});
+          onDone({ code: data.code });
+          return;
+        }
+        case 'decline':
+          await api('POST', `/api/v1/users/${id}/request/decline`, {});
+          onDone({ message: 'Request declined' });
+          return;
+        case 'cancel-request':
+          await api('POST', `/api/v1/users/${id}/request/cancel`, {});
+          onDone({ message: 'Request cancelled' });
+          return;
+        case 'password-reset':
+        case 'ask-again':
+          // ResetPasswordDialog handles these.
           return;
         default:
           await api('POST', `/api/v1/users/${id}/${confirm.action}`, {});
@@ -747,7 +1042,7 @@ function ConfirmDialog({
       <DialogSurface>
         <DialogBody>
           <DialogTitle>{text.title}</DialogTitle>
-          <DialogContent>
+          <DialogContent className={styles.dialogBody}>
             {problem ? (
               problem.isUnavailable ? (
                 <ErrorBar error={problem} onRetry={() => void act()} />
@@ -764,10 +1059,25 @@ function ConfirmDialog({
             ) : (
               <Text as="p">{text.body}</Text>
             )}
+            {text.more ? (
+              <Text as="p" className={styles.paragraph}>
+                {text.more}
+              </Text>
+            ) : null}
+            {text.roles ? (
+              <div className={styles.rolesLine}>
+                <Text>Roles they get:</Text>
+                {text.roles.map((r) => (
+                  <Badge key={r} appearance="tint" color="subtle">
+                    {r}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </DialogContent>
           <DialogActions>
             <Button appearance="secondary" onClick={onCancel}>
-              Cancel
+              {text.dismiss ?? 'Cancel'}
             </Button>
             <Button
               appearance="primary"
@@ -784,27 +1094,161 @@ function ConfirmDialog({
   );
 }
 
+/**
+ * "Reset password…" (DEC-042): password only, or with "Also reset two-factor" for a person who lost
+ * their authenticator too (never for an Admin). With two-factor and another Admin able to approve,
+ * nothing changes until they do.
+ */
+function ResetPasswordDialog({
+  user,
+  approvers,
+  initialAlsoTwoFactor,
+  onCancel,
+  onDone,
+}: {
+  user: UserRow;
+  approvers: number;
+  /** "Ask again…" after an ended request starts with "Also reset two-factor" ticked. */
+  initialAlsoTwoFactor: boolean;
+  onCancel: () => void;
+  onDone: (link: IssuedLink, alsoTwoFactor: boolean) => void;
+}) {
+  const styles = useStyles();
+  // Without an authenticator the password-only reset could never be confirmed (DEC-042 item 3), so the
+  // reset includes two-factor; an Admin without one doesn't reach this dialog (the menu says why).
+  const noAuthenticator = !user.twoFactorEnrolled && !user.roles.includes('Admin');
+  const [alsoTwoFactor, setAlsoTwoFactor] = useState(
+    (initialAlsoTwoFactor || noAuthenticator) && !user.roles.includes('Admin'),
+  );
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<ApiError | null>(null);
+  const first = firstName(user.displayName);
+  const admin = user.roles.includes('Admin');
+  const dual = alsoTwoFactor && approvers > 0;
+  const paragraphs = !alsoTwoFactor
+    ? [
+        `This signs ${first} out everywhere, and their current password stops working now.`,
+        `Next you get a link and a code. ${first} needs both, and their authenticator app, to choose a new password before the link expires. Their two-factor and roles stay.`,
+      ]
+    : dual
+      ? [
+          `Another Admin must approve this. When they do, ${first} is signed out everywhere, their current password stops working, and their authenticator and recovery codes are removed.`,
+          `You get the link now; the approving Admin gets the code. ${first} needs both to choose a new password and set up two-factor again. Their roles stay.`,
+        ]
+      : [
+          `This signs ${first} out everywhere, their current password stops working now, and their authenticator and recovery codes are removed.`,
+          `Next you get a link and a code. ${first} needs both to choose a new password and set up two-factor again before the link expires. Their roles stay.`,
+        ];
+
+  async function act() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const { data } = await api<{ link: IssuedLink }>('POST', `/api/v1/users/${user.id}/password-reset`, {
+        alsoTwoFactor,
+      });
+      onDone(data.link, alsoTwoFactor);
+    } catch (error) {
+      if (error instanceof ApiError) setProblem(error);
+      else throw error;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const box = (
+    <Checkbox
+      label={`Also reset two-factor (${first} lost their authenticator)`}
+      checked={alsoTwoFactor}
+      disabled={admin || noAuthenticator || busy}
+      onChange={(_, d) => setAlsoTwoFactor(d.checked === true)}
+    />
+  );
+  return (
+    <Dialog open modalType="alert" onOpenChange={(_, d) => (d.open ? undefined : onCancel())}>
+      <DialogSurface>
+        <DialogBody>
+          <DialogTitle>{`Reset the password for ${user.displayName}?`}</DialogTitle>
+          <DialogContent className={styles.dialogBody}>
+            {problem ? (
+              problem.isUnavailable ? (
+                <ErrorBar error={problem} onRetry={() => void act()} />
+              ) : (
+                <MessageBar intent="error">
+                  <MessageBarBody>{problem.message}</MessageBarBody>
+                </MessageBar>
+              )
+            ) : null}
+            {paragraphs.map((text) => (
+              <Text as="p" key={text} className={styles.paragraph}>
+                {text}
+              </Text>
+            ))}
+            {admin || noAuthenticator ? (
+              // A link and code alone never yield an Admin session (DEC-042 item 7).
+              <Tooltip
+                content={
+                  admin
+                    ? 'Remove Admin first; add it again after their first sign-in.'
+                    : `${first} has no authenticator, so the reset includes two-factor.`
+                }
+                relationship="description"
+              >
+                <div>{box}</div>
+              </Tooltip>
+            ) : (
+              box
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button appearance="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button
+              appearance="primary"
+              disabled={busy}
+              onClick={() => void act()}
+              {...(busy ? { icon: <Spinner size="tiny" /> } : {})}
+            >
+              {dual ? 'Ask for approval' : 'Reset password'}
+            </Button>
+          </DialogActions>
+        </DialogBody>
+      </DialogSurface>
+    </Dialog>
+  );
+}
+
 function UserPanel({
   panel,
+  dualControl,
   onClose,
   onCreated,
   onSaved,
   onDone,
 }: {
   panel: Panel;
+  /** Another Admin could approve an invitation you create (DEC-042). */
+  dualControl: boolean;
   onClose: () => void;
   onCreated: (user: UserRow, link: IssuedLink) => void;
   onSaved: (user: UserRow) => void;
   onDone: () => void;
 }) {
+  const name = panel.kind === 'add' ? '' : panel.user.displayName;
   const title =
     panel.kind === 'add'
       ? 'Add user'
       : panel.kind === 'roles'
-        ? `Roles for ${panel.user.displayName}`
-        : panel.purpose === 'invitation'
-          ? `Invitation for ${panel.user.displayName}`
-          : `New set-up link for ${panel.user.displayName}`;
+        ? `Roles for ${name}`
+        : panel.kind === 'code'
+          ? `Code for ${name}`
+          : {
+              invitation: `Invitation for ${name}`,
+              'two-factor-reset': `New set-up link for ${name}`,
+              'password-reset': `Password reset link for ${name}`,
+              'combined-reset': `Set-up link for ${name}`,
+            }[panel.purpose];
   return (
     <>
       <DrawerHeader>
@@ -815,17 +1259,20 @@ function UserPanel({
           {title}
         </DrawerHeaderTitle>
       </DrawerHeader>
-      {panel.kind === 'add' ? <AddUser onClose={onClose} onCreated={onCreated} /> : null}
+      {panel.kind === 'add' ? <AddUser dualControl={dualControl} onClose={onClose} onCreated={onCreated} /> : null}
       {panel.kind === 'roles' ? <EditRoles user={panel.user} onClose={onClose} onSaved={onSaved} /> : null}
       {panel.kind === 'secret' ? <ShownOnce panel={panel} onDone={onDone} /> : null}
+      {panel.kind === 'code' ? <ApprovedCodePanel panel={panel} onDone={onDone} /> : null}
     </>
   );
 }
 
 function AddUser({
+  dualControl,
   onClose,
   onCreated,
 }: {
+  dualControl: boolean;
   onClose: () => void;
   onCreated: (user: UserRow, link: IssuedLink) => void;
 }) {
@@ -871,7 +1318,15 @@ function AddUser({
   return (
     <form onSubmit={(event) => void onSubmit(event)} noValidate>
       <DrawerBody className={styles.panelBody}>
-        {problem ? <ErrorBar error={problem} onRetry={() => setProblem(null)} /> : null}
+        {problem ? (
+          problem.isUnavailable ? (
+            <ErrorBar error={problem} onRetry={() => setProblem(null)} />
+          ) : (
+            <MessageBar intent="error">
+              <MessageBarBody>{problem.message}</MessageBarBody>
+            </MessageBar>
+          )
+        ) : null}
         <Field label="Display name" required {...validation(errors.displayName)}>
           <Input value={displayName} onChange={(_, d) => setDisplayName(d.value)} />
         </Field>
@@ -906,7 +1361,7 @@ function AddUser({
       </DrawerBody>
       <DrawerFooter>
         <Button type="submit" appearance="primary" disabled={busy} {...(busy ? { icon: <Spinner size="tiny" /> } : {})}>
-          Create invitation
+          {dualControl ? 'Create and ask for approval' : 'Create invitation'}
         </Button>
         <Button onClick={onClose}>Cancel</Button>
       </DrawerFooter>
@@ -931,6 +1386,8 @@ function EditRoles({
   const [busy, setBusy] = useState(false);
   const self = user.id === session.user?.id;
   const neverSignedIn = current.lastSignInAt === null;
+  // Its link may need none of their factors, and an Admin is never reset that way (DEC-042 item 7).
+  const resetPending = current.account.passwordResetPending;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -996,7 +1453,8 @@ function EditRoles({
           <legend className={styles.legend}>Roles</legend>
           {['Admin', 'Editor', 'Viewer', 'Auditor'].map((r) => {
             const lockedAdmin =
-              r === 'Admin' && ((self && roles.includes('Admin')) || (neverSignedIn && !roles.includes('Admin')));
+              r === 'Admin' &&
+              ((self && roles.includes('Admin')) || ((neverSignedIn || resetPending) && !roles.includes('Admin')));
             const reason =
               r !== 'Admin'
                 ? null
@@ -1004,7 +1462,9 @@ function EditRoles({
                   ? 'You can’t remove Admin from yourself.'
                   : neverSignedIn
                     ? 'Add Admin after their first sign-in.'
-                    : null;
+                    : resetPending
+                      ? 'Add Admin after they finish their password reset.'
+                      : null;
             const box = (
               <RoleCheckbox
                 key={r}
@@ -1069,54 +1529,74 @@ function RoleCheckbox({
   );
 }
 
-/** The shown-once link and code (DEC-038 items 2 and 8): the code has no copy button on purpose. */
+/**
+ * The shown-once link and code (DEC-038 items 2 and 8): the code has no copy button on purpose. Under
+ * dual control the one who asks gets the link only, and the approving Admin the code (DEC-042).
+ */
 function ShownOnce({ panel, onDone }: { panel: Extract<Panel, { kind: 'secret' }>; onDone: () => void }) {
   const styles = useStyles();
   const [sent, setSent] = useState(false);
-  const path = panel.purpose === 'invitation' ? 'invite' : 'reset';
-  const url = `${window.location.origin}/${path}#t=${panel.link.token}`;
-  const first = panel.user.displayName.split(' ')[0] ?? panel.user.displayName;
-  const expires = formatUtc(panel.link.expiresAt);
+  const { purpose, link } = panel;
+  const path = purpose === 'invitation' ? 'invite' : purpose === 'two-factor-reset' ? 'reset' : 'password-reset';
+  const url = `${window.location.origin}/${path}#t=${link.token}`;
+  const first = firstName(panel.user.displayName);
+  const expires = formatUtc(link.expiresAt);
+  const hours = `${link.expiryHours} ${link.expiryHours === 1 ? 'hour' : 'hours'}`;
+  const waiting = link.code === null;
+  const intro = waiting
+    ? `Send this link now. Another Admin approves the ${purpose === 'invitation' ? 'invitation' : 'reset'} and tells ${first} the code by phone or in person. The link works only after that.`
+    : {
+        invitation: 'Goldmark keeps only a hash of the link and the code.',
+        'two-factor-reset': `${first}’s password and roles are kept; they use these to set up two-factor again.`,
+        'password-reset': `${first}’s two-factor and roles are kept; they use these to choose a new password.`,
+        'combined-reset': `${first}’s roles are kept; they use these to choose a new password and set up two-factor again.`,
+      }[purpose];
   return (
     <>
       <DrawerBody className={styles.panelBody}>
         <MessageBar intent="warning">
           <MessageBarBody>
-            <b>Shown only once.</b>{' '}
-            {panel.purpose === 'invitation'
-              ? 'Goldmark keeps only a hash of the link and the code.'
-              : `${first}’s password and roles are kept; they use these to set up two-factor again.`}
+            <b>Shown only once.</b> {intro}
           </MessageBarBody>
         </MessageBar>
+        {link.onlyAdmin ? (
+          <MessageBar intent="info">
+            <MessageBarBody>
+              You’re the only Admin, so you get both the link and the code. With a second Admin, another Admin approves
+              and tells them the code.
+            </MessageBarBody>
+          </MessageBar>
+        ) : null}
         <section className={styles.section} aria-labelledby="link-heading">
           <h3 id="link-heading" className={styles.h3}>
-            1 · Send this link by chat or email
+            {waiting ? 'Send this link by chat or email' : '1 · Send this link by chat or email'}
           </h3>
           <div className={styles.secretBox}>
             <span className={styles.link}>{url}</span>
             <CopyButton value={url} label="Copy link" />
           </div>
         </section>
-        <section className={styles.section} aria-labelledby="code-heading">
-          <h3 id="code-heading" className={styles.h3}>
-            2 · Tell them this code by phone or in person
-          </h3>
-          <div className={styles.secretBox}>
-            <span className={styles.bigCode} aria-label={panel.link.code.replace('-', '').split('').join(', ')}>
-              {panel.link.code}
-            </span>
-          </div>
-          <Text className={styles.roleHint}>
-            No copy button on purpose: the link doesn’t work without this code, so never send them together. Codes avoid
-            look-alike characters (0/O, 1/I/L).
-          </Text>
-        </section>
+        {link.code ? (
+          <section className={styles.section} aria-labelledby="code-heading">
+            <h3 id="code-heading" className={styles.h3}>
+              2 · Tell them this code by phone or in person
+            </h3>
+            <SpokenCode code={link.code} />
+            <Text className={styles.roleHint}>
+              No copy button on purpose: the link doesn’t work without this code, so never send them together. Codes
+              avoid look-alike characters (0/O, 1/I/L).
+            </Text>
+          </section>
+        ) : null}
         <Text>
-          Expires in {panel.link.expiryHours} {panel.link.expiryHours === 1 ? 'hour' : 'hours'}, at {expires} UTC.{' '}
-          {panel.link.codeAttempts} wrong {panel.link.codeAttempts === 1 ? 'code ends' : 'codes end'} the link.
+          {waiting
+            ? purpose === 'invitation'
+              ? `Waiting for approval. The request ends if nobody approves it within ${hours}.`
+              : `Waiting for approval. Nothing changes on ${first}’s account until then; the request ends if nobody approves it within ${hours}.`
+            : `Expires in ${hours}, at ${expires} UTC. ${link.codeAttempts} wrong ${link.codeAttempts === 1 ? 'code ends' : 'codes end'} the link.`}
         </Text>
         <Checkbox
-          label="I sent the link and told them the code by phone or in person"
+          label={waiting ? 'I sent the link' : 'I sent the link and told them the code by phone or in person'}
           checked={sent}
           onChange={(_, d) => setSent(d.checked === true)}
         />
@@ -1127,6 +1607,59 @@ function ShownOnce({ panel, onDone }: { panel: Extract<Panel, { kind: 'secret' }
         </Button>
       </DrawerFooter>
     </>
+  );
+}
+
+/** The approving Admin's code, shown once; the one who asked has the link (DEC-042). */
+function ApprovedCodePanel({ panel, onDone }: { panel: Extract<Panel, { kind: 'code' }>; onDone: () => void }) {
+  const styles = useStyles();
+  const [told, setTold] = useState(false);
+  const first = firstName(panel.user.displayName);
+  const { code } = panel;
+  return (
+    <>
+      <DrawerBody className={styles.panelBody}>
+        <MessageBar intent="warning">
+          <MessageBarBody>
+            <b>Shown only once.</b> Tell {first} this code by phone or in person. {panel.askedBy} has sent the link.
+          </MessageBarBody>
+        </MessageBar>
+        <section className={styles.section} aria-labelledby="code-heading">
+          <h3 id="code-heading" className={styles.h3}>
+            Tell them this code by phone or in person
+          </h3>
+          <SpokenCode code={code.code} />
+          <Text className={styles.roleHint}>
+            No copy button on purpose: say it aloud. Codes avoid look-alike characters (0/O, 1/I/L).
+          </Text>
+        </section>
+        <Text>
+          The link works until {formatUtc(code.expiresAt)} UTC. {code.codeAttempts} wrong{' '}
+          {code.codeAttempts === 1 ? 'code ends' : 'codes end'} it.
+        </Text>
+        <Checkbox
+          label="I told them the code by phone or in person"
+          checked={told}
+          onChange={(_, d) => setTold(d.checked === true)}
+        />
+      </DrawerBody>
+      <DrawerFooter>
+        <Button appearance="primary" disabled={!told} onClick={onDone}>
+          Done
+        </Button>
+      </DrawerFooter>
+    </>
+  );
+}
+
+function SpokenCode({ code }: { code: string }) {
+  const styles = useStyles();
+  return (
+    <div className={styles.secretBox}>
+      <span className={styles.bigCode} aria-label={code.replace('-', '').split('').join(', ')}>
+        {code}
+      </span>
+    </div>
   );
 }
 

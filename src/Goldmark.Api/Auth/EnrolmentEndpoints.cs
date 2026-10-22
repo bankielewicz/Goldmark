@@ -9,10 +9,11 @@ using Microsoft.Extensions.Options;
 namespace Goldmark.Api.Auth;
 
 /// <summary>
-/// First-run setup (screen 2; US-02), invitation and two-factor reset links (screen 1b; DEC-038 items 2
-/// and 8), and the steps they share: choose or confirm a password, set up an authenticator, verify a code,
-/// receive recovery codes. Nothing is stored until the last step, which commits in one transaction; the
-/// person is then signed in. The setup page answers only while setup is not complete.
+/// First-run setup (screen 2; US-02), invitation and reset links (screen 1b; DEC-038 items 2 and 8,
+/// DEC-042), and the steps they share: choose or confirm a password, set up an authenticator, verify a
+/// code, receive recovery codes; for a password reset, confirm with the existing authenticator instead.
+/// Nothing is stored until the last step, which commits in one transaction; the person is then signed
+/// in. The setup page answers only while setup is not complete.
 /// </summary>
 internal static class EnrolmentEndpoints
 {
@@ -84,6 +85,12 @@ internal static class EnrolmentEndpoints
             .RequireRateLimiting(RateLimits.Credentials)
             .WithDisplayName("Enrolment: verify and finish");
 
+        enrolment.MapPost("/confirm", ConfirmPasswordResetAsync)
+            .RequireAccess(AccessPolicy.Enrolment)
+            .WithMetadata(new StartsNewSession())
+            .RequireRateLimiting(RateLimits.Credentials)
+            .WithDisplayName("Enrolment: confirm a password reset");
+
         return enrolment;
     }
 
@@ -96,6 +103,8 @@ internal static class EnrolmentEndpoints
     internal sealed record PasswordRequest(string? Password);
 
     internal sealed record CodeRequest(string? Code);
+
+    internal sealed record ConfirmRequest(string? Code, string? RecoveryCode);
 
     // --- Setup ------------------------------------------------------------------------------------
 
@@ -126,6 +135,7 @@ internal static class EnrolmentEndpoints
         {
             null or { IsOpen: false } => Results.Ok(new { status = "invalid" }),
             _ when links.IsExpired(link) => Results.Ok(new { status = "expired" }),
+            { IsAwaitingApproval: true } => Results.Ok(new { status = "pending" }),
             _ => Results.Ok(new { status = "valid", purpose = Purpose(link), triesLeft = links.TriesLeft(link) }),
         };
     }
@@ -144,8 +154,15 @@ internal static class EnrolmentEndpoints
             return ApiProblems.Problem(StatusCodes.Status410Gone, "link-expired", "This link has expired. Ask your administrator for a new one.");
         }
 
-        var code = LinkSecrets.NormalizeCode(request.Code);
-        if (code is null || !LinkSecrets.Matches(link.CodeHash, LinkSecrets.HashCode(request.Token!, code)))
+        if (link.IsAwaitingApproval)
+        {
+            // No code exists yet, so nothing counts as a wrong try (DEC-042).
+            return LinkPending();
+        }
+
+        // A recovery link's code is the operator's own (DEC-042 item 6); every other code is generated.
+        var code = link.IsRecovery ? LinkSecrets.NormalizeRecoveryCode(request.Code) : LinkSecrets.NormalizeCode(request.Code);
+        if (code is null || !links.CodeMatches(link, request.Token!, code))
         {
             return await db.InTransactionAsync(async () =>
             {
@@ -164,12 +181,14 @@ internal static class EnrolmentEndpoints
         }
 
         var user = await users.FindByIdAsync(link.UserId.ToString("D"));
-        if (user is null || user.IsDisabled || (link.Purpose == LinkPurpose.Invitation) != user.IsPending)
+        if (user is null || user.IsDisabled || (link.Purpose == LinkPurpose.Invitation) != user.IsPending
+            || (link.Purpose == LinkPurpose.PasswordReset && !user.HasAuthenticator)
+            || (link.Purpose == LinkPurpose.TwoFactorReset && user.IsPasswordResetPending))
         {
             return LinkInvalid();
         }
 
-        var kind = link.Purpose == LinkPurpose.Invitation ? EnrolmentKind.Invitation : EnrolmentKind.TwoFactorReset;
+        var kind = KindOf(link);
         await new EnrolmentState(kind, user.Id, link.Id, user.SecurityStamp).SaveAsync(context);
         return Results.Ok(new
         {
@@ -240,8 +259,8 @@ internal static class EnrolmentEndpoints
     }
 
     /// <summary>
-    /// An invitation's new password (checked against the policy), or, after a two-factor reset, the
-    /// current password (a wrong one counts toward lockout, as at sign-in).
+    /// A new password (checked against the policy) for an invitation or a reset, or, after a two-factor
+    /// reset, the current password (a wrong one counts toward lockout, as at sign-in).
     /// </summary>
     private static async Task<IResult> PasswordAsync(PasswordRequest request, HttpContext context, GoldmarkUserManager users,
         SetupState setup, LinkStore links, DbSession db, AuditTrail audit, IOptions<AuthOptions> options)
@@ -254,21 +273,21 @@ internal static class EnrolmentEndpoints
         var password = request.Password ?? "";
         switch (current.State.Kind)
         {
-            case EnrolmentKind.Invitation:
+            case EnrolmentKind.Invitation or EnrolmentKind.CombinedReset or EnrolmentKind.PasswordReset:
                 var policy = await users.CheckPasswordPolicyAsync(user, password);
                 if (!policy.Succeeded)
                 {
                     return ApiProblems.Validation(policy);
                 }
 
-                await (current.State with { PasswordHash = users.PasswordHasher.HashPassword(user, password), AuthenticatorKey = null }).SaveAsync(context);
-                return Results.Ok(new { next = "authenticator" });
+                var chosen = current.State with { PasswordHash = users.PasswordHasher.HashPassword(user, password), AuthenticatorKey = null };
+                await chosen.SaveAsync(context);
+                return Results.Ok(new { next = chosen.NextStep });
 
             case EnrolmentKind.TwoFactorReset:
                 if (await users.IsLockedOutAsync(user))
                 {
-                    return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
-                        $"This account is locked for {options.Value.LockoutMinutes} minutes after {options.Value.LockoutThreshold} failed attempts.");
+                    return AuthEndpoints.Locked(options.Value);
                 }
 
                 if (!await users.CheckPasswordAsync(user, password))
@@ -299,6 +318,12 @@ internal static class EnrolmentEndpoints
             return ApiProblems.Problem(StatusCodes.Status409Conflict, "wrong-step", "Choose the password first.");
         }
 
+        if (current.State.Kind == EnrolmentKind.PasswordReset)
+        {
+            // A password reset keeps the authenticator, which proves the person at the last step (DEC-042).
+            return ApiProblems.Problem(StatusCodes.Status409Conflict, "wrong-step", "Confirm with your authenticator instead.");
+        }
+
         var key = users.GenerateNewAuthenticatorKey();
         await (current.State with { AuthenticatorKey = key }).SaveAsync(context);
         return Results.Ok(new { key = Totp.FormatKey(key), issuer = Issuer, userName = current.User?.UserName ?? current.State.UserName });
@@ -325,6 +350,11 @@ internal static class EnrolmentEndpoints
         }
 
         var (state, user) = current;
+        if (state.Kind == EnrolmentKind.PasswordReset)
+        {
+            return ApiProblems.Problem(StatusCodes.Status409Conflict, "wrong-step", "Confirm with your authenticator instead.");
+        }
+
         if (state.AuthenticatorKey is not { } key || !state.HasPassword)
         {
             return ApiProblems.Problem(StatusCodes.Status409Conflict, "wrong-step", "Set up the authenticator first.");
@@ -349,7 +379,7 @@ internal static class EnrolmentEndpoints
             {
                 var (person, recoveryCodes) = state.Kind == EnrolmentKind.Setup
                     ? await CompleteSetupAsync(state, key, step, users, audit)
-                    : await CompleteLinkAsync(state, user!, key, step, users, links, audit);
+                    : await CompleteLinkAsync(state, user!, key, step, users, links, db, audit);
                 // The session row commits with the account: if it cannot be written, nothing is, and
                 // the step can be tried again (the recovery codes were never shown).
                 return (await AuthEndpoints.StartSessionAsync(context, users, person), recoveryCodes);
@@ -397,9 +427,10 @@ internal static class EnrolmentEndpoints
     }
 
     private static async Task<(GoldmarkUser, IReadOnlyList<string>)> CompleteLinkAsync(EnrolmentState state, GoldmarkUser user, string key,
-        long step, GoldmarkUserManager users, LinkStore links, AuditTrail audit)
+        long step, GoldmarkUserManager users, LinkStore links, DbSession db, AuditTrail audit)
     {
-        if (!await links.RedeemAsync(state.LinkId!.Value))
+        var link = await links.FindAsync(state.LinkId!.Value);
+        if (link is null || !await links.RedeemAsync(link.Id))
         {
             throw new LinkClosedException();
         }
@@ -408,12 +439,123 @@ internal static class EnrolmentEndpoints
         {
             Check(await users.SetPasswordHashAsync(user, state.PasswordHash!));
         }
+        else if (state.Kind == EnrolmentKind.CombinedReset)
+        {
+            // An administrator's reset already ended the sessions; a recovery link (DEC-042 item 6) changed
+            // nothing until now, so its sessions end here, before this one starts.
+            await SessionTicketStore.EndAllAsync(db, user.Id);
+            Check(await users.CompletePasswordResetAsync(user, state.PasswordHash!));
+        }
 
         Check(await users.SetAuthenticatorAsync(user, key, step));
         var codes = await users.GenerateNewTwoFactorRecoveryCodesAsync(user, RecoveryCodeCount) ?? throw new InvalidOperationException("No recovery codes.");
-        await audit.WriteAsync(state.Kind == EnrolmentKind.Invitation ? AuditActions.InvitationRedeemed : AuditActions.TwoFactorResetCompleted,
-            AuditActor.User(user.Id), "User", user.Id);
+        var (issuedBy, approvedBy) = await LinkPeopleAsync(link, users);
+        var (action, details) = state.Kind switch
+        {
+            EnrolmentKind.Invitation => (AuditActions.InvitationRedeemed, (object)new { issuedBy, approvedBy }),
+            EnrolmentKind.CombinedReset => (AuditActions.PasswordResetCompleted,
+                new { confirmedWith = "new-authenticator", twoFactorToo = true, issuedBy, approvedBy }),
+            _ => (AuditActions.TwoFactorResetCompleted, new { issuedBy }),
+        };
+        await audit.WriteAsync(action, AuditActor.User(user.Id), "User", user.Id, details);
         return (user, [.. codes]);
+    }
+
+    /// <summary>
+    /// The last step of a password reset (DEC-042): a code from the person's own authenticator, or a
+    /// recovery code, proves them before the new password takes effect; wrong ones count toward lockout,
+    /// as at sign-in. The password, the used link, the audit rows and the session commit together.
+    /// </summary>
+    private static async Task<IResult> ConfirmPasswordResetAsync(ConfirmRequest request, HttpContext context, GoldmarkUserManager users,
+        SetupState setup, LinkStore links, DbSession db, AuditTrail audit, IOptions<AuthOptions> options)
+    {
+        if (await CurrentAsync(context, users, setup, links) is not { User: { } user } current)
+        {
+            return await EnrolmentExpiredAsync(context);
+        }
+
+        if (current.State is not { Kind: EnrolmentKind.PasswordReset, PasswordHash: { } passwordHash, LinkId: { } linkId })
+        {
+            return ApiProblems.Problem(StatusCodes.Status409Conflict, "wrong-step", "Choose the new password first.");
+        }
+
+        if (await users.IsLockedOutAsync(user))
+        {
+            return AuthEndpoints.Locked(options.Value);
+        }
+
+        var usesRecoveryCode = string.IsNullOrEmpty(request.Code) && !string.IsNullOrEmpty(request.RecoveryCode);
+        AuthEndpoints.SessionUser? signedIn = null;
+        int? remaining = null;
+        try
+        {
+            var refused = await db.InTransactionAsync<IResult?>(async () =>
+            {
+                var accepted = usesRecoveryCode
+                    ? (await users.RedeemTwoFactorRecoveryCodeAsync(user, request.RecoveryCode!)).Succeeded
+                    : await users.VerifyTwoFactorTokenAsync(user, users.Options.Tokens.AuthenticatorTokenProvider, request.Code ?? "");
+                if (!accepted)
+                {
+                    return await AuthEndpoints.FailAsync(users, audit, user, usesRecoveryCode ? "recovery-code" : "authenticator-code", options.Value,
+                        () => usesRecoveryCode
+                            ? ApiProblems.Problem(StatusCodes.Status401Unauthorized, "invalid-recovery-code",
+                                "That recovery code didn't work, or it was already used.")
+                            : ApiProblems.Problem(StatusCodes.Status401Unauthorized, "invalid-code",
+                                "That code didn't work. Codes change every 30 seconds."));
+                }
+
+                var link = await links.FindAsync(linkId);
+                if (link is null || !await links.RedeemAsync(linkId))
+                {
+                    throw new LinkClosedException();
+                }
+
+                await users.ResetAccessFailedCountAsync(user);
+                Check(await users.CompletePasswordResetAsync(user, passwordHash));
+                if (usesRecoveryCode)
+                {
+                    remaining = await users.CountRecoveryCodesAsync(user);
+                    await audit.WriteAsync(AuditActions.RecoveryCodeUsed, AuditActor.User(user.Id), "User", user.Id, new { remaining });
+                }
+
+                var (issuedBy, _) = await LinkPeopleAsync(link, users);
+                await audit.WriteAsync(AuditActions.PasswordResetCompleted, AuditActor.User(user.Id), "User", user.Id,
+                    new { confirmedWith = usesRecoveryCode ? "recovery-code" : "authenticator-code", twoFactorToo = false, issuedBy });
+                signedIn = await AuthEndpoints.StartSessionAsync(context, users, user);
+                return null;
+            });
+            if (refused is not null)
+            {
+                return refused;
+            }
+        }
+        catch (LinkClosedException)
+        {
+            await EnrolmentEndAsync(context);
+            return LinkInvalid();
+        }
+
+        await EnrolmentEndAsync(context);
+        if (usesRecoveryCode && await users.IsAuthenticatorUnreadableAsync(user))
+        {
+            // The key ring lost the authenticator's key (DEC-038 item 5): as after such a sign-in, the
+            // recovery code just proven starts setting up a new authenticator.
+            await new EnrolmentState(EnrolmentKind.ChangeAuthenticator, user.Id, SecurityStamp: user.SecurityStamp, PasswordVerified: true)
+                .SaveAsync(context);
+            return Results.Ok(new { user = signedIn, recoveryCodesRemaining = remaining, next = "new-authenticator" });
+        }
+
+        return Results.Ok(new { user = signedIn, recoveryCodesRemaining = remaining });
+    }
+
+    /// <summary>
+    /// Who issued and who approved a link, by display name and username as they are now, for its audit
+    /// entry (DEC-042). A recovery link has no issuer: an operator set the recovery setting on the server.
+    /// </summary>
+    private static async Task<(string IssuedBy, string? ApprovedBy)> LinkPeopleAsync(LinkRow link, GoldmarkUserManager users)
+    {
+        return (link.CreatedBy is null ? LinkIssuers.ServerSetting : await users.AuditNameAsync(link.CreatedBy) ?? "removed-account",
+            await users.AuditNameAsync(link.ApprovedBy));
     }
 
     /// <summary>
@@ -463,16 +605,36 @@ internal static class EnrolmentEndpoints
     private static IResult LinkInvalid() =>
         ApiProblems.Problem(StatusCodes.Status410Gone, "link-invalid", "This link is no longer valid. Ask your administrator for a new one.");
 
+    private static IResult LinkPending() =>
+        ApiProblems.Problem(StatusCodes.Status409Conflict, "link-pending",
+            "This link isn't active yet. You'll get a code by phone or in person once another administrator approves it. Open the link again then.");
+
     private static IResult SetupComplete() =>
         ApiProblems.Problem(StatusCodes.Status409Conflict, "setup-complete", "Setup is already complete. Sign in.");
 
-    private static string Purpose(LinkRow link) => link.Purpose == LinkPurpose.Invitation ? "invitation" : "two-factor-reset";
+    private static string Purpose(LinkRow link) => link.Purpose switch
+    {
+        LinkPurpose.Invitation => "invitation",
+        LinkPurpose.PasswordReset => "password-reset",
+        LinkPurpose.CombinedReset => "combined-reset",
+        _ => "two-factor-reset",
+    };
+
+    private static EnrolmentKind KindOf(LinkRow link) => link.Purpose switch
+    {
+        LinkPurpose.Invitation => EnrolmentKind.Invitation,
+        LinkPurpose.PasswordReset => EnrolmentKind.PasswordReset,
+        LinkPurpose.CombinedReset => EnrolmentKind.CombinedReset,
+        _ => EnrolmentKind.TwoFactorReset,
+    };
 
     private static string KindName(EnrolmentKind kind) => kind switch
     {
         EnrolmentKind.Setup => "setup",
         EnrolmentKind.Invitation => "invitation",
         EnrolmentKind.TwoFactorReset => "two-factor-reset",
+        EnrolmentKind.PasswordReset => "password-reset",
+        EnrolmentKind.CombinedReset => "combined-reset",
         _ => "new-authenticator",
     };
 

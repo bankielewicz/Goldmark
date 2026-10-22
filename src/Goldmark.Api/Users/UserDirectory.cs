@@ -20,11 +20,29 @@ internal sealed record UserSummary(
 /// <summary>
 /// <c>State</c>: active, locked, disabled, invitation-pending or invitation-expired. <c>LockedUntil</c> is
 /// set for an automatic lockout, null for an administrator's lock; <c>Link</c> describes an open
-/// invitation or two-factor reset link.
+/// invitation or reset link; <c>PasswordResetPending</c>: an administrator reset the password and the
+/// person has not chosen a new one yet (DEC-042).
 /// </summary>
-internal sealed record UserAccountState(string State, DateTimeOffset? LockedUntil, OpenLink? Link);
+internal sealed record UserAccountState(string State, DateTimeOffset? LockedUntil, OpenLink? Link, bool PasswordResetPending);
 
-internal sealed record OpenLink(string Purpose, DateTime ExpiresAt, bool Expired);
+/// <summary>
+/// An open link: its purpose (invitation, two-factor-reset, password-reset, combined-reset), when it (or,
+/// awaiting approval, the request) ends, and under dual control who asked for it (DEC-042).
+/// </summary>
+internal sealed record OpenLink(string Purpose, DateTime ExpiresAt, bool Expired, bool AwaitingApproval, LinkRequester? RequestedBy);
+
+/// <summary>The Admin who asked for a link under dual control, and when (DEC-042).</summary>
+internal sealed record LinkRequester(Guid Id, string DisplayName, DateTime AskedAt);
+
+/// <summary>
+/// An Admin who could approve a request (DEC-042 item 8), and whether they can sign in to do it: not with
+/// a password reset unfinished, without an authenticator, or locked by an administrator. The automatic
+/// lockout is not counted, so failed sign-ins in someone's name can't change who approves.
+/// </summary>
+internal sealed record Approver(string DisplayName, bool PasswordResetPending, bool HasAuthenticator, bool LockedByAdministrator)
+{
+    public bool CanApprove => !PasswordResetPending && HasAuthenticator && !LockedByAdministrator;
+}
 
 /// <summary>Read queries for screen 17: every person with roles, account state and open link, in one query.</summary>
 internal sealed class UserDirectory(DbSession db, TimeProvider time)
@@ -36,9 +54,13 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
             u.LockoutEnd, u.IsDisabled, u.LastSignInAt,
             u.CreatedAt, u.ConcurrencyStamp,
             (SELECT STRING_AGG(r.Role, ',') FROM cmdb.UserRole AS r WHERE r.UserId = u.Id) AS Roles,
-            i.Purpose AS LinkPurpose, i.ExpiresAt AS LinkExpiresAt
+            CAST(CASE WHEN u.PasswordResetAt IS NULL THEN 0 ELSE 1 END AS bit) AS PasswordResetPending,
+            i.Purpose AS LinkPurpose, i.ExpiresAt AS LinkExpiresAt,
+            CAST(CASE WHEN i.ApprovalRequired = 1 AND i.ApprovedAt IS NULL THEN 1 ELSE 0 END AS bit) AS LinkAwaitingApproval,
+            i.CreatedBy AS LinkCreatedBy, c.DisplayName AS LinkCreatedByName, i.CreatedAt AS LinkCreatedAt
         FROM cmdb.UserAccount AS u
         LEFT JOIN cmdb.UserInvitation AS i ON i.UserId = u.Id AND i.RedeemedAt IS NULL AND i.RevokedAt IS NULL
+        LEFT JOIN cmdb.UserAccount AS c ON c.Id = i.CreatedBy
         """;
 
     public async Task<IReadOnlyList<UserSummary>> ListAsync() =>
@@ -58,6 +80,34 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
             JOIN cmdb.UserAccount AS u WITH (UPDLOCK, HOLDLOCK) ON u.Id = r.UserId
             WHERE r.Role = 'Admin' AND u.IsDisabled = 0 AND u.PasswordHash IS NOT NULL;
             """);
+
+    /// <summary>
+    /// Administrators who could approve a request about <paramref name="target"/> asked by
+    /// <paramref name="requester"/> (DEC-042): enabled, past their invitation, and neither of the two,
+    /// with whether each can sign in to approve. None means the one who asks gets both the link and the
+    /// code; none who can sign in means the request is refused (owner: "C. Refuse, say why").
+    /// </summary>
+    public Task<IReadOnlyList<Approver>> ApproversAsync(Guid requester, Guid target) =>
+        db.QueryAsync<Approver>("""
+            SELECT u.DisplayName,
+                CAST(CASE WHEN u.PasswordResetAt IS NULL THEN 0 ELSE 1 END AS bit) AS PasswordResetPending,
+                CAST(CASE WHEN u.AuthenticatorKey IS NULL THEN 0 ELSE 1 END AS bit) AS HasAuthenticator,
+                CAST(CASE WHEN u.LockoutEnd = @administratorLock THEN 1 ELSE 0 END AS bit) AS LockedByAdministrator
+            FROM cmdb.UserRole AS r
+            JOIN cmdb.UserAccount AS u ON u.Id = r.UserId
+            WHERE r.Role = 'Admin' AND u.IsDisabled = 0 AND u.PasswordHash IS NOT NULL AND u.Id <> @requester AND u.Id <> @target
+            ORDER BY u.DisplayName;
+            """, new { requester, target, administratorLock = DateTimeOffset.MaxValue });
+
+    /// <summary>Requests <paramref name="admin"/> could approve now: waiting, not ended, not their own, not about them.</summary>
+    public Task<int> CountApprovalsWaitingForAsync(Guid admin) =>
+        db.ExecuteScalarAsync<int>("""
+            SELECT COUNT(*)
+            FROM cmdb.UserInvitation AS i
+            JOIN cmdb.UserAccount AS u ON u.Id = i.UserId
+            WHERE i.ApprovalRequired = 1 AND i.ApprovedAt IS NULL AND i.RedeemedAt IS NULL AND i.RevokedAt IS NULL
+                AND i.ExpiresAt > @now AND u.IsDisabled = 0 AND (i.CreatedBy IS NULL OR i.CreatedBy <> @admin) AND i.UserId <> @admin;
+            """, new { admin, now = time.GetUtcNow().UtcDateTime });
 
     /// <summary>The list as CSV for "Export CSV", formula cells neutralized (<see cref="Csv"/>).</summary>
     public static string ToCsv(IEnumerable<UserSummary> users)
@@ -84,7 +134,10 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
     {
         var now = time.GetUtcNow();
         var link = row.LinkPurpose is { } purpose && row.LinkExpiresAt is { } expires
-            ? new OpenLink(purpose == LinkPurpose.Invitation ? "invitation" : "two-factor-reset", expires, expires <= now.UtcDateTime)
+            ? new OpenLink(PurposeName(purpose), expires, expires <= now.UtcDateTime, row.LinkAwaitingApproval,
+                row.LinkAwaitingApproval && row.LinkCreatedBy is { } by && row.LinkCreatedAt is { } asked
+                    ? new LinkRequester(by, row.LinkCreatedByName ?? "", asked)
+                    : null)
             : null;
         var state = row switch
         {
@@ -96,8 +149,17 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
         var lockedUntil = state == "locked" && row.LockoutEnd != DateTimeOffset.MaxValue ? row.LockoutEnd : null;
         var roles = (row.Roles ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries);
         return new UserSummary(row.Id, row.UserName, row.DisplayName, [.. Roles.ForPeople.Where(r => roles.Contains(r, StringComparer.Ordinal))],
-            row.TwoFactorEnrolled, new UserAccountState(state, lockedUntil, link), row.LastSignInAt, row.CreatedAt, row.ConcurrencyStamp);
+            row.TwoFactorEnrolled, new UserAccountState(state, lockedUntil, link, row.PasswordResetPending), row.LastSignInAt, row.CreatedAt,
+            row.ConcurrencyStamp);
     }
+
+    private static string PurposeName(string purpose) => purpose switch
+    {
+        LinkPurpose.Invitation => "invitation",
+        LinkPurpose.PasswordReset => "password-reset",
+        LinkPurpose.CombinedReset => "combined-reset",
+        _ => "two-factor-reset",
+    };
 
     private sealed class Row
     {
@@ -126,5 +188,15 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
         public string? LinkPurpose { get; set; }
 
         public DateTime? LinkExpiresAt { get; set; }
+
+        public bool PasswordResetPending { get; set; }
+
+        public bool LinkAwaitingApproval { get; set; }
+
+        public Guid? LinkCreatedBy { get; set; }
+
+        public string? LinkCreatedByName { get; set; }
+
+        public DateTime? LinkCreatedAt { get; set; }
     }
 }

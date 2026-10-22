@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark password reset steps</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1840px; height: 2700px; box-sizing: border-box; padding: 40px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 24px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Password reset · steps</h1>
+    <p style="margin: 0; color: #424242">Confirm code → choose a new password → confirm with the authenticator (or a recovery code). Nothing changes until the last step checks out; then the person is signed in. Two-factor stays as it is. The greeting appears from step 2, after the code.</p>
+  </div>
+  <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 40px">
+    <sc-for list="{{cards}}" as="c" hint-placeholder-count="9">
+      <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px">
+        <figcaption style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">{{c.label}}</figcaption>
+        <dc-import name="WizardCard" dark="{{c.dark}}" flow="password" step="{{c.step}}" state="{{c.state}}" recovery="{{c.recovery}}" hint-size="560px,780px"></dc-import>
+      </figure>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1840,"height":2700}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const card = (label, step, state, dark, recovery) => ({ label, step, state, dark: !!dark, recovery: !!recovery });
+    return {
+      cards: [
+        card('Step 1 · confirm code (no greeting yet)', '1', 'none'),
+        card('Step 2 · choose a new password', '2', 'none'),
+        card('Dark · step 2', '2', 'none', true),
+        card('Step 3 · authenticator code', '3', 'none'),
+        card('Dark · step 3 · authenticator code', '3', 'none', true),
+        card('Step 3 · recovery code instead', '3', 'none', false, true),
+        card('Step 2 · rules not met (common password, mismatch)', '2', 'passwordErrors'),
+        card('Done · signed in', 'done', 'none'),
+        card('Done · after a recovery code', 'done', 'recoveryUsed')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

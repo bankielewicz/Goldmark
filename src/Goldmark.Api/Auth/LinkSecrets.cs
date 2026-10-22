@@ -5,10 +5,11 @@ using System.Text;
 namespace Goldmark.Api.Auth;
 
 /// <summary>
-/// The secrets of invitation and two-factor reset links (DEC-038 items 2 and 8) and of the setup
+/// The secrets of invitation and reset links (DEC-038 items 2 and 8, DEC-042) and of the setup
 /// token (item 7). Only hashes are stored: a link token is 256 random bits, so SHA-256 suffices;
 /// the short code is hashed together with the token, so it cannot be tried without the token,
-/// which is never stored.
+/// which is never stored. A code made later, when another administrator approves the link, is hashed
+/// under a random key of that link's own, kept encrypted with Data Protection (see <see cref="LinkStore"/>).
 /// </summary>
 internal static class LinkSecrets
 {
@@ -44,11 +45,39 @@ internal static class LinkSecrets
             : null;
     }
 
+    public const int RecoveryCodeMinLength = 12;
+    public const int RecoveryCodeMaxLength = 64;
+
+    /// <summary>
+    /// An operator's recovery code (<c>GOLDMARK_RECOVER_CODE</c>, DEC-042 item 6), without spaces or
+    /// hyphens, upper case; null unless it is <see cref="RecoveryCodeMinLength"/> to
+    /// <see cref="RecoveryCodeMaxLength"/> ASCII letters and digits.
+    /// </summary>
+    public static string? NormalizeRecoveryCode(string? code)
+    {
+        if (code is null || code.Length > 2 * RecoveryCodeMaxLength)
+        {
+            return null;
+        }
+
+        var normalized = string.Concat(code.Where(c => c is not (' ' or '-'))).ToUpperInvariant();
+        return normalized.Length is >= RecoveryCodeMinLength and <= RecoveryCodeMaxLength && normalized.All(char.IsAsciiLetterOrDigit)
+            ? normalized
+            : null;
+    }
+
     public static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
     /// <summary>SHA-256 of the token and the normalized code (<see cref="NormalizeCode"/>).</summary>
     public static byte[] HashCode(string token, string normalizedCode) =>
         SHA256.HashData(Encoding.UTF8.GetBytes($"{token}\n{normalizedCode}"));
+
+    /// <summary>A random key for one link's code, for a code made at approval (scheme 2, DEC-042).</summary>
+    public static byte[] NewCodeKey() => RandomNumberGenerator.GetBytes(32);
+
+    /// <summary>HMAC-SHA-256 of the normalized code (<see cref="NormalizeCode"/>) under the link's own key (scheme 2).</summary>
+    public static byte[] HashCode(byte[] codeKey, string normalizedCode) =>
+        HMACSHA256.HashData(codeKey, Encoding.UTF8.GetBytes(normalizedCode));
 
     public static bool Matches(ReadOnlySpan<byte> expected, ReadOnlySpan<byte> actual) =>
         CryptographicOperations.FixedTimeEquals(expected, actual);

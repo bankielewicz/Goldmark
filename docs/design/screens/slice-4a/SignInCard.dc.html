@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sign-in card with the forgot-password caption</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <main aria-labelledby="signin-heading-{{uid}}" style="width: 100%; box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 16px">
+    <h1 id="signin-heading-{{uid}}" tabindex="-1" style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">{{heading}}</h1>
+
+    <sc-if value="{{msg.show}}" hint-placeholder-val="{{false}}">
+      <div role="{{msg.role}}" tabindex="-1" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: {{msg.bg}}; border: 1px solid {{msg.bd}}; border-radius: 4px">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="{{msg.icon}}" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="{{msg.path}}"></path></svg>
+        <span>{{msg.text}}</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{isCredentials}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="si-user-{{uid}}" style="font-weight: 600">Username</label>
+        <input id="si-user-{{uid}}" autocomplete="username" value="{{username}}" style="height: 32px; box-sizing: border-box; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="si-pw-{{uid}}" style="font-weight: 600">Password</label>
+        <div style="display: flex; align-items: center; height: 32px; box-sizing: border-box; padding: 0 2px 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px">
+          <input id="si-pw-{{uid}}" type="password" autocomplete="current-password" value="{{password}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none">
+          <button type="button" aria-label="Show password" aria-pressed="false" style="width: 28px; height: 28px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6z"></path><circle cx="10" cy="10" r="2.5"></circle></svg></button>
+        </div>
+      </div>
+      <button type="submit" style="height: 32px; display: flex; align-items: center; justify-content: center; gap: 8px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Sign in</button>
+      <p style="margin: 0; font-size: 12px; line-height: 16px; color: var(--fg3)">Forgot your password? Ask an administrator to reset it.</p>
+    </sc-if>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":400},"state":{"editor":"enum","options":["none","badCredentials"],"default":"none"},"$preview":{"width":400,"height":560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 400;
+    const state = this.props.state ?? 'none';
+    const bad = state === 'badCredentials';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: ' + width + 'px; height: 560px; box-sizing: border-box; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      uid: (dark ? 'd' : 'l') + state + width,
+      heading: 'Sign in',
+      msg: bad
+        ? { show: true, text: 'Username or password is incorrect.', bg: 'var(--mberr)', bd: 'var(--mberrbd)', icon: 'var(--mberri)', role: 'alert', path: 'M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5' }
+        : { show: false },
+      isCredentials: true,
+      username: bad ? 'sam' : '',
+      password: bad ? 'old-sample-password' : ''
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -78,9 +78,11 @@ internal static class AuthEndpoints
         var user = await users.FindByNameAsync(name);
         var now = time.GetUtcNow();
 
-        // No usable account, or one locked by an administrator: fail exactly like a wrong password,
-        // with the same lockout, so the answer does not say whether the account exists.
-        if (user is null || user.IsDisabled || user.IsPending || user.IsLockedByAdministrator)
+        // No usable account, one locked by an administrator, or one whose password an administrator
+        // reset (DEC-042): fail exactly like a wrong password, with the same lockout, so the answer does
+        // not say whether the account exists. The account's own failure count is left alone, so it
+        // does not lock before the person can finish the reset.
+        if (user is null || user.IsDisabled || user.IsPending || user.IsLockedByAdministrator || user.IsPasswordResetPending)
         {
             if (throttle.IsLockedOut(normalized))
             {
@@ -89,7 +91,7 @@ internal static class AuthEndpoints
             }
 
             var passwordMatches = VerifyOrDummy(users, user, password);
-            if (passwordMatches && user is { IsLockedByAdministrator: true, IsDisabled: false })
+            if (passwordMatches && user is { IsLockedByAdministrator: true, IsDisabled: false, IsPasswordResetPending: false })
             {
                 // Only someone who knows the password learns that an administrator locked the account.
                 await audit.WriteAsync(AuditActions.SignInFailed, AuditActor.Anonymous, "User", user.Id, new { reason = "locked-by-administrator" });
@@ -98,8 +100,15 @@ internal static class AuthEndpoints
             }
 
             var lockedNow = throttle.RecordFailure(normalized);
-            await audit.WriteAsync(AuditActions.SignInFailed, AuditActor.Anonymous, "User", user?.Id,
-                new { reason = user is null ? "unknown-user" : user.IsDisabled ? "disabled" : user.IsPending ? "not-set-up" : "password" });
+            var reason = user switch
+            {
+                null => "unknown-user",
+                { IsDisabled: true } => "disabled",
+                { IsPending: true } => "not-set-up",
+                { IsPasswordResetPending: true } => "password-reset-pending",
+                _ => "password",
+            };
+            await audit.WriteAsync(AuditActions.SignInFailed, AuditActor.Anonymous, "User", user?.Id, new { reason });
             return lockedNow ? Locked(options.Value) : InvalidCredentials();
         }
 
@@ -250,7 +259,8 @@ internal static class AuthEndpoints
         var id = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
         var stamp = context.User.FindFirstValue(GoldmarkClaims.SecurityStamp);
         var user = id is null ? null : await users.FindByIdAsync(id);
-        return user is { IsDisabled: false, IsPending: false, HasAuthenticator: true, IsLockedByAdministrator: false } && user.SecurityStamp == stamp
+        return user is { IsDisabled: false, IsPending: false, HasAuthenticator: true, IsLockedByAdministrator: false, IsPasswordResetPending: false }
+            && user.SecurityStamp == stamp
             ? user
             : null;
     }
@@ -278,7 +288,8 @@ internal static class AuthEndpoints
     private static IResult InvalidCredentials() =>
         ApiProblems.Problem(StatusCodes.Status401Unauthorized, "invalid-credentials", "Username or password is incorrect.");
 
-    private static IResult Locked(AuthOptions options) =>
+    /// <summary>The lockout answer, with its configured minutes and attempts for the screens to state.</summary>
+    internal static IResult Locked(AuthOptions options) =>
         ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
             $"This account is locked for {options.LockoutMinutes} minutes after {options.LockoutThreshold} failed attempts.",
             new Dictionary<string, object?> { ["minutes"] = options.LockoutMinutes, ["attempts"] = options.LockoutThreshold });

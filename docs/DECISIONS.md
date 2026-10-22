@@ -1408,6 +1408,129 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     show the period. Editing it in the UI would need the app to write `cmdb.AuditRetention`, which is
     exactly what item 1 prevents. Changing that goes back to the owner.
 
+## DEC-042 Slice 4a: password recovery, dual control for links that need none of the person's factors
+
+- **Decision (owner, 2026-10-21, asked in the HANDOFF rule-6 format; each answer quoted).**
+  1. **Placements.** Issue #25 (forgotten passwords) becomes its own slice, **4a**, before 4b ("A. Own
+     slice, before 4b (Recommended)"), approved to start in a fresh session ("A. APPROVED: #25 first
+     (Recommended)"). #31 (trusted proxies) goes to slice 24 ("A. Slice 24 (Recommended)"). #34 (the
+     retention period checked before `bootstrap-db`) goes to slice 4b ("A. Slice 4b (Recommended)").
+     The placements are commented on #25, #31 and #34 when the slice PR opens ("A. Comment on all
+     three (Recommended)").
+  2. **One "Reset password…" action, with "Also reset two-factor" for a person who lost both ("A. One
+     action, a checkbox (Recommended)").** Otherwise a person who forgot their password and lost their
+     authenticator could finish neither reset: the two-factor reset asks for the current password, the
+     password reset for the authenticator. With the box ticked the link runs the invitation's steps,
+     proof by the link and its separate code alone, the same level as enrolment (ASVS 5.0 6.4.4).
+  3. **A password reset ends with the person's own authenticator ("A. Yes, then signed in
+     (Recommended)").** New password, then a 6-digit code or a recovery code; nothing changes until it
+     checks out, and wrong codes count toward lockout as at sign-in. ASVS 5.0 6.4.3: a password reset
+     must not bypass two-factor.
+  4. **The old password stops working at once ("A. Stops working at once (Recommended)").** Sessions
+     end; the old password then fails like any wrong password, and those failures go through the
+     unknown-user throttle, so the account does not lock before the person finishes the reset.
+  5. **Change password for a signed-in person, in this slice ("A. Yes, in slice 4a (Recommended)";
+     scope change, ASVS 5.0 6.2.2 and 6.2.3).** Current password, new password under the policy; other
+     sessions end, this one continues.
+  6. **The way back in when no Admin can sign in: emergency-Admin guidance plus a startup setting, not a
+     command ("A + startup setting (Recommended)").** First built as a typed command, `recover-admin`
+     (from #25's second criterion and the owner's answers "A. Password and two-factor (Recommended)" and
+     "A. Path and code (Recommended)"); the owner then said "commands are not meant to be run on a server
+     such as recover-admin ingrid.m. when was this designed?" and asked how professional applications,
+     Active Directory and Microsoft Entra handle it. Researched (vendor documentation, 2026-10-21): every
+     self-hosted product falls back to server access (Jira and Confluence's recovery mode is a startup
+     property; GitLab, Grafana and Keycloak have commands); Entra recommends two or more emergency access
+     accounts. So: the README prescribes Microsoft's pattern adapted to Goldmark (a second Admin not
+     tied to a person, its password and recovery codes kept in a safe, its use visible in the audit log,
+     checked every 90 days), and the last resort is the setup-token pattern #25 named: the operator sets
+     `GOLDMARK_RECOVER_ADMIN=<username>` and restarts; Goldmark logs a one-time password-and-two-factor
+     link and code for that enabled Admin, once per start, as it logs the setup token (DEC-038 item 7),
+     audits it as System, and warns in the log while the setting is set. An administrator's lock is kept
+     (the owner's chosen text said a lockout from failed attempts ends; a side agent noted the command
+     had lifted every lock). Settled in the slice, open to veto: the link changes nothing on the account
+     until it is used, so a setting left in place only prints a new link at each start (the previous one
+     stops working) rather than resetting the Admin again; using it signs the Admin out everywhere and
+     sets a new password and authenticator. The recovery link becomes the second secret Goldmark ever
+     logs, after the setup token. Then a side agent noted that logs reach more people than the server's
+     operators (`docker compose logs`, central log tools, saved files) and outlive the reset, so the
+     owner was asked again (2026-10-21) and chose "A. Operator sets it in .env (Recommended)" and "A. 1
+     hour, ended at a clean restart (Recommended)": the operator sets `GOLDMARK_RECOVER_CODE` (12 to 64
+     letters and digits) with the username, the log carries the link's path only and never the code,
+     the link works for one hour whatever the link lifetime setting says, and a start without the
+     setting ends every unused recovery link (audited "Link stopped working", reason
+     `recovery-setting-removed`). Five wrong codes still end it. Settled in the slice, open to veto (a
+     side agent's note): issuing the link is audited "Recovery link issued", not "Password reset", since
+     nothing changes until it is used, as a waiting combined reset is "Approval requested" (item 8); its
+     use is "Password reset completed", Link issued by "server-setting". From the review of PR #38
+     (Codex, reproduced): every start, not only one without the setting, ends every unused recovery
+     link, whoever it was for (audited, reason `restart`), so a link lasts at most until the next start
+     and a refused start ends the previous link too. The code reaches the app as an environment
+     variable (readable with `docker inspect` by whoever holds the host, as the owner's choice implies);
+     reading the log alone is still not enough.
+  7. **The password-and-two-factor reset is never for an Admin ("A. Not for an Admin (Recommended)").**
+     A link and code alone never yield an Admin session, as for invitations (DEC-038 item 2): Remove
+     Admin first; add it again after their first sign-in. The recovery setting (item 6) is the one,
+     deliberate, exception: whoever can set it and its code already holds the server, with the runtime
+     login and the key ring.
+  8. **Dual control for invitations and the password-and-two-factor reset ("B. Dual control now,
+     both").** Asked after a side agent noted that the Admin who issues such a link holds both values
+     and could finish it as the person; the owner: "how can we harden this as it doesn't seem secure?
+     let's consult with /advisor for guidance/best practices". The Admin who asks gets the link only;
+     another enabled Admin (not the one who asked, not the person) approves and gets the code, made at
+     approval. With no such Admin the one who asks gets both, audited "only-admin" (the fallback the
+     owner accepted with option B, as is the audited bypass of first removing another Admin's role).
+     Not for the password-only and two-factor-only resets, which each still need one of the person's
+     own factors. Settled on the boards and approved with them: a combined reset changes nothing on
+     the account until approved; a request waits up to the link lifetime, and the link's own lifetime
+     counts from the approval; the approving Admin in the samples is Morgan Okafor. An invitation that
+     waits still writes "Invitation created" (detail: approval requested), so a filter on it finds every
+     invitation; a combined reset writes "Approval requested", since nothing changed yet. From the
+     review of PR #38 (Codex, reproduced; the owner, 2026-10-22, asked in the rule-6 format: "C. Refuse,
+     say why (Recommended)"): an Admin who can't sign in to approve (password reset unfinished, no
+     authenticator, or locked by an administrator; never the automatic lockout, which failed sign-ins in
+     their name could trigger) leaves the request refused, naming who and why, rather than waiting for
+     an approval that can't come or widening the fallback. Approve records the approval before it
+     changes the account, so a request that ended meanwhile changes nothing. A waiting invitation can't
+     be replaced by a new link either. A password-only reset needs the person's authenticator (its link
+     ends with it), and Admin can't be added while a password reset is unfinished (item 7).
+  9. **Waiting requests are visible ("A. Nav count + time left (Recommended)"; raised by a side agent:
+     Goldmark sends no email).** Every Admin sees a count on the "Users & roles" nav item on every page;
+     the requester's row shows the time left and, once it lapses, "approval request ended"; the README
+     says to tell the approving Admin yourself.
+  10. **Row 4a's "Done when" as proposed ("A. As proposed (Recommended)").**
+  11. **The boards are approved (owner, 2026-10-21, "approved.").** Version 28 (`1792617023-b865`) of
+      https://claude.ai/artifact/Bzpjzj8maiwQGfPJ31KCy3, copied to `docs/design/screens/slice-4a/`. The
+      approvals count and the requester's time-left wording (item 9) came after; they get a board
+      before their UI.
+  12. **Windows and LDAP sign-in are filed, not built.** Asked whether Goldmark supports NT
+      authentication: not in the PRD (A3: local accounts with TOTP; OIDC, slice 25). The owner's
+      decisions are in #36 (Windows sign-in, Kerberos only, its own slice after 25) and #37 (LDAP
+      sign-in over LDAPS, its own slice after #36).
+- **How it is built.**
+  - `cmdb.UserAccount.PasswordResetAt` (migration 0005) marks a reset password; the hash stays until
+    the person chooses a new one. A link has a purpose (`PasswordReset`, `CombinedReset` added), and a
+    link asked for under dual control has a token and no code (`ApprovalRequired`, `ApprovedAt`,
+    `ApprovedBy`) until approved.
+  - **Code hashes, two schemes.** Scheme 1 (0003) hashes the code with the token, which is never
+    stored; it serves every code made when the token is known. A code made at approval cannot be, so
+    scheme 2 is HMAC-SHA-256 under a random key of that link's own, stored encrypted with Data
+    Protection: a copy of the database alone still gives no way to test codes. A shared key table was
+    rejected: written once, it would break dual control for good if the key ring were lost. Losing the
+    key ring fails approved, unused links like a wrong code, as DEC-038 item 5 accepts for
+    authenticator keys.
+  - **Guards, in the API whatever the UI shows.** A two-factor reset is refused while a password reset
+    or a request waits. Admin is not added while a combined reset is open, and an approval is refused
+    if the person became an Admin meanwhile. Nobody approves their own request or one about
+    themselves.
+  - The recovery setting is read by a hosted service once the database is ready; it issues the link
+    through the same link store (scheme 1, no issuing account, the operator's code, one hour) and never
+    resets the account itself. A link with no issuing account is a recovery link and only that: other
+    links always name their issuer, and the redeem step checks a recovery link's code against the
+    operator code's shape, every other code against the generated one's.
+  - The nav's approvals count (item 9) is read when a page opens and after Users & roles changes
+    something, never on a timer: every request counts as activity, so polling would keep an idle
+    Admin signed in past `Goldmark:Auth:SessionIdleMinutes` (a side agent's note).
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -1568,3 +1691,24 @@ Same status vocabulary as slice 1. Local runs on the owner's WSL machine:
 | 11 | Rule 3: design handoff before UI code | **Met** | Handoff 2026-10-20; boards approved 2026-10-21 (DEC-041 item 5, `docs/design/screens/slice-4/`) |
 | 12 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for screen 16** | `web/e2e/auth.spec.ts` "slice 4 screen": the page, an expanded entry, a filter and the export dialog, light and dark |
 | 13 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4a acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine, 2026-10-21 and 2026-10-22:
+393 in-process tests; the full integration suite, 224 tests (SQL Server 2025), with review round 1's fixes; web 48
+policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose smoke, 97 unique checks with Playwright 10/10 inside (Chrome).
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | #25: an administrator resets another person's password from Users & roles, through the invitation's link and separate code, signs them out everywhere, audited; the person chooses a new password and two-factor stays | **Met**, with the owner's additions: the person's own authenticator or a recovery code confirms it (DEC-042 item 3), and "Also reset two-factor" for a lost authenticator (item 2, never for an Admin, item 7) | `POST /api/v1/users/{id}/password-reset`; `/password-reset` link page; `PasswordRecoveryTests` (old password refused without locking, sessions ended, recovery-code confirm, atomicity with the audit row); Playwright "slice 4a screens" end to end |
+| 2 | #25: an operator-only container command issues such a link for the last administrator, audited, no secret logged but the link | **Met as amended** (owner, DEC-042 item 6): no command, "A + startup setting", then "A. Operator sets it in .env" and "A. 1 hour, ended at a clean restart" | `GOLDMARK_RECOVER_ADMIN` + `GOLDMARK_RECOVER_CODE`; `RecoverAdminService` logs the path only (event 3004), audited "Recovery link issued"; refusals 3005/3006; a clean start ends the link; README's emergency-Admin guidance; `PasswordRecoveryTests` (code never logged or audited, 1-hour lifetime, a second start replaces the link, a clean start ends it, refusals) |
+| 3 | #25: every new endpoint declares an access policy and joins the M6 enumeration test | **Met** | `EndpointInventoryTests`, `docs/security/endpoint-access.md`: password reset, request approve/decline/cancel, `GET /users/approvals`, `/enrolment/confirm`, `POST /account/password` |
+| 4 | Rule 3 / #25: screens through a design handoff first | **Met** | Handoff `tmp/screen-handoff-slice4a.md`; boards approved 2026-10-21 (version 28, "approved.") and the addendum (version 29, "the addendum boards have been approved"); `docs/design/screens/slice-4a/` |
+| 5 | Row 4a: the reset ends sessions and the old password at once | **Met** | `PasswordResetAt` (migration 0005); sign-in refuses it through the unknown-user throttle, so the account doesn't lock; `PasswordRecoveryTests` |
+| 6 | Row 4a / owner: dual control for invitations and the password-and-two-factor reset (DEC-042 item 8) | **Met** | Requests (`ApprovalRequired`), approve/decline/cancel, the code made at approval under a per-link key (scheme 2); the single-Admin fallback audited "only-admin"; lapsed requests can be asked again; `PasswordRecoveryTests` |
+| 7 | Owner: waiting requests are visible (DEC-042 item 9) | **Met** | The nav count (`GET /api/v1/users/approvals`, read when a page opens, never on a timer), the approvers' MessageBar, the requester's time left and "Ask again…"; Playwright (shaped answers: one Admin can't make such a request) |
+| 8 | Owner / ASVS 5.0 6.2.2, 6.2.3: Change password for a signed-in person | **Met** | `POST /api/v1/account/password`, other sessions end; the account menu's dialog; `PasswordRecoveryTests` |
+| 9 | Rule 7: new mutations write audit records, tested | **Met** | The new actions in `AuditCatalog` (catalog test); each flow's audit rows asserted in `PasswordRecoveryTests`; the audit page's words for the new details |
+| 10 | Rule 7: every UI function is available through `/api/v1` | **Met** | The pages call only `/api/v1/users*`, `/links/*`, `/enrolment/*`, `/account/password` |
+| 11 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for the slice's screens** | `web/e2e/auth.spec.ts` "slice 4a screens": sign-in caption, Change password, the link page (new password; authenticator, dark; done), the reset dialog (light and dark), the link panel, the link before approval, the nav count (dark, and the 1024 rail) |
+| 12 | CI green | **Not executed** | Runs on the PR |

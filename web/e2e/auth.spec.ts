@@ -2,10 +2,11 @@ import AxeBuilder from '@axe-core/playwright';
 import { createHmac } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
-// Slice 3 in a real browser against the Compose stack (tests/smoke/compose-smoke.sh completes
-// first-run setup through the API first and passes the administrator's credentials): sign-in with a
-// TOTP code, the app shell, Users & roles and the two-factor page, each checked with axe in both
-// themes (NFR-A11Y-3) and with no CSP or Trusted Types violation (DEC-037).
+// Slices 3, 4 and 4a in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
+// completes first-run setup through the API first and passes the administrator's credentials):
+// sign-in with a TOTP code, the app shell, Users & roles, the two-factor page, the audit log and a
+// password reset end to end, each checked with axe in both themes (NFR-A11Y-3) and with no CSP or
+// Trusted Types violation (DEC-037).
 
 const admin = {
   userName: process.env.GOLDMARK_E2E_ADMIN_USER ?? '',
@@ -69,6 +70,12 @@ async function expectAccessible(page: Page, what: string) {
     `${what}: axe`,
   ).toEqual([]);
   expect(await page.evaluate(() => window.__cspViolations), `${what}: CSP`).toEqual([]);
+}
+
+/** Switches the colour scheme and waits until the app has applied it (the theme follows the system). */
+async function useScheme(page: Page, scheme: 'light' | 'dark') {
+  await page.emulateMedia({ colorScheme: scheme });
+  await page.waitForFunction((wanted) => document.documentElement.style.colorScheme === wanted, scheme);
 }
 
 // The newest time step a sign-in in this run used. The server accepts a step once, and only newer
@@ -329,6 +336,179 @@ test.describe('slice 4 screen', () => {
     await page.unroute(isList);
   });
 });
+
+test.describe('slice 4a screens', () => {
+  test.use({ reducedMotion: 'reduce' });
+  // Two sign-ins and two codes from a new authenticator, each waiting for a fresh TOTP step.
+  test.describe.configure({ timeout: 240_000 });
+  test.skip(!admin.userName || !admin.password || !admin.totpKey, 'needs GOLDMARK_E2E_ADMIN_* from compose-smoke.sh');
+
+  test('an administrator resets a password and the person sets a new one with their authenticator', async ({
+    page,
+    browser,
+  }) => {
+    await recordViolations(page);
+    await page.goto('/sign-in');
+    await expect(page.getByText('Forgot your password? Ask an administrator to reset it.')).toBeVisible();
+    await signIn(page);
+
+    // Change password from the account menu: the dialog and its checks (nothing is sent).
+    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('menuitem', { name: 'Change password…' }).click();
+    const change = page.getByRole('dialog', { name: 'Change your password' });
+    await expect(change).toBeVisible();
+    await change.getByRole('textbox', { name: 'New password', exact: true }).fill('a long new passphrase 2026');
+    await change.getByRole('textbox', { name: 'Confirm new password' }).fill('a long new passphrase 2027');
+    await change.getByRole('button', { name: 'Change password' }).click();
+    await expect(change.getByText('Enter your current password.')).toBeVisible();
+    await expect(change.getByText('The passwords don’t match.')).toBeVisible();
+    await expectAccessible(page, 'change password dialog');
+    await change.getByRole('button', { name: 'Cancel' }).click();
+
+    // A link opened before another Admin approves it (DEC-042) shows no code field.
+    await page.route('**/api/v1/links/check', (route) => route.fulfill({ json: { status: 'pending' } }));
+    await page.goto('/invite#t=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA');
+    await expect(page.getByRole('heading', { level: 1, name: 'This link isn’t active yet' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Code' })).toHaveCount(0);
+    await expectAccessible(page, 'link before approval');
+    await page.unroute('**/api/v1/links/check');
+
+    // An invitation: with one Admin, they get both the link and the code.
+    await page.goto('/users');
+    await page.getByRole('button', { name: 'Add user' }).first().click();
+    await page.getByRole('textbox', { name: 'Display name' }).fill('Sam Rivera');
+    await page.getByRole('textbox', { name: 'Username' }).fill('sam.rivera');
+    await page.getByRole('button', { name: 'Create invitation' }).click();
+    await expect(page.getByRole('heading', { name: 'Invitation for Sam Rivera' })).toBeVisible();
+    await expect(page.getByText(/You’re the only Admin, so you get both the link and the code/)).toBeVisible();
+    const invitation = await shownOnce(page);
+    await page.getByRole('checkbox', { name: /^I sent the link/ }).check();
+    await page.getByRole('button', { name: 'Done' }).click();
+
+    const context = await browser.newContext({ baseURL: process.env.GOLDMARK_BASE_URL ?? '', reducedMotion: 'reduce' });
+    const person = await context.newPage();
+    await recordViolations(person);
+    await person.goto(invitation.url);
+    await person.getByRole('textbox', { name: 'Code' }).fill(invitation.code);
+    await person.getByRole('button', { name: 'Continue' }).click();
+    const firstPassword = 'sam rivera likes long walks 93';
+    await person.getByRole('textbox', { name: 'Password', exact: true }).fill(firstPassword);
+    await person.getByRole('textbox', { name: 'Confirm password' }).fill(firstPassword);
+    await person.getByRole('button', { name: 'Continue' }).click();
+    const alt = await person.getByRole('img', { name: /^QR code for your authenticator app/ }).getAttribute('alt');
+    const key = (alt ?? '').split('The same key as text: ')[1] ?? '';
+    const enrolled = Math.floor(Date.now() / 30000);
+    await person.getByRole('textbox', { name: '6-digit code from the app' }).fill(totp(key, enrolled));
+    await person.getByRole('button', { name: 'Verify' }).click();
+    await person.getByRole('checkbox', { name: 'I have stored these codes safely' }).check();
+    await person.getByRole('button', { name: 'Finish' }).click();
+    await person.getByRole('button', { name: 'Go to Goldmark' }).click();
+    await expect(person.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+
+    // The administrator resets Sam's password: the dialog, with and without two-factor, then the link.
+    await page.reload();
+    await page.getByRole('button', { name: 'Actions for Sam Rivera' }).click();
+    await page.getByRole('menuitem', { name: 'Reset password…' }).click();
+    const reset = page.getByRole('alertdialog', { name: 'Reset the password for Sam Rivera?' });
+    await expect(reset).toBeVisible();
+    await expectAccessible(page, 'reset password dialog');
+    await reset.getByRole('checkbox', { name: /^Also reset two-factor/ }).check();
+    await expect(reset.getByText(/their authenticator and recovery codes are removed/)).toBeVisible();
+    await useScheme(page, 'dark');
+    await expectAccessible(page, 'reset password dialog, two-factor too (dark)');
+    await useScheme(page, 'light');
+    await reset.getByRole('checkbox', { name: /^Also reset two-factor/ }).uncheck();
+    await reset.getByRole('button', { name: 'Reset password' }).click();
+    await expect(page.getByRole('heading', { name: 'Password reset link for Sam Rivera' })).toBeVisible();
+    await expectAccessible(page, 'password reset link');
+    const link = await shownOnce(page);
+    expect(link.url).toContain('/password-reset#t=');
+    await page.getByRole('checkbox', { name: /^I sent the link/ }).check();
+    await page.getByRole('button', { name: 'Done' }).click();
+    await expect(page.getByText(/^Active · password reset link expires in/)).toBeVisible();
+
+    // Sam was signed out; the link, the code, a new password, then their own authenticator.
+    await person.goto('/');
+    await expect(person.getByRole('heading', { level: 1, name: 'Sign in' })).toBeVisible();
+    await person.goto(link.url);
+    await person.getByRole('textbox', { name: 'Code' }).fill(link.code);
+    await person.getByRole('button', { name: 'Continue' }).click();
+    await expect(person.getByText('Choose a new password, Sam Rivera')).toBeVisible();
+    const newPassword = 'a brand new passphrase 2026';
+    await person.getByRole('textbox', { name: 'New password', exact: true }).fill(newPassword);
+    await person.getByRole('textbox', { name: 'Confirm new password' }).fill(newPassword);
+    await expectAccessible(person, 'link page, new password');
+    await person.getByRole('button', { name: 'Continue' }).click();
+    await expect(person.getByRole('heading', { level: 1, name: 'Confirm with your authenticator' })).toBeVisible();
+    await useScheme(person, 'dark');
+    await expectAccessible(person, 'link page, confirm with the authenticator (dark)');
+    // A step after the enrolment's (a code works once); the server accepts one step ahead.
+    const confirm = Math.max(Math.floor(Date.now() / 30000), enrolled + 1);
+    await person.getByRole('textbox', { name: '6-digit code' }).fill(totp(key, confirm));
+    await person.getByRole('button', { name: 'Change password' }).click();
+    await expect(person.getByRole('heading', { level: 1, name: 'Your new password is set' })).toBeVisible();
+    await expectAccessible(person, 'password reset done (dark)');
+    await person.getByRole('button', { name: 'Go to Goldmark' }).click();
+    await expect(person.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+    await context.close();
+
+    await page.goto('/audit');
+    await expect(page.getByRole('row', { name: /Password reset completed/ }).first()).toBeVisible();
+
+    // The addendum (DEC-042 item 9), with answers shaped by hand: one Admin can't make a request that
+    // needs another's approval. The nav counts requests to approve; the requester's own ended request
+    // says so and offers "Ask again…".
+    await page.route('**/api/v1/users/approvals', (route) => route.fulfill({ json: { waiting: 2 } }));
+    // The real list, read by the page itself: only the browser trusts the stack's self-signed
+    // certificate (pinned by its key), so route.fetch() from the test runner would be refused.
+    const body = await page.evaluate(
+      async () =>
+        (await (await fetch('/api/v1/users', { headers: { Accept: 'application/json' } })).json()) as {
+          users: { id: string; userName: string; displayName: string; account: { link: unknown } }[];
+        },
+    );
+    const me = body.users.find((u) => u.userName === admin.userName);
+    const sam = body.users.find((u) => u.userName === 'sam.rivera');
+    if (me && sam) {
+      sam.account.link = {
+        purpose: 'combined-reset',
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+        expired: true,
+        awaitingApproval: true,
+        requestedBy: {
+          id: me.id,
+          displayName: me.displayName,
+          askedAt: new Date(Date.now() - 86_460_000).toISOString(),
+        },
+      };
+    }
+    await page.route('**/api/v1/users', (route) => route.fulfill({ json: body }));
+    await page.goto('/users');
+    const nav = page.getByRole('link', { name: 'Users & roles, 2 requests need your approval' });
+    await expect(nav).toBeVisible();
+    await expect(page.getByText('Password reset approval request ended')).toBeVisible();
+    await page.getByRole('button', { name: 'Actions for Sam Rivera' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Ask again…' })).toBeVisible();
+    await expectAccessible(page, 'requester rows and nav count');
+    await page.keyboard.press('Escape');
+    await useScheme(page, 'dark');
+    await expectAccessible(page, 'nav count (dark)');
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(nav).toBeVisible();
+    await expectAccessible(page, 'nav count on the 1024 rail (dark)');
+    await page.unroute('**/api/v1/users');
+    await page.unroute('**/api/v1/users/approvals');
+  });
+});
+
+/** The shown-once panel's link and code (screen 17). */
+async function shownOnce(page: Page): Promise<{ url: string; code: string }> {
+  const url = (await page.getByText(/^https:\/\/.+#t=/).textContent()) ?? '';
+  const code = (await page.getByText(/^[A-Z0-9]{3,5}-[A-Z0-9]{3,5}$/).textContent()) ?? '';
+  expect(url, 'link').not.toBe('');
+  expect(code, 'code').not.toBe('');
+  return { url, code };
+}
 
 /** A promise the test resolves itself, to hold a request until the page is in the state under test. */
 function deferred() {

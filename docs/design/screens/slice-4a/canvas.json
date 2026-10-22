@@ -1,0 +1,475 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-21T20:40:11Z"
+  },
+  "title": "Goldmark slice 4a: password recovery",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Users & roles · light · row menu with Reset password…"
+    },
+    "UsersResetPw.dc.html": {
+      "x": 1520,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Reset password · light · confirmation"
+    },
+    "UsersResetPwBoth.dc.html": {
+      "x": 3040,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Reset password · light · also reset two-factor (asks for approval)"
+    },
+    "UsersResetPwDark.dc.html": {
+      "x": 4560,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Reset password · dark · confirmation"
+    },
+    "UsersResetPwBothDark.dc.html": {
+      "x": 6080,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Reset password · dark · also reset two-factor (asks for approval)"
+    },
+    "UsersPwLink.dc.html": {
+      "x": 0,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Password reset link and code (shown once) · light"
+    },
+    "UsersPwTfLink.dc.html": {
+      "x": 1520,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Password and two-factor reset sent for approval (link only) · light"
+    },
+    "UsersAccount.dc.html": {
+      "x": 3040,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Account column wordings · guard on a disabled account · light"
+    },
+    "UsersSelf.dc.html": {
+      "x": 4560,
+      "y": 1020,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Guard on yourself · light"
+    },
+    "Users1024Pw.dc.html": {
+      "x": 6080,
+      "y": 1020,
+      "w": 1024,
+      "h": 768,
+      "title": "17 · 1024 · password reset link as overlay drawer"
+    },
+    "ResetPw.dc.html": {
+      "x": 0,
+      "y": 2320,
+      "w": 1440,
+      "h": 1000,
+      "title": "1b · Password reset · light · step 2"
+    },
+    "ResetPwDark.dc.html": {
+      "x": 1520,
+      "y": 2320,
+      "w": 1440,
+      "h": 1000,
+      "title": "1b · Password reset · dark · step 3"
+    },
+    "ResetPwSteps.dc.html": {
+      "x": 3040,
+      "y": 2320,
+      "w": 1840,
+      "h": 2700,
+      "title": "1b · Password reset · steps"
+    },
+    "ResetPwStates.dc.html": {
+      "x": 4960,
+      "y": 2320,
+      "w": 1840,
+      "h": 1880,
+      "title": "1b · Password reset · states"
+    },
+    "ResetPwPhone.dc.html": {
+      "x": 6880,
+      "y": 2320,
+      "w": 390,
+      "h": 1100,
+      "title": "1b · Password reset · phone · step 3"
+    },
+    "ResetBothSteps.dc.html": {
+      "x": 7350,
+      "y": 2320,
+      "w": 1840,
+      "h": 1880,
+      "title": "1b · Password and two-factor reset · steps"
+    },
+    "SignIn.dc.html": {
+      "x": 0,
+      "y": 5420,
+      "w": 1440,
+      "h": 900,
+      "title": "1 · Sign-in · light · forgot-password caption"
+    },
+    "SignInDark.dc.html": {
+      "x": 1520,
+      "y": 5420,
+      "w": 1440,
+      "h": 900,
+      "title": "1 · Sign-in · dark · forgot-password caption"
+    },
+    "SignInPhone.dc.html": {
+      "x": 3040,
+      "y": 5420,
+      "w": 390,
+      "h": 844,
+      "title": "1 · Sign-in · phone"
+    },
+    "AccountMenu.dc.html": {
+      "x": 0,
+      "y": 6720,
+      "w": 1440,
+      "h": 900,
+      "title": "Account menu · light · Change password…"
+    },
+    "AccountMenuDark.dc.html": {
+      "x": 1520,
+      "y": 6720,
+      "w": 1440,
+      "h": 900,
+      "title": "Account menu · dark"
+    },
+    "ChangePw.dc.html": {
+      "x": 3040,
+      "y": 6720,
+      "w": 1440,
+      "h": 900,
+      "title": "Change password · light"
+    },
+    "ChangePwDark.dc.html": {
+      "x": 4560,
+      "y": 6720,
+      "w": 1440,
+      "h": 900,
+      "title": "Change password · dark"
+    },
+    "ChangePwDone.dc.html": {
+      "x": 6080,
+      "y": 6720,
+      "w": 1440,
+      "h": 900,
+      "title": "Change password · light · success Toast"
+    },
+    "ChangePw1024.dc.html": {
+      "x": 7600,
+      "y": 6720,
+      "w": 1024,
+      "h": 768,
+      "title": "Change password · 1024"
+    },
+    "ChangePwStates.dc.html": {
+      "x": 8704,
+      "y": 6720,
+      "w": 1840,
+      "h": 1880,
+      "title": "Change password · states"
+    },
+    "AuditPw.dc.html": {
+      "x": 0,
+      "y": 9000,
+      "w": 1440,
+      "h": 1000,
+      "title": "16 · Audit log · light · Password reset entry expanded"
+    },
+    "UsersAdminTarget.dc.html": {
+      "x": 0,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Reset password for an Admin · combined reset not offered"
+    },
+    "UsersRequestLink.dc.html": {
+      "x": 1520,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Invitation sent for approval · requester gets the link only"
+    },
+    "UsersSingleAdmin.dc.html": {
+      "x": 3040,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Invitation · only one Admin · both values (fallback)"
+    },
+    "UsersAwaiting.dc.html": {
+      "x": 4560,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Requests awaiting approval · another Admin's view"
+    },
+    "UsersApproverMenu.dc.html": {
+      "x": 6080,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Approver's row menu"
+    },
+    "UsersRequesterMenu.dc.html": {
+      "x": 7600,
+      "y": 10400,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Requester's row menu · Approve disabled"
+    },
+    "UsersApprove.dc.html": {
+      "x": 0,
+      "y": 11420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Approve dialog · light"
+    },
+    "UsersApproveDark.dc.html": {
+      "x": 1520,
+      "y": 11420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Approve dialog · dark"
+    },
+    "UsersCode.dc.html": {
+      "x": 3040,
+      "y": 11420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Approver gets the code (shown once) · light"
+    },
+    "UsersCodeDark.dc.html": {
+      "x": 4560,
+      "y": 11420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Approver gets the code (shown once) · dark"
+    },
+    "UsersDecline.dc.html": {
+      "x": 6080,
+      "y": 11420,
+      "w": 1440,
+      "h": 900,
+      "title": "17 · Decline dialog · light"
+    },
+    "LinkPending.dc.html": {
+      "x": 7600,
+      "y": 11420,
+      "w": 1440,
+      "h": 1000,
+      "title": "1b · Link opened before approval · light"
+    },
+    "WizardCard.dc.html": {
+      "x": 0,
+      "y": 12820,
+      "w": 560,
+      "h": 780,
+      "title": "Component · wizard card (slice 4a flows)"
+    },
+    "SignInCard.dc.html": {
+      "x": 640,
+      "y": 12820,
+      "w": 400,
+      "h": 560,
+      "title": "Component · sign-in card"
+    },
+    "UsersPage.dc.html": {
+      "x": 1120,
+      "y": 12820,
+      "w": 1440,
+      "h": 900,
+      "title": "Component · users page"
+    },
+    "UsersPanel.dc.html": {
+      "x": 2640,
+      "y": 12820,
+      "w": 400,
+      "h": 852,
+      "title": "Component · users side panel"
+    },
+    "TwoFactorPage.dc.html": {
+      "x": 3120,
+      "y": 12820,
+      "w": 1440,
+      "h": 900,
+      "title": "Component · account page with menu"
+    },
+    "ChangePasswordDialog.dc.html": {
+      "x": 4640,
+      "y": 12820,
+      "w": 480,
+      "h": 600,
+      "title": "Component · Change password dialog"
+    },
+    "AuditPage.dc.html": {
+      "x": 5200,
+      "y": 12820,
+      "w": 1440,
+      "h": 1000,
+      "title": "Component · audit log page (slice 4a entries)"
+    },
+    "Notes.dc.html": {
+      "x": 6720,
+      "y": 12820,
+      "w": 1440,
+      "h": 1600,
+      "title": "Notes · components, changes and build notes"
+    },
+    "UsersRequesterRows.dc.html": {
+      "x": 0,
+      "y": 14820,
+      "w": 1440,
+      "h": 900,
+      "title": "Addendum · requester's rows: time left, request ended, Ask again…"
+    },
+    "UsersNavCountDark.dc.html": {
+      "x": 1520,
+      "y": 14820,
+      "w": 1440,
+      "h": 900,
+      "title": "Addendum · nav count for an approver · dark"
+    },
+    "UsersNavCount1024.dc.html": {
+      "x": 3040,
+      "y": 14820,
+      "w": 1024,
+      "h": 768,
+      "title": "Addendum · nav count on the 1024 rail"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "UsersResetPw.dc.html",
+    "UsersResetPwBoth.dc.html",
+    "UsersResetPwDark.dc.html",
+    "UsersResetPwBothDark.dc.html",
+    "UsersPwLink.dc.html",
+    "UsersPwTfLink.dc.html",
+    "UsersAccount.dc.html",
+    "UsersSelf.dc.html",
+    "Users1024Pw.dc.html",
+    "ResetPw.dc.html",
+    "ResetPwDark.dc.html",
+    "ResetPwSteps.dc.html",
+    "ResetPwStates.dc.html",
+    "ResetPwPhone.dc.html",
+    "ResetBothSteps.dc.html",
+    "SignIn.dc.html",
+    "SignInDark.dc.html",
+    "SignInPhone.dc.html",
+    "AccountMenu.dc.html",
+    "AccountMenuDark.dc.html",
+    "ChangePw.dc.html",
+    "ChangePwDark.dc.html",
+    "ChangePwDone.dc.html",
+    "ChangePw1024.dc.html",
+    "ChangePwStates.dc.html",
+    "AuditPw.dc.html",
+    "UsersAdminTarget.dc.html",
+    "UsersRequestLink.dc.html",
+    "UsersSingleAdmin.dc.html",
+    "UsersAwaiting.dc.html",
+    "UsersApproverMenu.dc.html",
+    "UsersRequesterMenu.dc.html",
+    "UsersApprove.dc.html",
+    "UsersApproveDark.dc.html",
+    "UsersCode.dc.html",
+    "UsersCodeDark.dc.html",
+    "UsersDecline.dc.html",
+    "LinkPending.dc.html",
+    "WizardCard.dc.html",
+    "SignInCard.dc.html",
+    "UsersPage.dc.html",
+    "UsersPanel.dc.html",
+    "TwoFactorPage.dc.html",
+    "ChangePasswordDialog.dc.html",
+    "AuditPage.dc.html",
+    "Notes.dc.html",
+    "UsersRequesterRows.dc.html",
+    "UsersNavCountDark.dc.html",
+    "UsersNavCount1024.dc.html"
+  ],
+  "notes": {
+    "rowUsers": {
+      "x": 0,
+      "y": -280,
+      "text": "Screen 17 · Users & roles · Reset password",
+      "kind": "title1",
+      "maxW": 7520
+    },
+    "rowLink": {
+      "x": 0,
+      "y": 2040,
+      "text": "Screen 1b · The link page · password reset flows",
+      "kind": "title1",
+      "maxW": 9190
+    },
+    "rowSignIn": {
+      "x": 0,
+      "y": 5140,
+      "text": "Screen 1 · Sign-in",
+      "kind": "title1",
+      "maxW": 3430
+    },
+    "rowAccount": {
+      "x": 0,
+      "y": 6440,
+      "text": "Account menu · Change password",
+      "kind": "title1",
+      "maxW": 10544
+    },
+    "rowAudit": {
+      "x": 0,
+      "y": 8720,
+      "text": "Screen 16 · Audit log · new entries",
+      "kind": "title1",
+      "maxW": 1440
+    },
+    "rowDual": {
+      "x": 0,
+      "y": 10120,
+      "text": "Dual control · invitations and the password-and-two-factor reset",
+      "kind": "title1",
+      "maxW": 9040
+    },
+    "rowParts": {
+      "x": 0,
+      "y": 12540,
+      "text": "Components and notes",
+      "kind": "title1",
+      "maxW": 8160
+    },
+    "rowAddendum": {
+      "x": 0,
+      "y": 14540,
+      "text": "Addendum after approval · waiting requests are visible (DEC-042 item 9)",
+      "kind": "title1",
+      "maxW": 4064
+    }
+  },
+  "designSystems": []
+}

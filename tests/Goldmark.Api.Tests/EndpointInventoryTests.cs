@@ -47,11 +47,13 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Enrolment: new authenticator"] = ("POST", "/api/v1/enrolment/authenticator", AccessPolicy.Enrolment),
             ["Enrolment: authenticator QR code"] = ("GET", "/api/v1/enrolment/authenticator.svg", AccessPolicy.Enrolment),
             ["Enrolment: verify and finish"] = ("POST", "/api/v1/enrolment/complete", AccessPolicy.Enrolment),
+            ["Enrolment: confirm a password reset"] = ("POST", "/api/v1/enrolment/confirm", AccessPolicy.Enrolment),
 
             ["Account: two-factor status"] = ("GET", "/api/v1/account/two-factor", AccessPolicy.SignedIn),
             ["Account: new recovery codes"] = ("POST", "/api/v1/account/two-factor/recovery-codes", AccessPolicy.SignedIn),
             ["Account: start a new authenticator"] = ("POST", "/api/v1/account/two-factor/authenticator", AccessPolicy.SignedIn),
             ["Account: verify the new authenticator"] = ("POST", "/api/v1/account/two-factor/authenticator/verify", AccessPolicy.SignedIn),
+            ["Account: change password"] = ("POST", "/api/v1/account/password", AccessPolicy.SignedIn),
 
             ["Users: list"] = ("GET", "/api/v1/users", AccessPolicy.Admin),
             ["Users: export CSV"] = ("GET", "/api/v1/users/export", AccessPolicy.Admin),
@@ -65,6 +67,11 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Users: reset two-factor"] = ("POST", "/api/v1/users/{id:guid}/two-factor-reset", AccessPolicy.Admin),
             ["Users: new invitation link"] = ("POST", "/api/v1/users/{id:guid}/invitation", AccessPolicy.Admin),
             ["Users: revoke invitation"] = ("DELETE", "/api/v1/users/{id:guid}/invitation", AccessPolicy.Admin),
+            ["Users: reset password"] = ("POST", "/api/v1/users/{id:guid}/password-reset", AccessPolicy.Admin),
+            ["Users: approve a request"] = ("POST", "/api/v1/users/{id:guid}/request/approve", AccessPolicy.Admin),
+            ["Users: decline a request"] = ("POST", "/api/v1/users/{id:guid}/request/decline", AccessPolicy.Admin),
+            ["Users: cancel a request"] = ("POST", "/api/v1/users/{id:guid}/request/cancel", AccessPolicy.Admin),
+            ["Users: requests waiting for me"] = ("GET", "/api/v1/users/approvals", AccessPolicy.Admin),
 
             ["Audit: list"] = ("GET", "/api/v1/audit", AccessPolicy.AuditReader),
             ["Audit: catalog"] = ("GET", "/api/v1/audit/catalog", AccessPolicy.AuditReader),

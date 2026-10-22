@@ -81,9 +81,42 @@ the keys that encrypt sign-in cookies and every user's authenticator secret.
 Without it, everyone signs in again and authenticator codes stop working until
 each person signs in with a recovery code and sets up the app again.
 
-Keep at least two administrators: Goldmark cannot yet reset a forgotten password
-(#25), so an only administrator who forgets theirs leaves nobody able to manage
-users.
+An administrator resets a forgotten password from Users & roles: the person gets a
+link and a separate code and proves their authenticator to finish; ticking "Also
+reset two-factor" covers a person who also lost their authenticator. Signed-in
+people change their own password from the account menu (DEC-042).
+
+Keep at least two administrators. A new invitation, and a reset of both password and
+two-factor, then need a second administrator's approval: the one who asks gets the
+link, the one who approves gets the code, so no single administrator holds both.
+Goldmark sends no email, so tell the other administrator yourself when you ask; a
+request ends if nobody approves it within the link lifetime (24 hours by default).
+With only one administrator, they get both values at once.
+
+Keep an emergency administrator too, as Microsoft advises for its own cloud: an Admin
+account not tied to one person (for example `emergency.admin`), whose password and
+recovery codes are written down and kept in a safe, used only when no other Admin can
+sign in. Every sign-in shows in the audit log, so check it there, and every 90 days
+check that the account still signs in.
+
+If no administrator can sign in at all, set two values in `deploy/.env` and restart the
+app: `GOLDMARK_RECOVER_ADMIN`, the username of an enabled Admin, and
+`GOLDMARK_RECOVER_CODE`, a code you choose (12 to 64 letters and digits; spaces and
+hyphens are ignored).
+
+```sh
+docker compose -f deploy/docker-compose.yml up -d app
+docker compose -f deploy/docker-compose.yml logs app | grep RecoveryLink
+```
+
+The app log then shows, once, a link path for that Admin; the code is never logged, so
+reading the log alone is not enough. Within an hour, open the path on Goldmark's address
+in a browser, enter your code, and set a new password and authenticator; that ends every
+session of theirs. Nothing changes on the account until then. While the setting is set,
+each start prints a new link and the previous one stops working. Once the Admin can sign
+in, empty both values and restart: every start ends any unused recovery link, so the
+link printed before stops working. An Admin whom another administrator locked stays locked: name another Admin. The
+reset is recorded in the audit log (DEC-042).
 
 The audit log keeps each entry for 365 days by default
 (`GOLDMARK_AUDIT_RETENTION_DAYS`: 365 to 36500, or 0 to keep entries

@@ -40,10 +40,18 @@ internal static class AuditCatalog
         new(AuditActions.Enabled, "Users & roles", "Account enabled", Succeeded),
         new(AuditActions.TwoFactorReset, "Users & roles", "Two-factor reset", Succeeded),
         new(AuditActions.TwoFactorResetCompleted, "Users & roles", "Two-factor set up again", Succeeded),
+        new(AuditActions.PasswordReset, "Users & roles", "Password reset", Succeeded),
+        new(AuditActions.PasswordResetCompleted, "Users & roles", "Password reset completed", Succeeded),
+        new(AuditActions.ApprovalRequested, "Users & roles", "Approval requested", Succeeded),
+        new(AuditActions.RequestApproved, "Users & roles", "Request approved", Succeeded),
+        new(AuditActions.RequestDeclined, "Users & roles", "Request declined", Succeeded),
+        new(AuditActions.RequestCancelled, "Users & roles", "Request cancelled", Succeeded),
+        new(AuditActions.RecoveryLinkIssued, "Users & roles", "Recovery link issued", Succeeded),
 
         new(AuditActions.ConfirmationFailed, "Own account", "Password or code wrong at confirmation", Failed),
         new(AuditActions.RecoveryCodesRegenerated, "Own account", "New recovery codes", Succeeded),
         new(AuditActions.AuthenticatorChanged, "Own account", "New authenticator", Succeeded),
+        new(AuditActions.PasswordChanged, "Own account", "Password changed", Succeeded),
 
         new(AuditActions.Exported, "Audit log", "Audit log exported", Succeeded),
         new(AuditActions.RetentionPurged, "Audit log", "Old entries deleted", Succeeded),

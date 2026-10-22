@@ -100,6 +100,17 @@ public sealed class AuthPrimitivesTests
     }
 
     [Fact]
+    public void A_code_made_at_approval_is_bound_to_its_links_own_key()
+    {
+        var key = LinkSecrets.NewCodeKey();
+
+        Assert.Equal(32, key.Length);
+        Assert.NotEqual(LinkSecrets.HashCode(key, "K7Q2MX"), LinkSecrets.HashCode(LinkSecrets.NewCodeKey(), "K7Q2MX"));
+        Assert.NotEqual(LinkSecrets.HashCode(key, "K7Q2MX"), LinkSecrets.HashCode(key, "K7Q2MY"));
+        Assert.True(LinkSecrets.Matches(LinkSecrets.HashCode(key, "K7Q2MX"), LinkSecrets.HashCode(key, "K7Q2MX")));
+    }
+
+    [Fact]
     public void Setup_tokens_are_160_bits_and_match_ignoring_case_spaces_and_hyphens()
     {
         var token = LinkSecrets.NewSetupToken();
@@ -198,7 +209,7 @@ public sealed class AuthPrimitivesTests
     public void The_user_export_neutralizes_spreadsheet_formulas()
     {
         var user = new UserSummary(Guid.NewGuid(), "sam", "=HYPERLINK(\"http://x\")", ["Viewer"], true,
-            new UserAccountState("active", null, null), null, DateTime.UtcNow, "e");
+            new UserAccountState("active", null, null, false), null, DateTime.UtcNow, "e");
 
         var csv = UserDirectory.ToCsv([user]);
 
@@ -231,6 +242,56 @@ public sealed class AuthPrimitivesTests
 
         Assert.True(result.Failed);
         Assert.Contains($"Goldmark:Auth:{setting}", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_recovery_setting_that_cannot_be_a_username_is_refused_without_printing_it()
+    {
+        var tooLong = new string('q', 65);
+        var blank = new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = "   " });
+        var longer = new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = tooLong });
+
+        Assert.True(blank.Failed);
+        Assert.True(longer.Failed);
+        Assert.Contains("Goldmark:Auth:RecoverAdmin", longer.FailureMessage, StringComparison.Ordinal);
+        Assert.DoesNotContain(tooLong, longer.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("", "")]
+    [InlineData("", "a stale code is ignored")]
+    [InlineData("pat.admin", "harbour-lantern-2026")]
+    [InlineData(" pat.admin ", "HARBOUR LANTERN 2026")]
+    public void An_empty_recovery_setting_or_a_username_with_its_code_is_accepted(string name, string code) =>
+        Assert.True(new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = name, RecoverAdminCode = code }).Succeeded);
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("short2026")]
+    [InlineData("harbour_lantern_2026")]
+    [InlineData("hárbourlantern2026")]
+    public void The_recovery_setting_needs_its_own_code_and_never_prints_it(string code)
+    {
+        var result = new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = "pat.admin", RecoverAdminCode = code });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Goldmark:Auth:RecoverAdminCode is required with RecoverAdmin", result.FailureMessage, StringComparison.Ordinal);
+        if (code.Length > 0)
+        {
+            Assert.DoesNotContain(code, result.FailureMessage, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void A_recovery_code_ignores_case_spaces_and_hyphens_and_must_be_12_to_64_letters_and_digits()
+    {
+        Assert.Equal("HARBOURLANTERN2026", LinkSecrets.NormalizeRecoveryCode("harbour-lantern 2026"));
+        Assert.Equal(LinkSecrets.NormalizeRecoveryCode("HARBOURLANTERN2026"), LinkSecrets.NormalizeRecoveryCode("harbour lantern-2026"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode("abc-def-ghi"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode(new string('q', 65)));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode("harbour.lantern.2026"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode(null));
+        Assert.NotNull(LinkSecrets.NormalizeRecoveryCode(new string('q', 64)));
     }
 
     private sealed class ManualTime(DateTimeOffset start) : TimeProvider

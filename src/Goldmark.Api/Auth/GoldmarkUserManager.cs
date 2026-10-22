@@ -53,6 +53,46 @@ internal sealed class GoldmarkUserManager(
         return result;
     }
 
+    /// <summary>
+    /// An administrator's password reset (DEC-042): the old password stops working now; a lockout from
+    /// failed attempts ends, so the person can use the link at once (an administrator's lock stays); the
+    /// new security stamp ends sign-ins in progress.
+    /// </summary>
+    public Task<IdentityResult> StartPasswordResetAsync(GoldmarkUser user, DateTime resetAt)
+    {
+        user.PasswordResetAt = resetAt;
+        user.AccessFailedCount = 0;
+        if (!user.IsLockedByAdministrator)
+        {
+            user.LockoutEnd = null;
+        }
+
+        return UpdateSecurityStampAsync(user);
+    }
+
+    /// <summary>
+    /// Installs the password chosen through a reset link, which ends the reset. A lockout from failed
+    /// attempts ends too (a recovery link changed nothing before); an administrator's lock stays.
+    /// </summary>
+    public Task<IdentityResult> CompletePasswordResetAsync(GoldmarkUser user, string passwordHash)
+    {
+        user.PasswordResetAt = null;
+        user.AccessFailedCount = 0;
+        if (!user.IsLockedByAdministrator)
+        {
+            user.LockoutEnd = null;
+        }
+
+        return SetPasswordHashAsync(user, passwordHash);
+    }
+
+    /// <summary>
+    /// A person as audit details name them, "Display Name (username)" as they are now; null if there is
+    /// no such account (any more).
+    /// </summary>
+    public async Task<string?> AuditNameAsync(Guid? id) =>
+        id is { } value && await FindByIdAsync(value.ToString("D")) is { } person ? $"{person.DisplayName} ({person.UserName})" : null;
+
     /// <summary>Removes the authenticator key and every recovery code (an administrator's two-factor reset).</summary>
     public async Task<IdentityResult> ClearTwoFactorAsync(GoldmarkUser user)
     {
