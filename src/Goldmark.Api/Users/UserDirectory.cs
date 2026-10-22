@@ -34,6 +34,16 @@ internal sealed record OpenLink(string Purpose, DateTime ExpiresAt, bool Expired
 /// <summary>The Admin who asked for a link under dual control, and when (DEC-042).</summary>
 internal sealed record LinkRequester(Guid Id, string DisplayName, DateTime AskedAt);
 
+/// <summary>
+/// An Admin who could approve a request (DEC-042 item 8), and whether they can sign in to do it: not with
+/// a password reset unfinished, without an authenticator, or locked by an administrator. The automatic
+/// lockout is not counted, so failed sign-ins in someone's name can't change who approves.
+/// </summary>
+internal sealed record Approver(string DisplayName, bool PasswordResetPending, bool HasAuthenticator, bool LockedByAdministrator)
+{
+    public bool CanApprove => !PasswordResetPending && HasAuthenticator && !LockedByAdministrator;
+}
+
 /// <summary>Read queries for screen 17: every person with roles, account state and open link, in one query.</summary>
 internal sealed class UserDirectory(DbSession db, TimeProvider time)
 {
@@ -73,16 +83,21 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
 
     /// <summary>
     /// Administrators who could approve a request about <paramref name="target"/> asked by
-    /// <paramref name="requester"/> (DEC-042): enabled, past their invitation, and neither of the two.
-    /// None means the one who asks gets both the link and the code.
+    /// <paramref name="requester"/> (DEC-042): enabled, past their invitation, and neither of the two,
+    /// with whether each can sign in to approve. None means the one who asks gets both the link and the
+    /// code; none who can sign in means the request is refused (owner: "C. Refuse, say why").
     /// </summary>
-    public Task<int> CountApproversAsync(Guid requester, Guid target) =>
-        db.ExecuteScalarAsync<int>("""
-            SELECT COUNT(*)
+    public Task<IReadOnlyList<Approver>> ApproversAsync(Guid requester, Guid target) =>
+        db.QueryAsync<Approver>("""
+            SELECT u.DisplayName,
+                CAST(CASE WHEN u.PasswordResetAt IS NULL THEN 0 ELSE 1 END AS bit) AS PasswordResetPending,
+                CAST(CASE WHEN u.AuthenticatorKey IS NULL THEN 0 ELSE 1 END AS bit) AS HasAuthenticator,
+                CAST(CASE WHEN u.LockoutEnd = @administratorLock THEN 1 ELSE 0 END AS bit) AS LockedByAdministrator
             FROM cmdb.UserRole AS r
             JOIN cmdb.UserAccount AS u ON u.Id = r.UserId
-            WHERE r.Role = 'Admin' AND u.IsDisabled = 0 AND u.PasswordHash IS NOT NULL AND u.Id <> @requester AND u.Id <> @target;
-            """, new { requester, target });
+            WHERE r.Role = 'Admin' AND u.IsDisabled = 0 AND u.PasswordHash IS NOT NULL AND u.Id <> @requester AND u.Id <> @target
+            ORDER BY u.DisplayName;
+            """, new { requester, target, administratorLock = DateTimeOffset.MaxValue });
 
     /// <summary>Requests <paramref name="admin"/> could approve now: waiting, not ended, not their own, not about them.</summary>
     public Task<int> CountApprovalsWaitingForAsync(Guid admin) =>

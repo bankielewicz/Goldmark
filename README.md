@@ -114,8 +114,8 @@ reading the log alone is not enough. Within an hour, open the path on Goldmark's
 in a browser, enter your code, and set a new password and authenticator; that ends every
 session of theirs. Nothing changes on the account until then. While the setting is set,
 each start prints a new link and the previous one stops working. Once the Admin can sign
-in, empty both values and restart: a start without them also ends any unused recovery
-link. An Admin whom another administrator locked stays locked: name another Admin. The
+in, empty both values and restart: every start ends any unused recovery link, so the
+link printed before stops working. An Admin whom another administrator locked stays locked: name another Admin. The
 reset is recorded in the audit log (DEC-042).
 
 The audit log keeps each entry for 365 days by default

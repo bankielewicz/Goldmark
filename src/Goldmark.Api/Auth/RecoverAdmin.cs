@@ -14,9 +14,11 @@ namespace Goldmark.Api.Auth;
 /// reading the log alone is not enough; the link works for an hour (owner: "A. Operator sets it in
 /// .env" and "A. 1 hour, ended at a clean restart"). It replaces any open link of theirs and changes
 /// nothing on the account until it is used, so it is audited "Recovery link issued", not "Password reset";
-/// using it ends every session and sets a new password and authenticator. With the setting naming anyone else, a warning says so and no link is made. A start
-/// without the setting ends every unused recovery link, so emptying it and restarting ends a copy left
-/// in a log.
+/// using it ends every session and sets a new password and authenticator. With the setting naming
+/// anyone else, a warning says so and no link is made. Every
+/// start first ends every unused recovery link, whoever it was for and whatever the setting now says, so
+/// a link lasts at most until the next start and emptying the setting and restarting ends a copy left in
+/// a log (Codex, PR #38).
 /// </summary>
 internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, IOptions<AuthOptions> options, ILogger<RecoverAdminService> logger)
     : BackgroundService
@@ -39,11 +41,8 @@ internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, I
                 if (SchemaMigrations.DatabaseVersion(await db.QueryAsync<string>(SchemaMigrations.AppliedScriptsSql, cancellationToken: stoppingToken))
                     == SchemaMigrations.ExpectedVersion)
                 {
-                    if (name.Length == 0)
-                    {
-                        await EndRecoveryLinksAsync(scope.ServiceProvider, db);
-                    }
-                    else
+                    await EndRecoveryLinksAsync(scope.ServiceProvider, db);
+                    if (name.Length > 0)
                     {
                         await IssueAsync(scope.ServiceProvider, db, name);
                     }
@@ -110,7 +109,7 @@ internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, I
             foreach (var userId in await links.RevokeRecoveryLinksAsync())
             {
                 await audit.WriteAsync(AuditActions.LinkInvalidated, AuditActor.System, "User", userId,
-                    new { purpose = LinkPurpose.CombinedReset, reason = "recovery-setting-removed" });
+                    new { purpose = LinkPurpose.CombinedReset, reason = "restart" });
             }
 
             return 0;

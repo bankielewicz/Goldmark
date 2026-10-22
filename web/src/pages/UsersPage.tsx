@@ -825,7 +825,9 @@ function RowActions({
                       ? 'You can’t reset your own password here. Use Change password in your account menu.'
                       : disabled
                         ? 'Enable the account first. A disabled account can’t use the link.'
-                        : waiting
+                        : user.roles.includes('Admin') && !user.twoFactorEnrolled
+                          ? 'This Admin has no authenticator to confirm a new password with. Remove Admin first, or let them finish setting up two-factor.'
+                          : waiting
                   }
                   onClick={() => onConfirm('password-reset')}
                 >
@@ -1112,7 +1114,12 @@ function ResetPasswordDialog({
   onDone: (link: IssuedLink, alsoTwoFactor: boolean) => void;
 }) {
   const styles = useStyles();
-  const [alsoTwoFactor, setAlsoTwoFactor] = useState(initialAlsoTwoFactor && !user.roles.includes('Admin'));
+  // Without an authenticator the password-only reset could never be confirmed (DEC-042 item 3), so the
+  // reset includes two-factor; an Admin without one doesn't reach this dialog (the menu says why).
+  const noAuthenticator = !user.twoFactorEnrolled && !user.roles.includes('Admin');
+  const [alsoTwoFactor, setAlsoTwoFactor] = useState(
+    (initialAlsoTwoFactor || noAuthenticator) && !user.roles.includes('Admin'),
+  );
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<ApiError | null>(null);
   const first = firstName(user.displayName);
@@ -1153,7 +1160,7 @@ function ResetPasswordDialog({
     <Checkbox
       label={`Also reset two-factor (${first} lost their authenticator)`}
       checked={alsoTwoFactor}
-      disabled={admin || busy}
+      disabled={admin || noAuthenticator || busy}
       onChange={(_, d) => setAlsoTwoFactor(d.checked === true)}
     />
   );
@@ -1177,9 +1184,16 @@ function ResetPasswordDialog({
                 {text}
               </Text>
             ))}
-            {admin ? (
+            {admin || noAuthenticator ? (
               // A link and code alone never yield an Admin session (DEC-042 item 7).
-              <Tooltip content="Remove Admin first; add it again after their first sign-in." relationship="description">
+              <Tooltip
+                content={
+                  admin
+                    ? 'Remove Admin first; add it again after their first sign-in.'
+                    : `${first} has no authenticator, so the reset includes two-factor.`
+                }
+                relationship="description"
+              >
                 <div>{box}</div>
               </Tooltip>
             ) : (
@@ -1304,7 +1318,15 @@ function AddUser({
   return (
     <form onSubmit={(event) => void onSubmit(event)} noValidate>
       <DrawerBody className={styles.panelBody}>
-        {problem ? <ErrorBar error={problem} onRetry={() => setProblem(null)} /> : null}
+        {problem ? (
+          problem.isUnavailable ? (
+            <ErrorBar error={problem} onRetry={() => setProblem(null)} />
+          ) : (
+            <MessageBar intent="error">
+              <MessageBarBody>{problem.message}</MessageBarBody>
+            </MessageBar>
+          )
+        ) : null}
         <Field label="Display name" required {...validation(errors.displayName)}>
           <Input value={displayName} onChange={(_, d) => setDisplayName(d.value)} />
         </Field>
@@ -1364,6 +1386,8 @@ function EditRoles({
   const [busy, setBusy] = useState(false);
   const self = user.id === session.user?.id;
   const neverSignedIn = current.lastSignInAt === null;
+  // Its link may need none of their factors, and an Admin is never reset that way (DEC-042 item 7).
+  const resetPending = current.account.passwordResetPending;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -1429,7 +1453,8 @@ function EditRoles({
           <legend className={styles.legend}>Roles</legend>
           {['Admin', 'Editor', 'Viewer', 'Auditor'].map((r) => {
             const lockedAdmin =
-              r === 'Admin' && ((self && roles.includes('Admin')) || (neverSignedIn && !roles.includes('Admin')));
+              r === 'Admin' &&
+              ((self && roles.includes('Admin')) || ((neverSignedIn || resetPending) && !roles.includes('Admin')));
             const reason =
               r !== 'Admin'
                 ? null
@@ -1437,7 +1462,9 @@ function EditRoles({
                   ? 'You can’t remove Admin from yourself.'
                   : neverSignedIn
                     ? 'Add Admin after their first sign-in.'
-                    : null;
+                    : resetPending
+                      ? 'Add Admin after they finish their password reset.'
+                      : null;
             const box = (
               <RoleCheckbox
                 key={r}

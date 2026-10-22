@@ -86,6 +86,13 @@ internal sealed class GoldmarkUserManager(
         return SetPasswordHashAsync(user, passwordHash);
     }
 
+    /// <summary>
+    /// A person as audit details name them, "Display Name (username)" as they are now; null if there is
+    /// no such account (any more).
+    /// </summary>
+    public async Task<string?> AuditNameAsync(Guid? id) =>
+        id is { } value && await FindByIdAsync(value.ToString("D")) is { } person ? $"{person.DisplayName} ({person.UserName})" : null;
+
     /// <summary>Removes the authenticator key and every recovery code (an administrator's two-factor reset).</summary>
     public async Task<IdentityResult> ClearTwoFactorAsync(GoldmarkUser user)
     {

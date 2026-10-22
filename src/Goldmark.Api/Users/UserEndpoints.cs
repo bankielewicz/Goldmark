@@ -170,6 +170,12 @@ internal static class UserEndpoints
         };
         var result = await db.InTransactionAsync(async () =>
         {
+            var approvers = await directory.ApproversAsync(admin, user.Id);
+            if (NoApproverCanSignIn(approvers) is { } refused)
+            {
+                return (Problem: refused, Link: (LinkShownOnce?)null);
+            }
+
             var created = await users.CreateAsync(user);
             if (!created.Succeeded)
             {
@@ -181,7 +187,7 @@ internal static class UserEndpoints
                 Check(await users.AddToRoleAsync(user, Roles.PersonRole(role)!));
             }
 
-            var link = await InvitationLinkAsync(user, admin, links, directory);
+            var link = await InvitationLinkAsync(user, admin, links, approvers.Count > 0);
             await audit.WriteAsync(AuditActions.InvitationCreated, "User", user.Id, new
             {
                 userName = user.UserName,
@@ -244,6 +250,13 @@ internal static class UserEndpoints
             {
                 return ApiProblems.Problem(StatusCodes.Status409Conflict, "admin-needs-sign-in",
                     "Admin can be added only after the person has signed in once.");
+            }
+
+            if (add.Contains(Roles.Admin) && user.IsPasswordResetPending)
+            {
+                // Its link may be one that needs no factor of theirs, and an Admin is never reset that way (DEC-042 item 7).
+                return ApiProblems.Problem(StatusCodes.Status409Conflict, "password-reset-pending",
+                    "Admin can't be added while this person's password reset is unfinished. Add it after they set their new password.");
             }
 
             if (add.Contains(Roles.Admin) && await links.OpenForUserAsync(user.Id) is { Purpose: LinkPurpose.CombinedReset } combined
@@ -409,7 +422,19 @@ internal static class UserEndpoints
                 return user is null ? NotFound() : NoInvitation();
             }
 
-            var link = await InvitationLinkAsync(user, self, links, directory);
+            // A waiting request is approved, declined or cancelled first, as for the resets.
+            if (await WaitingRequestAsync(user, links) is not null)
+            {
+                return RequestWaiting();
+            }
+
+            var approvers = await directory.ApproversAsync(self, user.Id);
+            if (NoApproverCanSignIn(approvers) is { } refused)
+            {
+                return refused;
+            }
+
+            var link = await InvitationLinkAsync(user, self, links, approvers.Count > 0);
             await audit.WriteAsync(AuditActions.InvitationReissued, "User", user.Id, new
             {
                 userName = user.UserName,
@@ -443,10 +468,28 @@ internal static class UserEndpoints
     /// An invitation's link: a request (link only) when another Admin could approve it, else the link and
     /// its code, marked as given to the only Admin (DEC-042).
     /// </summary>
-    private static async Task<LinkShownOnce> InvitationLinkAsync(GoldmarkUser user, Guid asker, LinkStore links, UserDirectory directory) =>
-        await directory.CountApproversAsync(asker, user.Id) > 0
+    private static async Task<LinkShownOnce> InvitationLinkAsync(GoldmarkUser user, Guid asker, LinkStore links, bool dualControl) =>
+        dualControl
             ? LinkShownOnce.Of(await links.RequestAsync(user.Id, LinkPurpose.Invitation, asker))
             : LinkShownOnce.Of(await links.IssueAsync(user.Id, LinkPurpose.Invitation, asker), onlyAdmin: true);
+
+    /// <summary>
+    /// Under dual control (DEC-042 item 8): null when no other Admin exists (the one who asks gets both
+    /// values) or one of them can sign in to approve; otherwise the refusal, naming who can't and why
+    /// (owner, 2026-10-22: "C. Refuse, say why"), so no request waits for an approval that can't come.
+    /// </summary>
+    private static IResult? NoApproverCanSignIn(IReadOnlyList<Approver> approvers) =>
+        approvers.Count == 0 || approvers.Any(a => a.CanApprove)
+            ? null
+            : ApiProblems.Problem(StatusCodes.Status409Conflict, "no-approver-available",
+                $"No other Admin can approve now: {string.Join("; ", approvers.Select(Why))}. Unlock them, or let them finish their reset, first.");
+
+    private static string Why(Approver approver) => approver switch
+    {
+        { LockedByAdministrator: true } => $"{approver.DisplayName} is locked by an administrator",
+        { PasswordResetPending: true } => $"{approver.DisplayName}'s password reset isn't finished",
+        _ => $"{approver.DisplayName} has no authenticator yet",
+    };
 
     /// <summary>
     /// "Reset password…" (DEC-042). Password only: the old password stops working now, every session
@@ -484,9 +527,19 @@ internal static class UserEndpoints
                 return ApiProblems.Problem(StatusCodes.Status409Conflict, "disabled", "Enable the account first. A disabled account can't use the link.");
             }
 
-            if (alsoTwoFactor && await users.IsInRoleAsync(user, Roles.Admin))
+            var isAdmin = await users.IsInRoleAsync(user, Roles.Admin);
+            if (alsoTwoFactor && isAdmin)
             {
                 return AdminTarget();
+            }
+
+            if (!alsoTwoFactor && !user.HasAuthenticator)
+            {
+                // The password-only reset ends with the person's own authenticator (DEC-042 item 3): without one its
+                // link could never be used.
+                return ApiProblems.Problem(StatusCodes.Status409Conflict, "no-authenticator", isAdmin
+                    ? "This Admin has no authenticator to confirm a new password with, and the password-and-two-factor reset isn't for an Admin. Remove Admin first, or let them finish setting up two-factor."
+                    : "This person has no authenticator to confirm a new password with. Use \"Also reset two-factor\" instead.");
             }
 
             // A request that ended unapproved no longer counts: asking again replaces it.
@@ -495,8 +548,14 @@ internal static class UserEndpoints
                 return RequestWaiting();
             }
 
+            var approvers = alsoTwoFactor ? await directory.ApproversAsync(self, user.Id) : [];
+            if (NoApproverCanSignIn(approvers) is { } refused)
+            {
+                return refused;
+            }
+
             LinkShownOnce link;
-            if (alsoTwoFactor && await directory.CountApproversAsync(self, user.Id) > 0)
+            if (alsoTwoFactor && approvers.Count > 0)
             {
                 link = LinkShownOnce.Of(await links.RequestAsync(user.Id, LinkPurpose.CombinedReset, self));
                 await audit.WriteAsync(AuditActions.ApprovalRequested, "User", user.Id,
@@ -575,21 +634,22 @@ internal static class UserEndpoints
                 return AdminTarget();
             }
 
-            if (combined)
-            {
-                await StartResetAsync(user, alsoTwoFactor: true, users, db, time);
-            }
-
+            // The guarded approval first: if the request ended meanwhile, nothing on the account changes.
             if (await links.ApproveAsync(request.Id, self) is not { } code)
             {
                 return NoRequest(null);
+            }
+
+            if (combined)
+            {
+                await StartResetAsync(user, alsoTwoFactor: true, users, db, time);
             }
 
             await audit.WriteAsync(AuditActions.RequestApproved, "User", user.Id, new
             {
                 userName = user.UserName,
                 @for = combined ? "combined-reset" : "invitation",
-                askedBy = await NameAsync(request.CreatedBy, users),
+                askedBy = await users.AuditNameAsync(request.CreatedBy),
                 linkExpiresAt = code.ExpiresAt,
             });
             return Results.Ok(new { user = await directory.FindAsync(user.Id), code });
@@ -649,7 +709,7 @@ internal static class UserEndpoints
             {
                 userName = user.UserName,
                 @for = invitation ? "invitation" : "combined-reset",
-                askedBy = await NameAsync(request.CreatedBy, users),
+                askedBy = await users.AuditNameAsync(request.CreatedBy),
                 accountRemoved = invitation,
             });
             return Results.NoContent();
@@ -660,9 +720,6 @@ internal static class UserEndpoints
     /// <summary>The person's request awaiting approval, if any; one that ended unapproved only with <paramref name="includeEnded"/>.</summary>
     private static async Task<LinkRow?> WaitingRequestAsync(GoldmarkUser user, LinkStore links, bool includeEnded = false) =>
         await links.OpenForUserAsync(user.Id) is { IsAwaitingApproval: true } link && (includeEnded || !links.IsExpired(link)) ? link : null;
-
-    private static async Task<string?> NameAsync(Guid? id, GoldmarkUserManager users) =>
-        id is { } value && await users.FindByIdAsync(value.ToString("D")) is { } person ? $"{person.DisplayName} ({person.UserName})" : null;
 
     private static IResult NoRequest(LinkRow? link) =>
         link is { IsAwaitingApproval: true }

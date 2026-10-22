@@ -69,8 +69,7 @@ internal static class AccountEndpoints
         {
             if (await users.IsLockedOutAsync(user))
             {
-                return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
-                    $"This account is locked for {options.Value.LockoutMinutes} minutes after {options.Value.LockoutThreshold} failed attempts.");
+                return AuthEndpoints.Locked(options.Value);
             }
 
             if (!await users.CheckPasswordAsync(user, request.CurrentPassword ?? ""))
@@ -210,8 +209,7 @@ internal static class AccountEndpoints
     {
         if (await users.IsLockedOutAsync(user))
         {
-            return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
-                $"This account is locked for {options.LockoutMinutes} minutes after {options.LockoutThreshold} failed attempts.");
+            return AuthEndpoints.Locked(options);
         }
 
         if (!await users.CheckPasswordAsync(user, request.Password ?? ""))

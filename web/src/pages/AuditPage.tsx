@@ -382,7 +382,7 @@ const reasons: Record<string, string> = {
   'not-set-up': 'Account not set up yet',
   'two-factor-reset': 'Two-factor was reset',
   'password-reset-pending': 'Password reset pending',
-  'recovery-setting-removed': 'The recovery setting was removed, and Goldmark restarted',
+  restart: 'Goldmark restarted (a recovery link lasts until the next start)',
   'unknown-user': 'Unknown username (the name typed is not recorded)',
 };
 const methods: Record<string, string> = {

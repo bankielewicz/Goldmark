@@ -82,7 +82,8 @@ export function ChangePasswordDialog({ onClose, onChanged }: { onClose: () => vo
             <DialogContent className={styles.form}>
               {locked ? (
                 <Notice intent="warning">
-                  Too many wrong tries. Your account is locked for 15 minutes; you stay signed in.
+                  Too many wrong tries. Your account is locked for{' '}
+                  {typeof problem?.body.minutes === 'number' ? problem.body.minutes : 15} minutes; you stay signed in.
                 </Notice>
               ) : null}
               {problem && !locked ? (

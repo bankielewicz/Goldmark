@@ -1461,7 +1461,12 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      `recovery-setting-removed`). Five wrong codes still end it. Settled in the slice, open to veto (a
      side agent's note): issuing the link is audited "Recovery link issued", not "Password reset", since
      nothing changes until it is used, as a waiting combined reset is "Approval requested" (item 8); its
-     use is "Password reset completed", Link issued by "server-setting".
+     use is "Password reset completed", Link issued by "server-setting". From the review of PR #38
+     (Codex, reproduced): every start, not only one without the setting, ends every unused recovery
+     link, whoever it was for (audited, reason `restart`), so a link lasts at most until the next start
+     and a refused start ends the previous link too. The code reaches the app as an environment
+     variable (readable with `docker inspect` by whoever holds the host, as the owner's choice implies);
+     reading the log alone is still not enough.
   7. **The password-and-two-factor reset is never for an Admin ("A. Not for an Admin (Recommended)").**
      A link and code alone never yield an Admin session, as for invitations (DEC-038 item 2): Remove
      Admin first; add it again after their first sign-in. The recovery setting (item 6) is the one,
@@ -1479,7 +1484,15 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      the account until approved; a request waits up to the link lifetime, and the link's own lifetime
      counts from the approval; the approving Admin in the samples is Morgan Okafor. An invitation that
      waits still writes "Invitation created" (detail: approval requested), so a filter on it finds every
-     invitation; a combined reset writes "Approval requested", since nothing changed yet.
+     invitation; a combined reset writes "Approval requested", since nothing changed yet. From the
+     review of PR #38 (Codex, reproduced; the owner, 2026-10-22, asked in the rule-6 format: "C. Refuse,
+     say why (Recommended)"): an Admin who can't sign in to approve (password reset unfinished, no
+     authenticator, or locked by an administrator; never the automatic lockout, which failed sign-ins in
+     their name could trigger) leaves the request refused, naming who and why, rather than waiting for
+     an approval that can't come or widening the fallback. Approve records the approval before it
+     changes the account, so a request that ended meanwhile changes nothing. A waiting invitation can't
+     be replaced by a new link either. A password-only reset needs the person's authenticator (its link
+     ends with it), and Admin can't be added while a password reset is unfinished (item 7).
   9. **Waiting requests are visible ("A. Nav count + time left (Recommended)"; raised by a side agent:
      Goldmark sends no email).** Every Admin sees a count on the "Users & roles" nav item on every page;
      the requester's row shows the time left and, once it lapses, "approval request ended"; the README
@@ -1682,7 +1695,7 @@ Same status vocabulary as slice 1. Local runs on the owner's WSL machine:
 ## Slice 4a acceptance mapping
 
 Same status vocabulary as slice 1. Local runs on the owner's WSL machine, 2026-10-21 and 2026-10-22:
-393 in-process tests; the full integration suite, 219 tests (SQL Server 2025), on `d7c0724`; web 48
+393 in-process tests; the full integration suite, 224 tests (SQL Server 2025), with review round 1's fixes; web 48
 policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose smoke, 97 unique checks with Playwright 10/10 inside (Chrome).
 
 | # | Criterion (source) | Status | Evidence |

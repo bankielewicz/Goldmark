@@ -155,8 +155,9 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
     }
 
     /// <summary>
-    /// Revokes every unused recovery link (a start without the recovery setting, DEC-042 item 6), so
-    /// emptying the setting and restarting ends a copy of the link left in a log. Returns whose they were.
+    /// Revokes every unused recovery link (at each start, DEC-042 item 6), so a recovery link lasts at most
+    /// until the next start and emptying the setting and restarting ends a copy left in a log. Returns whose
+    /// they were.
     /// </summary>
     public Task<IReadOnlyList<Guid>> RevokeRecoveryLinksAsync() =>
         db.QueryAsync<Guid>("""

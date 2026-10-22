@@ -288,7 +288,8 @@ internal static class AuthEndpoints
     private static IResult InvalidCredentials() =>
         ApiProblems.Problem(StatusCodes.Status401Unauthorized, "invalid-credentials", "Username or password is incorrect.");
 
-    private static IResult Locked(AuthOptions options) =>
+    /// <summary>The lockout answer, with its configured minutes and attempts for the screens to state.</summary>
+    internal static IResult Locked(AuthOptions options) =>
         ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
             $"This account is locked for {options.LockoutMinutes} minutes after {options.LockoutThreshold} failed attempts.",
             new Dictionary<string, object?> { ["minutes"] = options.LockoutMinutes, ["attempts"] = options.LockoutThreshold });

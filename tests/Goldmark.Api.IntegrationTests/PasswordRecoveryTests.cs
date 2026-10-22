@@ -339,7 +339,7 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         await scenario.App.Logs.WaitForAsync(_ => false, TimeSpan.FromSeconds(3));
         var person = scenario.App.Client();
         Assert.Equal("invalid", AuthScenario.Ok(await person.PostAsync("/api/v1/links/check", new { token })).Value("status"));
-        Assert.Contains("\"reason\":\"recovery-setting-removed\"", Assert.Single(await scenario.AuditAsync("user.link.invalidated")),
+        Assert.Contains("\"reason\":\"restart\"", Assert.Single(await scenario.AuditAsync("user.link.invalidated")),
             StringComparison.Ordinal);
         Assert.Equal("Revoked", await sql.AdminScalarAsync<string>(scenario.Installation.Database,
             "SELECT RevokeReason FROM cmdb.UserInvitation WHERE Purpose = 'CombinedReset';"));
@@ -399,6 +399,159 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         Assert.Equal(0, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
             $"SELECT COUNT(*) FROM cmdb.UserInvitation WHERE UserId = '{sam.Id:D}' AND Purpose = 'PasswordReset';"));
         AuthScenario.Ok(await samClient.GetAsync("/api/v1/account/two-factor"));
+    }
+
+    // Review of PR #38 (Codex): the regressions, each first reproduced as a failing test.
+
+    [Fact]
+    public async Task A_password_only_reset_needs_an_authenticator_to_confirm_it()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (pat, _) = await scenario.SetUpAsync();
+        var (_, sam) = await scenario.InviteAndAcceptAsync(pat, "sam.rivera", "Viewer");
+        var (_, morgan) = await scenario.InviteAndAcceptAsync(pat, "morgan.okafor", "Viewer");
+        await PromoteAsync(pat, morgan);
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{sam.Id:D}/two-factor-reset"));
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{morgan.Id:D}/two-factor-reset"));
+
+        // Its link would end with their own authenticator, which is gone: refused, and nothing changed.
+        var refused = await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset");
+        Assert.Equal("no-authenticator", refused.Code);
+        Assert.Contains("Also reset two-factor", refused.Text, StringComparison.Ordinal);
+        Assert.Equal("no-authenticator", (await pat.PostAsync($"/api/v1/users/{morgan.Id:D}/password-reset")).Code);
+        Assert.Equal("admin-target", (await pat.PostAsync($"/api/v1/users/{morgan.Id:D}/password-reset", new { alsoTwoFactor = true })).Code);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            "SELECT COUNT(*) FROM cmdb.UserAccount WHERE PasswordResetAt IS NOT NULL;"));
+        Assert.Empty(await scenario.AuditAsync("user.password.reset"));
+
+        // The password-and-two-factor reset is the way for Sam, but it needs another Admin's approval, and
+        // Morgan, the only other Admin, has no authenticator either: refused, saying so.
+        Assert.Contains("Morgan Okafor has no authenticator yet",
+            (await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true })).Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_request_is_refused_with_reasons_when_no_other_Admin_can_sign_in_to_approve()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (pat, _) = await scenario.SetUpAsync();
+        var (_, morgan) = await scenario.InviteAndAcceptAsync(pat, "morgan.okafor", "Viewer");
+        var (_, taylor) = await scenario.InviteAndAcceptAsync(pat, "taylor.ng", "Viewer");
+        var (_, jo) = await scenario.InviteAndAcceptAsync(pat, "jo.park", "Viewer");
+        var (_, sam) = await scenario.InviteAndAcceptAsync(pat, "sam.rivera", "Viewer");
+        foreach (var person in new[] { morgan, taylor, jo })
+        {
+            await PromoteAsync(pat, person);
+        }
+
+        var waiting = await pat.PostAsync("/api/v1/users", new { displayName = "Riley One", userName = "riley.one", roles = ViewerOnly });
+        Assert.True(waiting.Body.GetProperty("link").GetProperty("awaitingApproval").GetBoolean());
+        // A waiting invitation is approved, declined or cancelled first, as for the resets.
+        var rileyOne = waiting.Body.GetProperty("user").GetProperty("id").GetGuid();
+        Assert.Equal("request-waiting", (await pat.PostAsync($"/api/v1/users/{rileyOne:D}/invitation")).Code);
+
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{morgan.Id:D}/password-reset"));
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{taylor.Id:D}/lock"));
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{jo.Id:D}/two-factor-reset"));
+
+        // No request waits for an approval that can't come (owner: "C. Refuse, say why"); nothing is created.
+        var refused = await pat.PostAsync("/api/v1/users", new { displayName = "Riley Two", userName = "riley.two", roles = ViewerOnly });
+        Assert.Equal("no-approver-available", refused.Code);
+        Assert.Contains("Taylor Ng is locked by an administrator", refused.Text, StringComparison.Ordinal);
+        Assert.Contains("Morgan Okafor's password reset isn't finished", refused.Text, StringComparison.Ordinal);
+        Assert.Contains("Jo Park has no authenticator yet", refused.Text, StringComparison.Ordinal);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            "SELECT COUNT(*) FROM cmdb.UserAccount WHERE NormalizedUserName = 'RILEY.TWO';"));
+        Assert.Equal("no-approver-available", (await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true })).Code);
+        // Only Morgan's reset above; the refused request wrote nothing.
+        Assert.Single(await scenario.AuditAsync("user.password.reset"));
+        Assert.Single(await scenario.AuditAsync("user.invitation.created"), row => row.Contains("riley.one", StringComparison.Ordinal));
+        Assert.Empty(await scenario.AuditAsync("user.approval.requested"));
+
+        // An automatic lockout never counts: failed sign-ins in an Admin's name can't change who approves.
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{taylor.Id:D}/unlock"));
+        for (var i = 0; i < 5; i++)
+        {
+            await scenario.App.Client().PostAsync("/api/v1/auth/sign-in", new { userName = taylor.UserName, password = "not the password at all" });
+        }
+
+        Assert.Contains("locked", (await scenario.App.Client().PostAsync("/api/v1/auth/sign-in",
+            new { userName = taylor.UserName, password = taylor.Password })).Code, StringComparison.Ordinal);
+        var again = await pat.PostAsync("/api/v1/users", new { displayName = "Riley Three", userName = "riley.three", roles = ViewerOnly });
+        Assert.True(again.Body.GetProperty("link").GetProperty("awaitingApproval").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Approving_records_the_approval_before_it_changes_the_account()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (pat, _) = await scenario.SetUpAsync();
+        var (_, morganPerson) = await scenario.InviteAndAcceptAsync(pat, "morgan.okafor", "Viewer");
+        var (_, sam) = await scenario.InviteAndAcceptAsync(pat, "sam.rivera", "Viewer");
+        await PromoteAsync(pat, morganPerson);
+        var morgan = await scenario.SignInAsync(morganPerson);
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true }));
+
+        // Fails the transaction if the reset reaches the account while the request is still unapproved: with
+        // the approval first, a request that ended meanwhile leaves the account as it was (Codex, PR #38).
+        await sql.AsAdminAsync(scenario.Installation.Database, """
+            CREATE TRIGGER cmdb.trg_test_account_after_approval ON cmdb.UserAccount AFTER UPDATE AS
+            SET NOCOUNT ON;
+            IF EXISTS (SELECT 1 FROM inserted AS a JOIN cmdb.UserInvitation AS l ON l.UserId = a.Id
+                       WHERE a.PasswordResetAt IS NOT NULL AND l.ApprovalRequired = 1 AND l.ApprovedAt IS NULL AND l.RevokedAt IS NULL)
+                THROW 50001, 'The account changed before the approval was recorded.', 1;
+            """);
+        var approved = AuthScenario.Ok(await morgan.PostAsync($"/api/v1/users/{sam.Id:D}/request/approve"));
+        Assert.False(string.IsNullOrEmpty(approved.Body.GetProperty("code").GetProperty("code").GetString()));
+        Assert.Single(await scenario.AuditAsync("user.approval.approved"));
+        Assert.Equal(1, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            $"SELECT COUNT(*) FROM cmdb.UserAccount WHERE Id = '{sam.Id:D}' AND PasswordResetAt IS NOT NULL AND AuthenticatorKey IS NULL;"));
+    }
+
+    [Fact]
+    public async Task Each_start_ends_every_unused_recovery_link_whoever_it_was_for()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (pat, patPerson) = await scenario.SetUpAsync();
+        var (_, morgan) = await scenario.InviteAndAcceptAsync(pat, "morgan.okafor", "Viewer");
+        await PromoteAsync(pat, morgan);
+
+        await scenario.RestartAsync(Recover(patPerson.UserName));
+        var first = await scenario.App.RecoveryLinkAsync();
+        await scenario.RestartAsync(Recover(morgan.UserName));
+        var second = await scenario.App.RecoveryLinkAsync();
+        var client = scenario.App.Client();
+        Assert.Equal("invalid", AuthScenario.Ok(await client.PostAsync("/api/v1/links/check", new { token = first })).Value("status"));
+        Assert.Equal("valid", AuthScenario.Ok(await client.PostAsync("/api/v1/links/check", new { token = second })).Value("status"));
+
+        // A start whose setting it refuses ends the previous link too.
+        await scenario.RestartAsync(Recover("nobody.here"));
+        _ = await scenario.App.EventAsync(3005);
+        Assert.Equal("invalid", AuthScenario.Ok(await scenario.App.Client().PostAsync("/api/v1/links/check", new { token = second })).Value("status"));
+        Assert.Equal(0, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            "SELECT COUNT(*) FROM cmdb.UserInvitation WHERE CreatedBy IS NULL AND RedeemedAt IS NULL AND RevokedAt IS NULL;"));
+        Assert.Equal(2, (await scenario.AuditAsync("user.link.invalidated")).Count);
+    }
+
+    [Fact]
+    public async Task Admin_is_not_added_while_a_password_reset_is_unfinished()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (pat, _) = await scenario.SetUpAsync();
+        var (_, morganPerson) = await scenario.InviteAndAcceptAsync(pat, "morgan.okafor", "Viewer");
+        var (_, sam) = await scenario.InviteAndAcceptAsync(pat, "sam.rivera", "Viewer");
+        await PromoteAsync(pat, morganPerson);
+        var morgan = await scenario.SignInAsync(morganPerson);
+        AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true }));
+        AuthScenario.Ok(await morgan.PostAsync($"/api/v1/users/{sam.Id:D}/request/approve"));
+        await sql.AsAdminAsync(scenario.Installation.Database,
+            $"UPDATE cmdb.UserInvitation SET ExpiresAt = DATEADD(MINUTE, -1, SYSUTCDATETIME()) WHERE UserId = '{sam.Id:D}' AND RedeemedAt IS NULL AND RevokedAt IS NULL;");
+
+        // The link lapsed unused: Sam still has no password and no authenticator, so Admin must wait.
+        var grant = await pat.PutAsync($"/api/v1/users/{sam.Id:D}/roles", new { roles = ViewerAndAdmin }, (await pat.GetAsync($"/api/v1/users/{sam.Id:D}")).ETag);
+        Assert.Equal("password-reset-pending", grant.Code);
+        Assert.True(AuthScenario.Ok(await pat.PostAsync($"/api/v1/users/{sam.Id:D}/password-reset", new { alsoTwoFactor = true }))
+            .Body.GetProperty("link").GetProperty("awaitingApproval").GetBoolean());
     }
 
     private static async Task PromoteAsync(ApiClient admin, Person person)

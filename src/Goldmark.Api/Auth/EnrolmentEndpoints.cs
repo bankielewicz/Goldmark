@@ -287,8 +287,7 @@ internal static class EnrolmentEndpoints
             case EnrolmentKind.TwoFactorReset:
                 if (await users.IsLockedOutAsync(user))
                 {
-                    return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
-                        $"This account is locked for {options.Value.LockoutMinutes} minutes after {options.Value.LockoutThreshold} failed attempts.");
+                    return AuthEndpoints.Locked(options.Value);
                 }
 
                 if (!await users.CheckPasswordAsync(user, password))
@@ -482,9 +481,7 @@ internal static class EnrolmentEndpoints
 
         if (await users.IsLockedOutAsync(user))
         {
-            return ApiProblems.Problem(StatusCodes.Status403Forbidden, "locked",
-                $"This account is locked for {options.Value.LockoutMinutes} minutes after {options.Value.LockoutThreshold} failed attempts.",
-                new Dictionary<string, object?> { ["minutes"] = options.Value.LockoutMinutes, ["attempts"] = options.Value.LockoutThreshold });
+            return AuthEndpoints.Locked(options.Value);
         }
 
         var usesRecoveryCode = string.IsNullOrEmpty(request.Code) && !string.IsNullOrEmpty(request.RecoveryCode);
@@ -557,10 +554,8 @@ internal static class EnrolmentEndpoints
     /// </summary>
     private static async Task<(string IssuedBy, string? ApprovedBy)> LinkPeopleAsync(LinkRow link, GoldmarkUserManager users)
     {
-        return (link.CreatedBy is null ? LinkIssuers.ServerSetting : await NameAsync(link.CreatedBy) ?? "removed-account", await NameAsync(link.ApprovedBy));
-
-        async Task<string?> NameAsync(Guid? id) =>
-            id is { } value && await users.FindByIdAsync(value.ToString("D")) is { } person ? $"{person.DisplayName} ({person.UserName})" : null;
+        return (link.CreatedBy is null ? LinkIssuers.ServerSetting : await users.AuditNameAsync(link.CreatedBy) ?? "removed-account",
+            await users.AuditNameAsync(link.ApprovedBy));
     }
 
     /// <summary>

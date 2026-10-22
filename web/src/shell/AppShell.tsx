@@ -158,7 +158,8 @@ function useApprovals(enabled: boolean, pathname: string): number {
         })
         .catch(() => undefined);
     };
-    refresh();
+    // Users & roles reads its list and then sends approvalsChanged itself: one read there, not two.
+    if (pathname !== '/users') refresh();
     window.addEventListener(approvalsChanged, refresh);
     return () => {
       cancelled = true;

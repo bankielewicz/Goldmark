@@ -146,7 +146,7 @@ and tested locally, PR #38. The decisions are DEC-042, with the owner's words.
 - **Change password** from the account menu (`POST /api/v1/account/password`); other sessions end.
 - **The recovery setting** in place of an operator command: `GOLDMARK_RECOVER_ADMIN` and the
   operator's `GOLDMARK_RECOVER_CODE`, then a restart, log a one-hour link's path (event 3004; never
-  the code). A start without the setting ends any unused recovery link. The README prescribes an
+  the code). Every start ends any unused recovery link. The README prescribes an
   emergency Admin not tied to a person.
 - Migration **0005**: `UserAccount.PasswordResetAt`, link purposes `PasswordReset` and
   `CombinedReset`, nullable `CreatedBy` (only a recovery link has none), approval and code-key columns.
@@ -157,6 +157,9 @@ and tested locally, PR #38. The decisions are DEC-042, with the owner's words.
   `WaitingRequestAsync`, or a guard blocks for good.
 - Under dual control `POST /api/v1/users` returns no code, so `AuthScenario.InviteAsync` only works
   with one Admin.
+- Dual control counts an approver only if they can sign in (no unfinished password reset, an
+  authenticator, not locked by an administrator; the automatic lockout never counts). With none, a
+  request is refused with the reasons (owner, 2026-10-22, "C. Refuse, say why").
 - The SPA must not poll: every request counts as activity, so a timer would keep an idle session
   alive past `SessionIdleMinutes`.
 - Stopping a background integration run leaves its SQL Server container (no reaper, DEC-027):

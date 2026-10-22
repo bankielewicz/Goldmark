@@ -33,8 +33,8 @@ public sealed class AuthOptions
     /// <summary>
     /// The way back in when no administrator can sign in (DEC-042 item 6; <c>GOLDMARK_RECOVER_ADMIN</c>):
     /// the username of an enabled Admin. While set, each start logs a one-time password-and-two-factor
-    /// link for them, which works for an hour with <see cref="RecoverAdminCode"/>. Empty: off, and a
-    /// start ends any unused recovery link.
+    /// link for them, which works for an hour with <see cref="RecoverAdminCode"/>. Empty: off. Every start
+    /// ends any unused recovery link first.
     /// </summary>
     public string RecoverAdmin { get; set; } = "";
 
