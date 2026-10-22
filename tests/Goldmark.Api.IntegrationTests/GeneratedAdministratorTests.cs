@@ -91,6 +91,28 @@ public sealed class GeneratedAdministratorTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task Rotation_gives_the_generated_administrator_a_new_password_and_later_runs_sign_in_with_it() // DEC-043 item 7
+    {
+        var (installation, files, _) = await FirstRunAsync();
+        var (admin, oldPassword) = Read(files.Admin);
+
+        var rotated = await sql.RunAsync(installation, ["rotate-db-credentials"], Bundled(files));
+
+        Assert.True(rotated.Code == 0, rotated.ToString());
+        var (sameAdmin, newPassword) = Read(files.Admin);
+        Assert.Equal(admin, sameAdmin);
+        Assert.NotEqual(oldPassword, newPassword);
+        Assert.False(File.Exists(files.Admin + ".new"));
+        Assert.Contains($"rotate-db-credentials: administrator login '{admin}': new password", rotated.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(newPassword, rotated.Output + rotated.Error, StringComparison.Ordinal);
+        Assert.Equal(1, await SaDisabledAsync());
+
+        var again = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], Bundled(files));
+        Assert.True(again.Code == 0, again.ToString());
+        Assert.Contains($"bootstrap-db: signed in as the generated administrator '{admin}'", again.Output, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task A_lost_administrator_file_is_recovered_by_re_enabling_sa()
     {
         var (installation, files, _) = await FirstRunAsync();

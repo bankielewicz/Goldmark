@@ -6,14 +6,42 @@ using Serilog.Formatting.Compact;
 namespace Goldmark.Api.Hosting;
 
 /// <summary>
-/// Structured JSON logs to stdout (NFR-LOG-1). Every event carries the W3C trace id
-/// (<c>@tr</c>) as the per-request correlation id. Request logs contain method, path
-/// (never the query string), status and duration; headers, cookies and bodies are never
-/// logged, and no component logs connection strings or credentials.
+/// Structured JSON logs to stdout (NFR-LOG-1), and with <c>Goldmark:Logging:Directory</c> also to one file
+/// per day in that owner-only folder (the Windows service, which has no console; DEC-043 item 4). Every
+/// event carries the W3C trace id (<c>@tr</c>) as the per-request correlation id. Request logs contain
+/// method, path (never the query string), status and duration; headers, cookies and bodies are never
+/// logged, and no component logs connection strings or credentials. Nothing goes to the Windows event
+/// log, which anyone signed in on the server can read: Serilog replaces the logger providers, the event
+/// log's included.
 /// </summary>
 internal static class LoggingSetup
 {
     public const string MinimumLevelKey = "Goldmark:Logging:MinimumLevel";
+    public const string DirectoryKey = "Goldmark:Logging:Directory";
+    public const string RetainedFilesKey = "Goldmark:Logging:RetainedFiles";
+    public const int DefaultRetainedFiles = 31;
+
+    /// <summary>The log folder's full path (relative to the content root), or null for stdout only.</summary>
+    public static string? Directory(IConfiguration configuration, string contentRoot) =>
+        configuration[DirectoryKey] is { Length: > 0 } directory ? Path.GetFullPath(directory, contentRoot) : null;
+
+    /// <summary>Checked before the host is built: the number of files kept, and an owner-only folder.</summary>
+    public static List<string> Errors(IConfiguration configuration, string contentRoot, string? serviceAccount)
+    {
+        var errors = new List<string>();
+        if (configuration.GetValue(RetainedFilesKey, DefaultRetainedFiles) is < 1 or > 3650)
+        {
+            errors.Add($"{RetainedFilesKey} must be between 1 and 3650.");
+        }
+
+        if (Directory(configuration, contentRoot) is { } directory
+            && Security.PrivateDirectory.Problem(DirectoryKey, directory, serviceAccount) is { } problem)
+        {
+            errors.Add(problem);
+        }
+
+        return errors;
+    }
 
     public static WebApplicationBuilder AddGoldmarkLogging(this WebApplicationBuilder builder)
     {
@@ -26,6 +54,12 @@ internal static class LoggingSetup
                 .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
                 .Enrich.FromLogContext()
                 .WriteTo.Console(new RenderedCompactJsonFormatter());
+            if (Directory(builder.Configuration, builder.Environment.ContentRootPath) is { } directory)
+            {
+                logger.WriteTo.File(new RenderedCompactJsonFormatter(), Path.Combine(directory, "goldmark-.json"),
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: builder.Configuration.GetValue(RetainedFilesKey, DefaultRetainedFiles));
+            }
 
             // Extra sinks registered in DI (used by tests to inspect log output).
             foreach (var sink in services.GetServices<ILogEventSink>())

@@ -139,7 +139,8 @@ internal sealed partial class TlsCertificateProvider(HttpsOptions options, TimeP
     }
 
     /// <summary>
-    /// Creates the directory if needed and, on Unix, forces it to 0700 on every start: a
+    /// Creates the directory if needed; on Windows with an owner-only ACL (<see cref="PrivateDirectory"/>),
+    /// on Unix forcing it to 0700 on every start: a
     /// pre-existing directory (for example a volume mount point) may have been created with
     /// a wider mode by the image build or the container runtime.
     /// </summary>
@@ -147,7 +148,8 @@ internal sealed partial class TlsCertificateProvider(HttpsOptions options, TimeP
     {
         if (OperatingSystem.IsWindows())
         {
-            Directory.CreateDirectory(directory);
+            // Checked at start by GeneratedCertificateFolderValidator; this only creates it (#6).
+            PrivateDirectory.Ensure($"{HttpsOptions.SectionName}:GeneratedCertificateDirectory", directory, serviceAccount: null);
             return;
         }
 

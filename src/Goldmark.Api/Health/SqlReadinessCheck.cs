@@ -9,10 +9,11 @@ namespace Goldmark.Api.Health;
 /// reads the migration journal. Ready only when the database's schema version equals the
 /// version this build expects (DEC-023): an older schema (migrations not yet applied) and a
 /// newer one (a newer build migrated it) are both not ready, and both versions are logged.
-/// Failure details are logged (exception text only at Debug) and never returned to the caller.
+/// Failure details are logged (exception text only at Debug) and never returned to the caller. With
+/// <c>Goldmark:Database:CheckRightsAtStart</c>, also not ready until <see cref="RuntimeRightsCheck"/> passed.
 /// </summary>
 internal sealed partial class SqlReadinessCheck(
-    SqlConnectionFactory connections, ReadinessGate gate, ILogger<SqlReadinessCheck> logger)
+    SqlConnectionFactory connections, ReadinessGate gate, RuntimeRights rights, ILogger<SqlReadinessCheck> logger)
     : IHealthCheck
 {
     public const string Name = "sql";
@@ -49,7 +50,8 @@ internal sealed partial class SqlReadinessCheck(
                 return HealthCheckResult.Unhealthy("Database schema version does not match this build.");
             }
 
-            return HealthCheckResult.Healthy();
+            // With Goldmark:Database:CheckRightsAtStart, not ready until the login's rights are checked.
+            return rights.Checked ? HealthCheckResult.Healthy() : HealthCheckResult.Unhealthy("This login's rights are not checked yet.");
         }
         catch (Exception ex) when (ex is SqlException or InvalidOperationException or TimeoutException or OperationCanceledException)
         {

@@ -57,7 +57,9 @@ public sealed class ReadinessSchemaTests(SqlServerFixture sql)
     private async Task<HealthCheckResult> CheckAsync(Installation installation, ListLogger<SqlReadinessCheck> logger)
     {
         using var gate = new ReadinessGate(TimeProvider.System);
-        var check = new SqlReadinessCheck(new SqlConnectionFactory(Options.Create(sql.DatabaseOptions(installation))), gate, logger);
+        var rights = new RuntimeRights();
+        rights.MarkChecked(); // Goldmark:Database:CheckRightsAtStart is off here, as on Docker
+        var check = new SqlReadinessCheck(new SqlConnectionFactory(Options.Create(sql.DatabaseOptions(installation))), gate, rights, logger);
         return await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
     }
 

@@ -24,6 +24,21 @@ internal static class MigrateCommand
     public const string Name = "migrate";
     private const int Refused = 3;
 
+    // Run as the administrator when there is no migration login (DEC-043 item 2): it must be able to
+    // change the schema, i.e. be db_owner of this database or more (sysadmin maps to dbo).
+    private const string AdministratorSql = """
+        SET NOCOUNT ON;
+        SELECT CAST(N'not db_owner' AS nvarchar(40)), SUSER_SNAME() COLLATE DATABASE_DEFAULT
+        WHERE ISNULL(IS_MEMBER(N'db_owner'), 0) <> 1;
+        """;
+
+    // Whether this login may impersonate the runtime login, to check its rights when it can't sign in
+    // as it (a Windows login, or a password encrypted to the service account).
+    private const string CanImpersonateSql = """
+        SELECT CASE WHEN IS_SRVROLEMEMBER(N'sysadmin') = 1
+            OR HAS_PERMS_BY_NAME(@user, N'LOGIN', N'IMPERSONATE') = 1 THEN 1 ELSE 0 END;
+        """;
+
     // Serialises concurrent migrate runs. Session-owned: released when the connection closes.
     private const string LockSql = """
         DECLARE @result int;
@@ -36,7 +51,7 @@ internal static class MigrateCommand
     // Only a user that bootstrap-db created (or adopted) for the runtime login is touched.
     private const string EnsureRuntimeMemberSql = """
         SET NOCOUNT ON;
-        DECLARE @uid int = (SELECT principal_id FROM sys.database_principals WHERE name = @user AND type = N'S');
+        DECLARE @uid int = (SELECT principal_id FROM sys.database_principals WHERE name = @user AND type IN (N'S', N'U'));
         IF @uid IS NULL
             SELECT N'missing';
         ELSE IF NOT EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 4 AND major_id = @uid
@@ -164,17 +179,20 @@ internal static class MigrateCommand
         var db = new DatabaseOptions();
         var migration = new MigrationOptions();
         var bootstrap = new BootstrapOptions();
+        var service = new ServiceOptions();
         var audit = new AuditOptions();
+        var runtimeReadable = true;
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
+            service = configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>() ?? service;
             audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? audit;
-            errors = ApplyCredentialFiles(db, migration);
+            errors = ApplyCredentialFiles(db, migration, out runtimeReadable);
             if (errors.Count == 0)
             {
-                errors = Validate(db, migration, bootstrap);
+                errors = Validate(db, migration, bootstrap, service);
                 errors.AddRange(AuditOptions.Errors(audit));
             }
         }
@@ -190,30 +208,50 @@ internal static class MigrateCommand
             return 2;
         }
 
-        var migrator = SqlConnectionFactory.Build(db, migration.User, migration.Password);
+        // Under Windows authentication the runtime login is the service account's (DEC-043).
+        if (db.UsesWindowsAuthentication)
+        {
+            db.User = service.Account!;
+        }
+
+        var migrator = !migration.UsesAdministrator ? SqlConnectionFactory.Build(db, migration.User, migration.Password)
+            : bootstrap.AdminUsesWindows ? SqlConnectionFactory.BuildIntegrated(db)
+            : SqlConnectionFactory.Build(db, bootstrap.AdminUser, bootstrap.AdminPassword);
         migrator.Pooling = false;
         try
         {
             await using var connection = await CommandSql.OpenWithRetryAsync(
                 migrator.ConnectionString, TimeSpan.FromSeconds(bootstrap.WaitSeconds), output, Name);
 
-            // 0. Only the managed migration login, holding db_owner and nothing at server level,
-            //    may migrate, also when migrate runs without bootstrap-db (Codex on #14).
-            var principal = await CommandSql.FindingsAsync(connection, MigrationMarkerSql);
-            principal.AddRange(await CommandSql.FindingsAsync(connection, BootstrapDatabaseCommand.VerifyMigrationSql));
-            if (principal.Count > 0)
-            {
-                return await RefuseAsync(error,
-                    $"the migration login '{migration.User}' must be the one bootstrap-db manages, db_owner of '{db.Name}' " +
-                    $"and nothing else: {string.Join("; ", principal)}. Nothing was changed.");
-            }
-
-            // The principal audit's effective-rights layer, as the migration login (DEC-031). The
-            // pass over other databases is bootstrap-db's (it opens every database).
             var policy = FindingPolicy.Parse(bootstrap.AcceptedFindings);
-            if (policy.Refused(await PrincipalAudit.SelfAsync(connection, db.Name, runtime: false, databases: false), output, Name) is { Count: > 0 } migrationFindings)
+            if (migration.UsesAdministrator)
             {
-                return await RefuseAsync(error, $"{FindingPolicy.Describe(migrationFindings)}{Environment.NewLine}Nothing was changed.");
+                // 0. No migration login (DEC-043 item 2): the administrator migrates, and must be able to.
+                if (await CommandSql.FindingsAsync(connection, AdministratorSql) is { Count: > 0 } notOwner)
+                {
+                    return await RefuseAsync(error,
+                        $"the administrator must be db_owner of '{db.Name}' or more to migrate: {string.Join("; ", notOwner)}. Nothing was changed.");
+                }
+            }
+            else
+            {
+                // 0. Only the managed migration login, holding db_owner and nothing at server level,
+                //    may migrate, also when migrate runs without bootstrap-db (Codex on #14).
+                var principal = await CommandSql.FindingsAsync(connection, MigrationMarkerSql);
+                principal.AddRange(await CommandSql.FindingsAsync(connection, BootstrapDatabaseCommand.VerifyMigrationSql));
+                if (principal.Count > 0)
+                {
+                    return await RefuseAsync(error,
+                        $"the migration login '{migration.User}' must be the one bootstrap-db manages, db_owner of '{db.Name}' " +
+                        $"and nothing else: {string.Join("; ", principal)}. Nothing was changed.");
+                }
+
+                // The principal audit's effective-rights layer, as the migration login (DEC-031). The
+                // pass over other databases is bootstrap-db's (it opens every database).
+                if (policy.Refused(await PrincipalAudit.SelfAsync(connection, db.Name, runtime: false, databases: false), output, Name) is { Count: > 0 } migrationFindings)
+                {
+                    return await RefuseAsync(error, $"{FindingPolicy.Describe(migrationFindings)}{Environment.NewLine}Nothing was changed.");
+                }
             }
 
             if (await ScalarAsync(connection, LockSql) < 0)
@@ -276,26 +314,64 @@ internal static class MigrateCommand
                     break;
             }
 
-            var runtime = SqlConnectionFactory.Build(db);
-            runtime.Pooling = false;
-            await using (var runtimeConnection = new SqlConnection(runtime.ConnectionString))
+            // 4. As the runtime login: its rights are exactly goldmark_runtime's. When migrate can't sign in as it
+            //    (a Windows login, or a password encrypted to the service account), an administrator who may
+            //    impersonate it checks its direct rights; the service checks all of them at each start
+            //    (Goldmark:Database:CheckRightsAtStart; rights from Windows groups show only there, DEC-043 item 11).
+            SqlConnection? runtimeConnection = null;
+            var impersonated = false;
+            try
             {
-                await runtimeConnection.OpenAsync();
-                if (await CommandSql.FindingsAsync(runtimeConnection, VerifyRuntimeSql) is { Count: > 0 } findings)
+                if (!db.UsesWindowsAuthentication && runtimeReadable)
                 {
-                    return await RefuseAsync(error,
-                        $"the runtime login '{db.User}' must hold exactly the rights of {BootstrapDatabaseCommand.RuntimeRole}: " +
-                        $"{string.Join("; ", findings)}. Restore the role's grants and remove any others.");
+                    var runtime = SqlConnectionFactory.Build(db);
+                    runtime.Pooling = false;
+                    runtimeConnection = new SqlConnection(runtime.ConnectionString);
+                    await runtimeConnection.OpenAsync();
+                }
+                else if (await ScalarAsync(connection, CanImpersonateSql, new SqlParameter("@user", System.Data.SqlDbType.NVarChar, 128) { Value = db.User }) == 1)
+                {
+                    runtimeConnection = new SqlConnection(migrator.ConnectionString);
+                    await runtimeConnection.OpenAsync();
+                    await using var impersonate = runtimeConnection.CreateCommand();
+                    // A plain batch: an EXECUTE AS inside sp_executesql would end with it. The name is a valid
+                    // login name (bootstrap-db's checks) and is quoted besides.
+                    impersonate.CommandText = $"EXECUTE AS LOGIN = N'{db.User.Replace("'", "''", StringComparison.Ordinal)}';";
+                    await impersonate.ExecuteNonQueryAsync();
+                    impersonated = true;
                 }
 
-                if (policy.Refused(await PrincipalAudit.SelfAsync(runtimeConnection, db.Name, runtime: true, databases: false), output, Name) is { Count: > 0 } runtimeFindings)
+                if (runtimeConnection is null)
                 {
-                    return await RefuseAsync(error, FindingPolicy.Describe(runtimeFindings));
+                    await output.WriteLineAsync($"{Name}: the runtime login '{db.User}' can't be signed in as or impersonated from here; " +
+                        "the service checks its own rights at each start.");
+                }
+                else
+                {
+                    if (await CommandSql.FindingsAsync(runtimeConnection, VerifyRuntimeSql) is { Count: > 0 } findings)
+                    {
+                        return await RefuseAsync(error,
+                            $"the runtime login '{db.User}' must hold exactly the rights of {BootstrapDatabaseCommand.RuntimeRole}: " +
+                            $"{string.Join("; ", findings)}. Restore the role's grants and remove any others.");
+                    }
+
+                    if (policy.Refused(await PrincipalAudit.SelfAsync(runtimeConnection, db.Name, runtime: true, databases: false), output, Name) is { Count: > 0 } runtimeFindings)
+                    {
+                        return await RefuseAsync(error, FindingPolicy.Describe(runtimeFindings));
+                    }
+
+                    await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' holds only {BootstrapDatabaseCommand.RuntimeRole}" +
+                        (impersonated ? " (by impersonation: rights from Windows groups are checked by the service at each start)." : "."));
+                }
+            }
+            finally
+            {
+                if (runtimeConnection is not null)
+                {
+                    await runtimeConnection.DisposeAsync();
                 }
             }
 
-
-            await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' holds only {BootstrapDatabaseCommand.RuntimeRole}.");
             await output.WriteLineAsync($"{Name}: database schema version {SchemaMigrations.DatabaseVersion(await AppliedScriptsAsync(connection))} " +
                 $"(this build expects {SchemaMigrations.ExpectedVersion})");
             return 0;
@@ -312,27 +388,50 @@ internal static class MigrateCommand
         }
     }
 
-    /// <summary>Both logins come from their credential files when those are configured (bootstrap-db writes them, DEC-034).</summary>
-    internal static List<string> ApplyCredentialFiles(DatabaseOptions db, MigrationOptions migration)
+    /// <summary>
+    /// Both logins come from their credential files when those are configured (bootstrap-db writes them,
+    /// DEC-034). A runtime file whose password is encrypted to the Windows service account still gives the
+    /// login's name; <paramref name="runtimeReadable"/> is then false (DEC-043 item 10).
+    /// </summary>
+    internal static List<string> ApplyCredentialFiles(DatabaseOptions db, MigrationOptions migration, out bool runtimeReadable)
     {
         var errors = new List<string>();
-        if (CredentialFile.Resolve(DatabaseOptions.SectionName, db.CredentialFile, db.User, db.Password, out var runtime) is { } runtimeProblem)
+        runtimeReadable = true;
+        // Under Windows authentication there is no runtime password: the service connects as its account.
+        if (!db.UsesWindowsAuthentication)
         {
-            errors.Add(runtimeProblem);
+            if (!string.IsNullOrWhiteSpace(db.CredentialFile)
+                && !CredentialFile.TryRead(db.CredentialFile, out var named, out var problem) && problem == CredentialFile.NotForThisAccount)
+            {
+                runtimeReadable = false;
+                db.User = named.User;
+            }
+            else if (CredentialFile.Resolve(DatabaseOptions.SectionName, db.CredentialFile, db.User, db.Password, out var runtime) is { } runtimeProblem)
+            {
+                errors.Add(runtimeProblem);
+            }
+            else
+            {
+                (db.User, db.Password) = (runtime.User, runtime.Password);
+            }
         }
 
-        if (CredentialFile.Resolve(MigrationOptions.SectionName, migration.CredentialFile, migration.User, migration.Password, out var migrator) is { } migrationProblem)
+        if (!migration.UsesAdministrator)
         {
-            errors.Add(migrationProblem);
+            if (CredentialFile.Resolve(MigrationOptions.SectionName, migration.CredentialFile, migration.User, migration.Password, out var migrator) is { } migrationProblem)
+            {
+                errors.Add(migrationProblem);
+            }
+
+            (migration.User, migration.Password) = (migrator.User, migrator.Password);
         }
 
-        (db.User, db.Password) = (runtime.User, runtime.Password);
-        (migration.User, migration.Password) = (migrator.User, migrator.Password);
         return errors;
     }
 
-    internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
+    internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap, ServiceOptions? service = null)
     {
+        service ??= new ServiceOptions();
         var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(db.Host))
         {
@@ -349,39 +448,65 @@ internal static class MigrateCommand
             errors.Add($"{DatabaseOptions.SectionName}:Name must be a simple identifier and not a system database.");
         }
 
-        if (!SqlIdentifier.IsValid(db.User) || SqlIdentifier.IsReservedPrincipal(db.User))
+        if (db.UsesWindowsAuthentication)
+        {
+            if (!WindowsAccount.IsValid(service.Account))
+            {
+                errors.Add($"{ServiceOptions.SectionName}:Account must name the service's Windows account with " +
+                    $"{DatabaseOptions.SectionName}:Authentication '{DatabaseOptions.WindowsAuthentication}'.");
+            }
+        }
+        else if (!SqlIdentifier.IsValid(db.User) || SqlIdentifier.IsReservedPrincipal(db.User))
         {
             errors.Add($"{DatabaseOptions.SectionName}:User must be a simple identifier and not a reserved name.");
         }
 
-        if (!SqlIdentifier.IsValid(migration.User) || SqlIdentifier.IsReservedPrincipal(migration.User)
-            || string.Equals(migration.User, db.User, StringComparison.OrdinalIgnoreCase))
+        if (migration.UsesAdministrator)
         {
-            errors.Add($"{MigrationOptions.SectionName}:User must be a simple identifier, not a reserved name, and differ from {DatabaseOptions.SectionName}:User.");
-        }
+            // migrate runs as the administrator bootstrap-db uses (DEC-043 item 2).
+            if (!bootstrap.AdminUsesWindows && (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword)))
+            {
+                errors.Add($"{BootstrapOptions.SectionName}:AdminUser and AdminPassword are required with {MigrationOptions.SectionName}:Login " +
+                    $"'{MigrationOptions.AdministratorLogin}', unless {BootstrapOptions.SectionName}:AdminAuthentication is '{DatabaseOptions.WindowsAuthentication}'.");
+            }
 
-        if (string.IsNullOrEmpty(db.Password))
-        {
-            errors.Add($"{DatabaseOptions.SectionName}:Password is required (the runtime login is verified after migrating).");
-        }
-
-        if (string.IsNullOrEmpty(migration.Password))
-        {
-            errors.Add($"{MigrationOptions.SectionName}:Password is required.");
+            if (!string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile))
+            {
+                errors.Add($"{BootstrapOptions.SectionName}:AdminCredentialFile (the bundled SQL Server's generated administrator) " +
+                    $"needs {MigrationOptions.SectionName}:Login '{MigrationOptions.DedicatedLogin}'.");
+            }
         }
         else
         {
-            // Same separation as bootstrap-db, also when migrate runs on its own: the app's
-            // credential must never authenticate as db_owner, nor the migrator as the admin.
-            if (string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
+            if (!SqlIdentifier.IsValid(migration.User) || SqlIdentifier.IsReservedPrincipal(migration.User)
+                || string.Equals(migration.User, db.User, StringComparison.OrdinalIgnoreCase))
             {
-                errors.Add($"{MigrationOptions.SectionName}:Password must differ from {DatabaseOptions.SectionName}:Password.");
+                errors.Add($"{MigrationOptions.SectionName}:User must be a simple identifier, not a reserved name, and differ from {DatabaseOptions.SectionName}:User.");
             }
 
-            if (string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+            if (string.IsNullOrEmpty(migration.Password))
             {
-                errors.Add($"{MigrationOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
+                errors.Add($"{MigrationOptions.SectionName}:Password is required.");
             }
+            else
+            {
+                // Same separation as bootstrap-db, also when migrate runs on its own: the app's
+                // credential must never authenticate as db_owner, nor the migrator as the admin.
+                if (string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
+                {
+                    errors.Add($"{MigrationOptions.SectionName}:Password must differ from {DatabaseOptions.SectionName}:Password.");
+                }
+
+                if (string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+                {
+                    errors.Add($"{MigrationOptions.SectionName}:Password must differ from {BootstrapOptions.SectionName}:AdminPassword.");
+                }
+            }
+        }
+
+        if (!db.UsesWindowsAuthentication && string.IsNullOrEmpty(db.Password) && !migration.UsesAdministrator)
+        {
+            errors.Add($"{DatabaseOptions.SectionName}:Password is required (the runtime login is verified after migrating).");
         }
 
         if (!string.IsNullOrEmpty(db.Password) && string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))

@@ -4,14 +4,19 @@
     <RootNamespace>Goldmark.Api</RootNamespace>
     <AssemblyName>Goldmark.Api</AssemblyName>
     <UserSecretsId>goldmark-api-dev</UserSecretsId>
+    <!-- The Windows service zip is a self-contained win-x64 build (DEC-043); locked restore needs its
+         graph in packages.lock.json. The container image stays framework-dependent. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Dapper" />
     <PackageReference Include="dbup-sqlserver" />
     <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" />
     <PackageReference Include="Net.Codecrete.QrCodeGenerator" />
     <PackageReference Include="Serilog.AspNetCore" />
+    <PackageReference Include="Serilog.Sinks.File" />
     <!--
       Security pin: Microsoft.Data.SqlClient 7.1.1 depends on
       System.Security.Cryptography.Pkcs 9.0.18, which has known vulnerabilities

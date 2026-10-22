@@ -12,10 +12,29 @@ namespace Goldmark.Api.Configuration;
 public sealed class DatabaseOptions
 {
     public const string SectionName = "Goldmark:Database";
+    public const string SqlAuthentication = "Sql";
+    public const string WindowsAuthentication = "Windows";
 
     public string Host { get; set; } = "";
     public int Port { get; set; } = 1433;
     public string Name { get; set; } = "Goldmark";
+
+    /// <summary>
+    /// <c>Sql</c> (default): a SQL login with <see cref="User"/> and <see cref="Password"/>. <c>Windows</c>
+    /// (the Windows service, DEC-043): the service connects as its own account, which
+    /// <c>Goldmark:Service:Account</c> names for the commands; no name or password is configured.
+    /// </summary>
+    public string Authentication { get; set; } = SqlAuthentication;
+
+    /// <summary>
+    /// The application checks its own rights in SQL Server at each start and refuses to start if it holds
+    /// more than <c>goldmark_runtime</c> (the Windows service sets it: nobody else can sign in as the
+    /// service account, and an administrator's impersonation misses rights from Windows groups, DEC-043
+    /// item 11). Until the check passes, readiness fails.
+    /// </summary>
+    public bool CheckRightsAtStart { get; set; }
+
+    public bool UsesWindowsAuthentication => Authentication == WindowsAuthentication;
 
     /// <summary>Runtime login. Must be a least-privilege login, never <c>sa</c>.</summary>
     public string User { get; set; } = "";
@@ -67,7 +86,19 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
             failures.Add($"{DatabaseOptions.SectionName}:Name must not be a SQL Server system database.");
         }
 
-        if (options.CredentialFileProblem is { } problem)
+        if (options.Authentication is not (DatabaseOptions.SqlAuthentication or DatabaseOptions.WindowsAuthentication))
+        {
+            failures.Add($"{DatabaseOptions.SectionName}:Authentication must be '{DatabaseOptions.SqlAuthentication}' or '{DatabaseOptions.WindowsAuthentication}'.");
+        }
+        else if (options.UsesWindowsAuthentication)
+        {
+            if (!string.IsNullOrEmpty(options.User) || !string.IsNullOrEmpty(options.Password) || !string.IsNullOrWhiteSpace(options.CredentialFile))
+            {
+                failures.Add($"{DatabaseOptions.SectionName}:User, Password and CredentialFile must be empty with Authentication " +
+                    $"'{DatabaseOptions.WindowsAuthentication}': the service connects as its own Windows account.");
+            }
+        }
+        else if (options.CredentialFileProblem is { } problem)
         {
             failures.Add(problem);
         }
@@ -108,12 +139,28 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
     /// contents of <see cref="DatabaseOptions.CredentialFile"/>, if one is configured, or records why
     /// it cannot be used. Settings that are also given must match the file.
     /// </summary>
-    public static void ApplyCredentialFile(DatabaseOptions options)
+    public static void ApplyCredentialFile(DatabaseOptions options, bool protectPlain = false)
     {
         if (CredentialFile.Resolve(DatabaseOptions.SectionName, options.CredentialFile, options.User, options.Password, out var credential) is { } problem)
         {
             options.CredentialFileProblem = problem;
             return;
+        }
+
+        if (protectPlain && !string.IsNullOrWhiteSpace(options.CredentialFile)
+            && CredentialFile.TryRead(options.CredentialFile, out var stored, out _, out var protection)
+            && protection == Security.CredentialProtection.Plain)
+        {
+            // Written by bootstrap-db or rotate-db-credentials, which couldn't encrypt it to this account.
+            try
+            {
+                CredentialFile.Write(options.CredentialFile, stored);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                options.CredentialFileProblem = $"{DatabaseOptions.SectionName}:CredentialFile could not be encrypted to this account ({ex.GetType().Name}).";
+                return;
+            }
         }
 
         options.User = credential.User;

@@ -21,7 +21,7 @@ public sealed class HttpsOptions
     public string? KeyPath { get; set; }
 
     /// <summary>Where the first-start self-signed certificate is persisted (outside the image).</summary>
-    public string GeneratedCertificateDirectory { get; set; } = "/var/lib/goldmark/tls";
+    public string GeneratedCertificateDirectory { get; set; } = DefaultPaths.Data("tls");
 
     /// <summary>Comma-separated DNS names and IP addresses for the self-signed certificate.</summary>
     public string Hostnames { get; set; } = "localhost";
@@ -136,4 +136,18 @@ internal sealed partial class HttpsOptionsValidator : IValidateOptions<HttpsOpti
             }
         }
     }
+}
+
+/// <summary>
+/// On Windows, the generated certificate's folder must be owner-only (DEC-043 item 5, #6): checked at start,
+/// and created if missing, so a folder others can read stops the start with the setting's name. On Unix the
+/// certificate provider forces 0700 and only warns when it can't (a mount point it doesn't own).
+/// </summary>
+internal sealed class GeneratedCertificateFolderValidator(IOptions<ServiceOptions> service) : IValidateOptions<HttpsOptions>
+{
+    public ValidateOptionsResult Validate(string? name, HttpsOptions options) =>
+        OperatingSystem.IsWindows() && !options.UsesOperatorCertificate && !string.IsNullOrWhiteSpace(options.GeneratedCertificateDirectory)
+            && Security.PrivateDirectory.Problem($"{HttpsOptions.SectionName}:GeneratedCertificateDirectory", options.GeneratedCertificateDirectory, service.Value.Account) is { } problem
+            ? ValidateOptionsResult.Fail(problem)
+            : ValidateOptionsResult.Success;
 }

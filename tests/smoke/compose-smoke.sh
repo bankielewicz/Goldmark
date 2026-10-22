@@ -605,7 +605,7 @@ else
   fail "external SQL Server: db-init (Mode Existing, administrator smoke_dba) and the app start healthy" "$(tail -n 5 <<< "${ext_init_log}" | cut -c1-300)"
 fi
 if [[ "${ext_init_log}" == *"runtime login: using the existing login 'ext_app' (Mode Existing: nothing is created)"* \
-      && "${ext_init_log}" == *"principal audit passed for both logins and the instance"* && "${ext_init_log}" != *"bootstrap-db: created"* \
+      && "${ext_init_log}" == *"principal audit passed for Goldmark's logins and the instance"* && "${ext_init_log}" != *"bootstrap-db: created"* \
       && "${ext_init_log}" != *"changed login password"* ]]; then
   pass "Mode Existing creates nothing and the principal audit passes"
 else

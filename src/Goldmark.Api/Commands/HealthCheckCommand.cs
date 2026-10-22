@@ -14,9 +14,8 @@ internal static class HealthCheckCommand
 {
     public const string Name = "healthcheck";
 
-    public static async Task<int> RunAsync()
+    public static async Task<int> RunAsync(IConfiguration configuration)
     {
-        var configuration = CommandConfiguration.Build();
         if (ConfigurationPreflight.BindingErrors(configuration) is { Count: > 0 } errors)
         {
             // 1, not 2: Docker reserves exit code 2 for HEALTHCHECK commands.

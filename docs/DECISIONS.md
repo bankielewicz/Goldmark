@@ -1565,7 +1565,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      Administrators only. A start that fails on its configuration also writes the setting names to the
      Application log. Asked as a security choice: the log carries the setup token (event 3001) and the
      recovery link's path (3004), and older Microsoft documentation gives Interactive Users read access to
-     the Application log (to verify on a current server). No new package: `Serilog.Sinks.File` is already
+     the Application log; measured on Windows 11 build 26300 (2026-10-22, `wevtutil gl Application`): its
+     channel access still grants `(A;;0x3;;;IU)`, read and write for Interactive Users. No new package: `Serilog.Sinks.File` is already
      in the lock file through `Serilog.AspNetCore`. Rejected: B, the Event Log only (new package; the
      two secrets readable by anyone signed in on the server); C, both.
   5. **Secrets at rest: "A. ACLs + DPAPI to the service account (Recommended)".** The folders for the
@@ -1601,6 +1602,32 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   9. **Row 4b's "Done when": "A. Approve as written (Recommended)"**, recorded in HANDOFF §1. Settled in
      the slice, open to veto: the zip carries a self-contained build, so the server needs no .NET
      install; a rotation is audited as System.
+  10. **The credential file when the installer can't encrypt to the service account: "A. Service
+     encrypts it at start (Recommended)".** Measured on a Windows 11 host outside a domain (2026-10-22):
+     DPAPI-NG `SID=` refuses to encrypt ("Encryption failed"), for the current account and for
+     `NT SERVICE\Goldmark`'s SID; `LOCAL=user` and classic DPAPI work. So, in SQL-login mode, with a
+     domain service account `bootstrap-db` encrypts the runtime file to that account (DPAPI-NG);
+     otherwise it writes the file with the owner-only ACL (as on Linux) and the service replaces it with a
+     copy encrypted to itself at its next start, which the wizard triggers at once. The plain copy exists
+     only between an install or a rotation and that start. Rejected: B, SQL logins only with a domain
+     account (CI has no domain, so that path would be checked by hand only); C, ACLs only for credential
+     files. Settled in the slice, open to veto: the service writes the key ring itself, so it uses DPAPI-NG
+     to a domain account and classic DPAPI to the virtual account; either way only the service account
+     reads it.
+  11. **Measured on the host with a probe service as `NT SERVICE\GoldmarkProbe` (2026-10-22, owner's
+     permission "A. Yes, a UAC prompt per script (Recommended)"; everything removed afterwards):**
+     - With restart-on-failure actions set, a configuration error found after the host started
+       (`ValidateOnStart`) looks like a crash (event 7031) and restarts every 2 seconds without end (9
+       starts in 14 s); one found before the host exists leaves the start hanging 30 s ("did not respond",
+       7009/7000, exit code 0). So a refused start reports itself to Windows as stopped with an error, which
+       failure actions don't restart (Done when item 5).
+     - An administrator's `EXECUTE AS LOGIN = N'NT SERVICE\GoldmarkProbe'` showed only the login and
+       `public`; the service's own token also held its local Windows group and that group's
+       `VIEW SERVER STATE`. Impersonation misses rights granted through Windows groups, so under Windows
+       authentication the service's own check at each start is the one that counts (settled, open to veto:
+       told the owner 2026-10-22); `bootstrap-db`'s check by impersonation is an early warning only.
+     - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
+       copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
 
 ---
 

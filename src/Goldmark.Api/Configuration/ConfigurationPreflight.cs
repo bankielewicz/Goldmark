@@ -25,6 +25,8 @@ internal static partial class ConfigurationPreflight
         Check(errors, AuthOptions.SectionName, () => configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>());
         Check(errors, AuditOptions.SectionName, () => configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>());
         Check(errors, LoggingSetup.MinimumLevelKey, () => configuration.GetValue<LogEventLevel>(LoggingSetup.MinimumLevelKey));
+        Check(errors, LoggingSetup.RetainedFilesKey, () => configuration.GetValue<int>(LoggingSetup.RetainedFilesKey));
+        Check(errors, ServiceOptions.SectionName, () => configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>());
         return errors;
     }
 
