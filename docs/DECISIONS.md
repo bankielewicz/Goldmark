@@ -1626,6 +1626,15 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        `VIEW SERVER STATE`. Impersonation misses rights granted through Windows groups, so under Windows
        authentication the service's own check at each start is the one that counts (settled, open to veto:
        told the owner 2026-10-22); `bootstrap-db`'s check by impersonation is an early warning only.
+     - SQL Server gives a Windows login `CONTROL`, `ALTER`, `IMPERSONATE` and `VIEW DEFINITION` on each Windows
+       group login in its own token, the same implicit rights it has on itself (measured: the owner's login on
+       itself on the host; `NT SERVICE\Goldmark` on `BUILTIN\Users`, which a fresh SQL Server 2025 Express has,
+       in CI on 2026-10-22, where the service refused its first start). They can't be revoked, so the service's
+       check skips those group logins as securables, as it skips its own login; what such a group is granted is
+       still refused (smoke phase 2). Owner, 2026-10-22: "a" (A. skip only the automatic rights on group logins
+       the service belongs to), after Microsoft's guidance: group membership is its "preferred strategy" for
+       access, and Express's `BUILTIN\Users` login can be safely removed. Not covered: a Windows group mapped as a
+       user in Goldmark's own database, where the database-level check still refuses (unmeasured).
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**

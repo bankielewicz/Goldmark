@@ -207,6 +207,10 @@ try {
     Check 'the refusal is in the Application log (Goldmark, event 3), naming the right' {
         (Goldmark-Event 3 $since | Select-Object -First 1).Message -match 'VIEW SERVER STATE'
     }
+    # A member's implicit rights on its own group's login are not a finding (SQL Server Express's BUILTIN\Users).
+    Check 'the refusal names no right on the group login itself' {
+        (Goldmark-Event 3 $since | Select-Object -First 1).Message -notmatch [regex]::Escape("LOGIN::[$env:COMPUTERNAME\$group]")
+    }
     Sql "DROP LOGIN [$env:COMPUTERNAME\$group];" | Out-Null
     & net.exe localgroup $group /delete | Out-Null
     Start-Service Goldmark

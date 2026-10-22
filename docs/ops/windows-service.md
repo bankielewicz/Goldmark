@@ -98,7 +98,9 @@ What it does, in order:
   rights it gets through Windows groups included; until then `/health/ready` fails. If it holds more, it stops
   and writes the reason to the Application log (event 3). Measured on 2026-10-22: an administrator impersonating
   the account (`EXECUTE AS LOGIN`) doesn't see rights from its Windows groups, so this check is the one that
-  counts.
+  counts. A login for a Windows group the account is in (SQL Server Express creates `BUILTIN\Users`) is
+  allowed; whatever that group is granted is checked like a grant to the account itself. Goldmark doesn't need
+  `BUILTIN\Users`, and Microsoft says it can be safely removed to keep other local users out of the instance.
 - **A setting that is wrong** stops the start; the setting's name (never its value) goes to the Application log
   (event 2). Windows doesn't restart a refused start.
 - **The logs** are JSON, one file per day, in `logs\goldmark-YYYYMMDD.json`, kept 31 days

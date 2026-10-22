@@ -421,12 +421,16 @@ internal static class PrincipalAudit
         END;
 
         -- Rights on other logins and server roles (e.g. IMPERSONATE), and on endpoints beyond CONNECT
-        -- on the system endpoints. A login's implicit rights on itself are expected.
+        -- on the system endpoints. A login's implicit rights on itself are expected, and SQL Server
+        -- gives a Windows login the same ones (CONTROL, ALTER, IMPERSONATE, VIEW DEFINITION) on each
+        -- Windows group login in its own token, such as Express's BUILTIN\Users (DEC-043 item 11).
+        -- Rights granted to such a group still show up on everything else.
         INSERT @f SELECT N'server-securable', @me, c.class, p.name, f.permission_name
         FROM sys.server_principals AS p
         CROSS APPLY (SELECT CASE p.type WHEN 'R' THEN N'SERVER ROLE' ELSE N'LOGIN' END AS class) AS c
         CROSS APPLY sys.fn_my_permissions(QUOTENAME(p.name), c.class) AS f
-        WHERE p.sid <> SUSER_SID() AND f.subentity_name = N'';
+        WHERE p.sid <> SUSER_SID() AND f.subentity_name = N''
+            AND p.sid NOT IN (SELECT t.sid FROM sys.login_token AS t WHERE t.type = N'WINDOWS GROUP');
         INSERT @f SELECT N'server-securable', @me, N'ENDPOINT', e.name, f.permission_name
         FROM sys.endpoints AS e CROSS APPLY sys.fn_my_permissions(QUOTENAME(e.name), N'ENDPOINT') AS f
         WHERE NOT (e.endpoint_id < 65536 AND f.permission_name = N'CONNECT');
