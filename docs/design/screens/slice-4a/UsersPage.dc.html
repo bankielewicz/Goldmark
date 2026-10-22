@@ -27,7 +27,7 @@ body{margin:0}
       <sc-for list="{{nav}}" as="g" hint-placeholder-count="3">
         <div style="display: flex; flex-direction: column; gap: 2px">
           <sc-if value="{{g.heading}}" hint-placeholder-val="{{true}}"><div style="padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.label}}</div></sc-if>
-          <a href="#" aria-current="{{g.current}}" aria-label="{{g.aria}}" style="{{g.style}}"><span style="{{g.bar}}"></span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{g.icon}}"></path></svg><sc-if value="{{labels}}" hint-placeholder-val="{{true}}"><span>{{g.item}}</span></sc-if></a>
+          <a href="#" aria-current="{{g.current}}" aria-label="{{g.aria}}" style="{{g.style}}"><span style="{{g.bar}}"></span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{g.icon}}"></path></svg><sc-if value="{{labels}}" hint-placeholder-val="{{true}}"><span style="flex: 1">{{g.item}}</span></sc-if><sc-if value="{{g.count.show}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="{{g.count.style}}">{{g.count.text}}</span></sc-if></a>
         </div>
       </sc-for>
     </nav>
@@ -132,7 +132,7 @@ body{margin:0}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"panel":{"editor":"enum","options":["none","menu","menuSelf","states","pwConfirm","pwConfirmBoth","pwResult","pwTfResult","adminTarget","inviteRequest","inviteSingle","awaiting","approverMenu","requesterMenu","approve","approveCode","decline"],"default":"none"},"$preview":{"width":1440,"height":900}}'>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"panel":{"editor":"enum","options":["none","menu","menuSelf","states","pwConfirm","pwConfirmBoth","pwResult","pwTfResult","adminTarget","inviteRequest","inviteSingle","awaiting","approverMenu","requesterMenu","approve","approveCode","decline","requesterRows"],"default":"none"},"$preview":{"width":1440,"height":900}}'>
 class Component extends DCLogic {
   renderVals() {
     const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
@@ -144,8 +144,13 @@ class Component extends DCLogic {
     const wide = width >= 1100;
     const badge = (k) => 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; font-weight: 600; white-space: nowrap';
     const plain = 'font-size: 14px; color: var(--fg1)';
-    const navItem = (label, heading, item, icon, current) => ({
-      label, heading: heading && wide, item, icon, aria: wide ? null : item,
+    const countStyle = wide
+      ? 'min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 10px; background: var(--brand); color: #ffffff; font-size: 12px; line-height: 20px; font-weight: 600; text-align: center'
+      : 'position: absolute; top: 4px; right: 4px; min-width: 16px; height: 16px; box-sizing: border-box; padding: 0 4px; border-radius: 8px; background: var(--brand); color: #ffffff; font-size: 10px; line-height: 16px; font-weight: 600; text-align: center';
+    const navItem = (label, heading, item, icon, current, count) => ({
+      label, heading: heading && wide, item, icon,
+      aria: count ? item + ', ' + count + (count === 1 ? ' request needs' : ' requests need') + ' your approval' : (wide ? null : item),
+      count: count ? { show: true, text: String(count), style: countStyle } : { show: false },
       current: current ? 'page' : null,
       style: 'position: relative; display: flex; align-items: center; gap: 10px; height: 40px; box-sizing: border-box; padding: 0 ' + (wide ? '12px' : '0') + '; justify-content: ' + (wide ? 'flex-start' : 'center') + '; border-radius: 4px; text-decoration: none; ' + (current ? 'background: var(--bbg2); color: var(--fg1); font-weight: 600' : 'color: var(--fg2)'),
       bar: current ? 'position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--bfg1)' : 'display: none'
@@ -193,6 +198,9 @@ class Component extends DCLogic {
     } else if (panel === 'approveCode') {
       set('riley', 'Invitation pending · expires in 24 h');
       set('sam', awaitingReset, badge('in'));
+    } else if (panel === 'requesterRows') {
+      set('riley', 'Invitation awaiting approval · ends in 20 h');
+      set('sam', 'Password reset approval request ended', badge('in'));
     } else if (['awaiting', 'approverMenu', 'requesterMenu', 'approve', 'decline'].includes(panel)) {
       set('riley', awaitingInvite);
       set('sam', awaitingReset, badge('in'));
@@ -200,7 +208,7 @@ class Component extends DCLogic {
 
     const requests = ['awaiting', 'approverMenu', 'approve', 'decline'].includes(panel) ? 2 : panel === 'approveCode' ? 1 : 0;
     const barShift = requests > 0 ? 56 : 0;
-    const menuOn = { menu: 'sam', menuSelf: 'dana', states: 'pat', approverMenu: 'riley', requesterMenu: 'riley' }[panel] || null;
+    const menuOn = { menu: 'sam', menuSelf: 'dana', states: 'pat', approverMenu: 'riley', requesterMenu: 'riley', requesterRows: 'sam' }[panel] || null;
     const highlight = {
       pwConfirm: 'sam', pwConfirmBoth: 'sam', pwResult: 'sam', pwTfResult: 'sam', adminTarget: 'morgan',
       inviteRequest: 'riley', inviteSingle: 'riley', approve: 'riley', approveCode: 'riley', decline: 'riley'
@@ -227,7 +235,8 @@ class Component extends DCLogic {
       menuSelf: { name: 'Dana Kowalski', items: [it('Edit roles…'), it('Lock…', 'off'), it('Disable…', 'off'), it('Reset password…', 'off', true), it('Reset two-factor…', 'off')], tipAt: 109, tipText: 'You can’t reset your own password here. Use Change password in your account menu.' },
       states: { name: 'Pat Lee', items: [it('Edit roles…'), it('Lock…'), it('Enable…'), it('Reset password…', 'off', true), it('Reset two-factor…')], tipAt: 109, tipText: 'Enable the account first. A disabled account can’t use the link.' },
       approverMenu: { name: 'Riley Chen', items: [it('Approve…', 'hover'), it('Decline…')] },
-      requesterMenu: { name: 'Riley Chen', items: [it('Approve…', 'off'), it('Cancel request…')], tipAt: 4, tipText: 'Another Admin approves requests you make.' }
+      requesterMenu: { name: 'Riley Chen', items: [it('Approve…', 'off'), it('Cancel request…')], tipAt: 4, tipText: 'Another Admin approves requests you make.' },
+      requesterRows: { name: 'Sam Rivera', items: [it('Ask again…', 'hover'), it('Edit roles…', null, true), it('Lock…'), it('Disable…'), it('Reset two-factor…', null, true)] }
     };
     const mm = menus[panel];
     // Rows start 209 px below the top of main (padding, breadcrumb, header, filters, table header), plus the
@@ -275,7 +284,7 @@ class Component extends DCLogic {
       navStyle: 'flex: none; width: ' + (wide ? 260 : 48) + 'px; box-sizing: border-box; padding: 8px ' + (wide ? '8px' : '4px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: 2px',
       nav: [
         navItem('Overview', true, 'Dashboard', 'M3 3h6v6H3zM11 3h6v4h-6zM11 9h6v8h-6zM3 11h6v6H3z', false),
-        navItem('Administration', true, 'Users & roles', 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5', true),
+        navItem('Administration', true, 'Users & roles', 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5', true, requests),
         navItem('Administration', false, 'Audit log', 'M5 2.5h7l3 3v12H5zM12 2.5v3h3M7.5 9h5M7.5 12h5M7.5 15h3', false)
       ],
       approvals: requests > 0

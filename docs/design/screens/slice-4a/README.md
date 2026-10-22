@@ -9,8 +9,8 @@ Approved by the owner on 2026-10-21 ("approved.") as published on the Claude Des
 https://claude.ai/artifact/Bzpjzj8maiwQGfPJ31KCy3 (version 28, `1792617023-b865`). The UI code must
 match these boards.
 
-These files are the canvas's source, the published version's files, unchanged (48 files, sizes checked
-against the published listing). Like the other mockups they need the Claude Design runtime and render
+These files are the canvas's source, the published version's files, unchanged (51 files, compared byte
+for byte with the canvas). Like the other mockups they need the Claude Design runtime and render
 unstyled when opened directly; review them on the canvas. `canvas.json` is the canvas index (board
 positions and titles).
 
@@ -22,6 +22,7 @@ positions and titles).
 | 1 Sign-in | `SignIn.dc.html`, `SignInDark.dc.html`, `SignInPhone.dc.html` | `SignInCard.dc.html` |
 | Account menu, Change password | `AccountMenu*.dc.html`, `ChangePw.dc.html`, `ChangePwDark.dc.html`, `ChangePwDone.dc.html`, `ChangePw1024.dc.html`, `ChangePwStates.dc.html` | `TwoFactorPage.dc.html`, `ChangePasswordDialog.dc.html` |
 | 16 Audit log, new entries | `AuditPw.dc.html` | `AuditPage.dc.html` |
+| Addendum: waiting requests (DEC-042 item 9) | `UsersNavCountDark.dc.html`, `UsersNavCount1024.dc.html` (the count on the "Users & roles" nav item, 1440 and the 1024 rail), `UsersRequesterRows.dc.html` (the requester's rows: "ends in 20 h", "approval request ended", "Ask again…") | `UsersPage.dc.html` |
 | Notes | `Notes.dc.html`: Fluent v9 components, the owner's decisions, details settled on the boards, build notes | |
 
 The owner's decisions the boards show (2026-10-21, DEC-042): the combined reset is offered for anyone
@@ -44,6 +45,12 @@ In the handoff (`tmp/screen-handoff-slice4a.md`) but not drawn: the Add user pan
 "Create and ask for approval", the Account filter value "Awaiting approval", the "Request declined"
 Toast, and the reset variant of the Approve dialog's wording. The recovery setting
 (`GOLDMARK_RECOVER_ADMIN`, DEC-042 item 6) has no screen.
+
+The addendum boards (DEC-042 item 9) came after that approval and were approved by the owner on
+2026-10-21 ("the addendum boards have been approved"): version 29 (`1792621336-73e7`), which added them
+and changed `UsersPage.dc.html` and `canvas.json`. The canvas's later versions up to `1792635061-68cf`
+hold the same board files. The Notes board's build note on `recover-admin` predates DEC-042 item 6's
+recovery setting, which replaced it; DEC-042 is the record.
 
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.
