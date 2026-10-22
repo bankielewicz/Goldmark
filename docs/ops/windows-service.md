@@ -64,7 +64,7 @@ upgrade, the values in the existing settings file are the defaults.
 | `-ServiceAccountPassword` | (a domain user only) | Password of the account (given to Windows only) |
 | `-AdminAuthentication` | `Windows` | How you sign in to SQL Server to set up the database: Windows (as you) or Sql (an administrator login) |
 | `-SqlAdminUser`, `-SqlAdminPassword` | (`-AdminAuthentication Sql` only) | SQL administrator login (CONTROL SERVER), its password |
-| `-SqlCertificatePath` | (none: the CA must be trusted) | SQL Server certificate file to pin |
+| `-SqlCertificatePath` | (none: the CA must be trusted) | SQL Server certificate file to pin (copied to `settings\sql-server.crt`, where the service can read it) |
 | `-SqlHostNameInCertificate` | (none) | Host name in the SQL Server certificate, if it differs |
 | `-HttpsPort` | 443 | HTTPS port |
 | `-CertificatePath`, `-KeyPath` | (none: a self-signed certificate is generated) | Your HTTPS certificate and its key (PEM, unencrypted key) |

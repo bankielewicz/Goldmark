@@ -267,9 +267,23 @@ try {
     Check 'uninstall -RemoveData removes the service and the data' { -not (Get-Service Goldmark -ErrorAction SilentlyContinue) -and -not (Test-Path $data2) }
 }
 finally {
-    Write-Host '== Cleanup'
     # Every step, whatever the one before did.
     $ErrorActionPreference = 'Continue'
+    if ($script:failures -gt 0) {
+        Write-Host '== Diagnostics (before cleanup)'
+        $service = Get-CimInstance Win32_Service -Filter "Name='Goldmark'" -ErrorAction SilentlyContinue
+        if ($service) { Write-Host "service: $($service.State), exit code $($service.ExitCode), as $($service.StartName)" }
+        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in 'Goldmark', '.NET Runtime', 'Application Error' } | Select-Object -First 5 |
+            ForEach-Object { Write-Host "Application log, $($_.ProviderName) $($_.Id): $($_.Message)" }
+        foreach ($data in $data1, $data2) {
+            Get-ChildItem (Join-Path $data 'logs') -Filter 'goldmark-*.json' -ErrorAction SilentlyContinue | ForEach-Object {
+                Write-Host "-- $($_.FullName) (without events 3001 and 3004)"
+                Get-Content $_.FullName -Tail 25 | Where-Object { $_ -notmatch '"Id":300[14]\b' } | ForEach-Object { Write-Host "   $_" }
+            }
+        }
+    }
+    Write-Host '== Cleanup'
     if (Get-Service Goldmark -ErrorAction SilentlyContinue) {
         $processId = (Get-CimInstance Win32_Service -Filter "Name='Goldmark'").ProcessId
         Stop-Service Goldmark -Force -ErrorAction SilentlyContinue

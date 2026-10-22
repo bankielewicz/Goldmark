@@ -337,7 +337,14 @@ $settings = [ordered]@{
 }
 if ($Authentication -eq 'Sql') { $settings.Goldmark.Database.CredentialFile = (Join-Path $DataDirectory 'credentials\runtime.json') }
 if ($AdminAuthentication -eq 'Sql') { $settings.Goldmark.Bootstrap.AdminUser = $SqlAdminUser }
-if ($SqlCertificatePath) { $settings.Goldmark.Database.ServerCertificatePath = $SqlCertificatePath }
+if ($SqlCertificatePath) {
+    # A copy in the settings folder, which the service account can read; the operator's path may not be.
+    $pinned = Join-Path $DataDirectory 'settings\sql-server.crt'
+    if ([IO.Path]::GetFullPath($SqlCertificatePath) -ne [IO.Path]::GetFullPath($pinned)) {
+        Copy-Item -Path $SqlCertificatePath -Destination $pinned -Force
+    }
+    $settings.Goldmark.Database.ServerCertificatePath = $pinned
+}
 if ($SqlHostNameInCertificate) { $settings.Goldmark.Database.HostNameInCertificate = $SqlHostNameInCertificate }
 if ($CertificatePath) { $settings.Goldmark.Https.CertificatePath = $CertificatePath; $settings.Goldmark.Https.KeyPath = $KeyPath }
 # The recovery setting (DEC-042 item 6) is kept on an upgrade; set it by editing this file and restarting.
@@ -368,6 +375,7 @@ if ($NoStart) {
     exit 0
 }
 Step 'Starting the service'
+$starting = Get-Date
 Start-Service -Name $ServiceName
 $certificate = if ($CertificatePath) { $CertificatePath } else { Join-Path $DataDirectory 'tls\goldmark.crt' }
 $status = 0
@@ -377,7 +385,16 @@ for ($i = 0; $i -lt 90 -and $status -ne 200; $i++) {
     if (Test-Path $certificate) { $status = Test-Ready "https://localhost:$HttpsPort/health/ready" $certificate }
 }
 if ($status -ne 200) {
-    Fail "the service didn't become ready. Its log: $(Join-Path $DataDirectory 'logs'); refusals also go to the Application log (source Goldmark)."
+    # Why: a refusal in the Application log, and the end of the log file without the two logged secrets.
+    $refusal = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $starting } -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProviderName -eq $ServiceName } | Select-Object -First 1
+    if ($refusal) { Write-Host "Application log, source Goldmark (event $($refusal.Id)):"; Write-Host $refusal.Message }
+    $log = Get-ChildItem (Join-Path $DataDirectory 'logs') -Filter 'goldmark-*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
+    if ($log) {
+        Write-Host "The end of $($log.FullName):"
+        Get-Content $log.FullName -Tail 20 | Where-Object { $_ -notmatch '"Id":300[14]\b' } | ForEach-Object { Write-Host "   $_" }
+    }
+    Fail "the service didn't become ready (state $((Get-Service -Name $ServiceName).Status)). Its log: $(Join-Path $DataDirectory 'logs'); refusals also go to the Application log (source Goldmark)."
 }
 Write-Host ''
 Write-Host "Goldmark is running: https://$($fqdn):$HttpsPort/" -ForegroundColor Green
