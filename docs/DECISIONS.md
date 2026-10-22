@@ -1818,3 +1818,25 @@ policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose
 | 10 | Rule 7: every UI function is available through `/api/v1` | **Met** | The pages call only `/api/v1/users*`, `/links/*`, `/enrolment/*`, `/account/password` |
 | 11 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for the slice's screens** | `web/e2e/auth.spec.ts` "slice 4a screens": sign-in caption, Change password, the link page (new password; authenticator, dark; done), the reset dialog (light and dark), the link panel, the link before approval, the nav count (dark, and the 1024 rail) |
 | 12 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4b acceptance mapping
+
+Same status vocabulary as slice 1. Local runs, 2026-10-22: on the owner's WSL machine, 428 in-process tests
+(10 Windows-only ones skipped) and the integration suite (232 tests, the Windows baseline one skipped); on the
+owner's Windows 11 host, the same 428 in-process tests (2 POSIX-only ones skipped) and all 32 checks of
+`tests/windows/Test-WindowsService.ps1` against SQL Server 2025 Developer with a test certificate.
+
+| # | Criterion (row 4b, DEC-043) | Status | Evidence |
+|---|---|---|---|
+| 1 | The installer sets up the service on Windows Server against SQL Server 2025, Windows authentication or a SQL login; the installing person's login runs `bootstrap-db migrate`; gMSA, domain user, or `NT SERVICE\Goldmark` for a local SQL Server only, never LocalSystem or NetworkService; ready and the sign-in page; upgrade = run again; uninstall keeps the data | **Met on Windows 11**; Windows Server in CI (windows-2025); gMSA and domain user by hand | `deploy/windows/Install-Goldmark.ps1`; `Test-WindowsService.ps1` phases 1, 3 and 4; the installer refuses LocalSystem, NetworkService and a virtual account for a remote server |
+| 2 | Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the audit covers Windows logins and group rights; the password path only for SQL logins | **Met** | `bootstrap-db` creates `FROM WINDOWS` logins and checks them by impersonation; `RuntimeRightsCheck` checks as the service itself (a right through a Windows group is refused: smoke phase 2); `WindowsSettingsTests` |
+| 3 | Owner-only folders, a start refuses a wider one; the key ring and a SQL login's password encrypted to the service account; administrator and migration passwords never stored on Windows; #6 | **Met**; DPAPI-NG to a gMSA by hand | `PrivateDirectory`, `CredentialProtector`, `KeyRingEncryption`; `WindowsProtectionTests` (run on Windows); smoke phase 1 (folders, encrypted keys) and 4 (the service encrypts its file) |
+| 4 | JSON log files per day; a configuration failure in the Application log with setting names only; 3001 and 3004 never in the Event Log | **Met** | `LoggingSetup`; smoke phase 1 (the token is in the file, nothing in the Application log) and phase 2 (event 2 names `Goldmark:Https:Port`) |
+| 5 | Restart after a crash; a configuration error stops without a loop | **Met** (measured) | DEC-043 item 11; `WindowsService.RefuseStart`; the rights refusal sets `ServiceBase.ExitCode`; smoke phase 2: both stop with exit code 13 and stay stopped past the restart delay |
+| 6 | `rotate-db-credentials` on Docker and Windows: every generated SQL login, file before login, audited as System, then a restart; nothing under Windows authentication | **Met** | `RotateCredentialsCommand`; `CredentialRotationTests`, `GeneratedAdministratorTests`, `WindowsSettingsTests`; smoke phase 4 (`Rotate-GoldmarkCredentials.ps1`) |
+| 7 | The recovery setting in the settings file; the link's path in the log file | **Met** (configuration) | `Goldmark__SettingsFile` (`SettingsFile`); the installer keeps `Goldmark:Auth` on an upgrade; `docs/ops/windows-service.md`. The recovery flow itself is unchanged and tested in slice 4a |
+| 8 | #34: `bootstrap-db` refuses an out-of-range retention period before connecting; a test proves nothing changes | **Met** | `AuditRetentionTests.Db_init_refuses_a_period_under_the_floor_before_bootstrap_db_changes_anything` (fails on the old code); `ContainerCommandsTests` |
+| 9 | Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express, the install smoke, a SQL-login install with rotate, uninstall; the gMSA by hand | **Not executed** | Job `windows-service`; runs on the PR. Hand check: `docs/ops/windows-service.md` "Checking a gMSA by hand" |
+| 10 | `docs/ops/windows-service.md`; the installer's prompts as a text spec; rule 7; rule 8 both ways | **Met** | The ops guide (parameters and prompts table); `database.credentials.rotated` in the audit catalog; `DefaultPaths`, Windows APIs behind `OperatingSystem.IsWindows()` |
+| 11 | Rule 7 / M6: new endpoints | **Not applicable** | The slice adds no endpoint |
+| 12 | CI green | **Not executed** | Runs on the PR |

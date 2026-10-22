@@ -56,10 +56,12 @@ try
     // Validated before the host starts: as a Windows service, a failure after that point would look like a
     // crash to Windows, and restart-on-failure would repeat it without end (measured, DEC-043 item 11).
     app.Services.GetRequiredService<IStartupValidator>().Validate();
+    // Taken now: RunAsync disposes the host, and its services with it, when it returns.
+    var rights = app.Services.GetRequiredService<Goldmark.Api.Health.RuntimeRights>();
     app.UseGoldmark();
     await app.RunAsync();
     // 3 when the login's rights were refused at start (Goldmark:Database:CheckRightsAtStart).
-    return app.Services.GetRequiredService<Goldmark.Api.Health.RuntimeRights>().ExitCode;
+    return rights.ExitCode;
 }
 catch (OptionsValidationException ex)
 {

@@ -218,6 +218,11 @@ try {
     Write-Host "      (the process exited $([int]((Get-Date) - $stopping).TotalSeconds) s after the stop began; it was $processId)"
     Check 'the service is gone and the data stays' { -not (Get-Service Goldmark -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $data1 'keys')) }
 
+    Check 'no unhandled .NET exception in Goldmark.Api.exe since the install (Application log)' {
+        -not (Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -ErrorAction SilentlyContinue |
+            Where-Object { $_.ProviderName -in '.NET Runtime', 'Application Error' -and $_.Message -like '*Goldmark.Api*' })
+    }
+
     Write-Host '== 4. A SQL login, and rotation'
     Sql "CREATE LOGIN [$adminLogin] WITH PASSWORD = N'$adminPassword', CHECK_POLICY = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER [$adminLogin];" | Out-Null
     $secure = ConvertTo-SecureString $adminPassword -AsPlainText -Force
