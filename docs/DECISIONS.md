@@ -1514,6 +1514,9 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     resets the account itself. A link with no issuing account is a recovery link and only that: other
     links always name their issuer, and the redeem step checks a recovery link's code against the
     operator code's shape, every other code against the generated one's.
+  - The nav's approvals count (item 9) is read when a page opens and after Users & roles changes
+    something, never on a timer: every request counts as activity, so polling would keep an idle
+    Admin signed in past `Goldmark:Auth:SessionIdleMinutes` (a side agent's note).
 
 ---
 
@@ -1675,3 +1678,24 @@ Same status vocabulary as slice 1. Local runs on the owner's WSL machine:
 | 11 | Rule 3: design handoff before UI code | **Met** | Handoff 2026-10-20; boards approved 2026-10-21 (DEC-041 item 5, `docs/design/screens/slice-4/`) |
 | 12 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for screen 16** | `web/e2e/auth.spec.ts` "slice 4 screen": the page, an expanded entry, a filter and the export dialog, light and dark |
 | 13 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4a acceptance mapping
+
+Same status vocabulary as slice 1. Local runs on the owner's WSL machine, 2026-10-21 and 2026-10-22:
+393 in-process tests; the full integration suite, 219 tests (SQL Server 2025), on `d7c0724`; web 48
+policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose smoke, 97 unique checks with Playwright 10/10 inside (Chrome).
+
+| # | Criterion (source) | Status | Evidence |
+|---|---|---|---|
+| 1 | #25: an administrator resets another person's password from Users & roles, through the invitation's link and separate code, signs them out everywhere, audited; the person chooses a new password and two-factor stays | **Met**, with the owner's additions: the person's own authenticator or a recovery code confirms it (DEC-042 item 3), and "Also reset two-factor" for a lost authenticator (item 2, never for an Admin, item 7) | `POST /api/v1/users/{id}/password-reset`; `/password-reset` link page; `PasswordRecoveryTests` (old password refused without locking, sessions ended, recovery-code confirm, atomicity with the audit row); Playwright "slice 4a screens" end to end |
+| 2 | #25: an operator-only container command issues such a link for the last administrator, audited, no secret logged but the link | **Met as amended** (owner, DEC-042 item 6): no command, "A + startup setting", then "A. Operator sets it in .env" and "A. 1 hour, ended at a clean restart" | `GOLDMARK_RECOVER_ADMIN` + `GOLDMARK_RECOVER_CODE`; `RecoverAdminService` logs the path only (event 3004), audited "Recovery link issued"; refusals 3005/3006; a clean start ends the link; README's emergency-Admin guidance; `PasswordRecoveryTests` (code never logged or audited, 1-hour lifetime, a second start replaces the link, a clean start ends it, refusals) |
+| 3 | #25: every new endpoint declares an access policy and joins the M6 enumeration test | **Met** | `EndpointInventoryTests`, `docs/security/endpoint-access.md`: password reset, request approve/decline/cancel, `GET /users/approvals`, `/enrolment/confirm`, `POST /account/password` |
+| 4 | Rule 3 / #25: screens through a design handoff first | **Met** | Handoff `tmp/screen-handoff-slice4a.md`; boards approved 2026-10-21 (version 28, "approved.") and the addendum (version 29, "the addendum boards have been approved"); `docs/design/screens/slice-4a/` |
+| 5 | Row 4a: the reset ends sessions and the old password at once | **Met** | `PasswordResetAt` (migration 0005); sign-in refuses it through the unknown-user throttle, so the account doesn't lock; `PasswordRecoveryTests` |
+| 6 | Row 4a / owner: dual control for invitations and the password-and-two-factor reset (DEC-042 item 8) | **Met** | Requests (`ApprovalRequired`), approve/decline/cancel, the code made at approval under a per-link key (scheme 2); the single-Admin fallback audited "only-admin"; lapsed requests can be asked again; `PasswordRecoveryTests` |
+| 7 | Owner: waiting requests are visible (DEC-042 item 9) | **Met** | The nav count (`GET /api/v1/users/approvals`, read when a page opens, never on a timer), the approvers' MessageBar, the requester's time left and "Ask again…"; Playwright (shaped answers: one Admin can't make such a request) |
+| 8 | Owner / ASVS 5.0 6.2.2, 6.2.3: Change password for a signed-in person | **Met** | `POST /api/v1/account/password`, other sessions end; the account menu's dialog; `PasswordRecoveryTests` |
+| 9 | Rule 7: new mutations write audit records, tested | **Met** | The new actions in `AuditCatalog` (catalog test); each flow's audit rows asserted in `PasswordRecoveryTests`; the audit page's words for the new details |
+| 10 | Rule 7: every UI function is available through `/api/v1` | **Met** | The pages call only `/api/v1/users*`, `/links/*`, `/enrolment/*`, `/account/password` |
+| 11 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for the slice's screens** | `web/e2e/auth.spec.ts` "slice 4a screens": sign-in caption, Change password, the link page (new password; authenticator, dark; done), the reset dialog (light and dark), the link panel, the link before approval, the nav count (dark, and the 1024 rail) |
+| 12 | CI green | **Not executed** | Runs on the PR |

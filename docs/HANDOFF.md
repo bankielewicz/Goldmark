@@ -31,7 +31,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | **done** (PR #24) | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); merged by PR #24 after two review rounds | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | **done** (PR #32, merged as `ecd7796`, DEC-041) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
-| 4a | **in progress** (approved 2026-10-21, DEC-042; backend built, screens approved) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
+| 4a | **in progress** (approved 2026-10-21, DEC-042; built, screens approved, PR open) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
 | 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
@@ -130,8 +130,40 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4** (`slice/04-audit-log`, approved 2026-10-20) is **in progress**. The owner's decisions
-(DEC-041):
+Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **in progress**: built
+and tested locally, PR open. The decisions are DEC-042, with the owner's words.
+
+**What it adds:**
+- **Reset password** on Users & roles: the old password stops working at once and every session ends;
+  the person gets the link and separate code and confirms the new password with their own
+  authenticator or a recovery code. "Also reset two-factor" runs the invitation's steps instead,
+  never for an Admin.
+- **Dual control** for invitations and the password-and-two-factor reset: the Admin who asks gets the
+  link, another enabled Admin approves and gets the code (made then, hashed under a per-link key
+  encrypted with Data Protection, scheme 2). With no other Admin the one who asks gets both,
+  audited "only-admin". Waiting requests show as a count on the nav item, a MessageBar for
+  approvers, and the requester's time left; an ended request can be asked again.
+- **Change password** from the account menu (`POST /api/v1/account/password`); other sessions end.
+- **The recovery setting** in place of an operator command: `GOLDMARK_RECOVER_ADMIN` and the
+  operator's `GOLDMARK_RECOVER_CODE`, then a restart, log a one-hour link's path (event 3004; never
+  the code). A start without the setting ends any unused recovery link. The README prescribes an
+  emergency Admin not tied to a person.
+- Migration **0005**: `UserAccount.PasswordResetAt`, link purposes `PasswordReset` and
+  `CombinedReset`, nullable `CreatedBy` (only a recovery link has none), approval and code-key columns.
+
+**For the slices that follow:**
+- Never null `PasswordHash` to reset: `IsPending` is `PasswordHash is null`. Use `PasswordResetAt`.
+- A request that ended unapproved stays an open row (`RevokedAt` null): check `links.IsExpired` or
+  `WaitingRequestAsync`, or a guard blocks for good.
+- Under dual control `POST /api/v1/users` returns no code, so `AuthScenario.InviteAsync` only works
+  with one Admin.
+- The SPA must not poll: every request counts as activity, so a timer would keep an idle session
+  alive past `SessionIdleMinutes`.
+- Stopping a background integration run leaves its SQL Server container (no reaper, DEC-027):
+  `docker ps -a --filter label=org.testcontainers=true`.
+
+Slice **4** (`slice/04-audit-log`, approved 2026-10-20) is **merged** (PR #32). The owner's
+decisions (DEC-041):
 - old entries are deleted by a daily backend job through a bounded procedure (A);
 - retention has a floor of 365 days (A);
 - exports are audited, reads are not (A).
