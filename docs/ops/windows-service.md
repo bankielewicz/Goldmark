@@ -52,7 +52,8 @@ cd C:\Install\Goldmark
 ```
 
 Every value can be a parameter; a missing one is asked for (or, with `-NonInteractive`, refused). On an
-upgrade, the values in the existing settings file are the defaults.
+upgrade, the values in the existing settings file are the defaults, and an optional one given empty (for example
+`-SqlCertificatePath ''` or `-AcceptedFindings ''`) is removed.
 
 | Parameter | Default | Prompt |
 |---|---|---|
@@ -67,29 +68,36 @@ upgrade, the values in the existing settings file are the defaults.
 | `-SqlCertificatePath` | (none: the CA must be trusted) | SQL Server certificate file to pin (copied to `settings\sql-server.crt`, where the service can read it) |
 | `-SqlHostNameInCertificate` | (none) | Host name in the SQL Server certificate, if it differs |
 | `-HttpsPort` | 443 | HTTPS port |
-| `-CertificatePath`, `-KeyPath` | (none: a self-signed certificate is generated) | Your HTTPS certificate and its key (PEM, unencrypted key) |
+| `-CertificatePath`, `-KeyPath` | (none: a self-signed certificate is generated) | Your HTTPS certificate and its key (PEM, unencrypted key), copied to `tls\operator.crt` and `tls\operator.key`, which only SYSTEM, Administrators and the service account can read |
 | `-Hostnames` | this computer's names and `localhost` | Host names users type (for the generated certificate) |
 | `-AcceptedFindings` | (none) | Accepted principal-audit findings (DEC-031) |
 | `-AuditRetentionDays` | 365 | Days the audit log keeps entries (365 to 36500, or 0 for ever) |
 | `-InstallDirectory` | `%ProgramFiles%\Goldmark` | |
-| `-DataDirectory` | `%ProgramData%\Goldmark` | |
+| `-DataDirectory` | `%ProgramData%\Goldmark`; on an upgrade, the installed service's | |
 | `-NoStart` | | Install without starting |
 
 What it does, in order:
 
-1. Stops the service if it runs (an upgrade), copies the program, and creates or updates the service: start
+1. Checks what is already there before changing anything: an existing data folder, its five folders and the
+   settings file must be owned by Administrators, SYSTEM, you or the installed service's account, and none may be
+   a link. Every user may create folders in `%ProgramData%`, and settings someone else wrote could send your SQL
+   administrator's password to their server. The program folder must be Goldmark's own, or empty.
+2. Stops the service if it runs (an upgrade), replaces the program folder with the new one (files the new
+   release doesn't have don't stay behind), and creates or updates the service: start
    delayed-automatic, as the service account (never LocalSystem, not even for a moment), the environment
    variable `Goldmark__SettingsFile`, and restart after a crash (after a minute, twice, then not again that day).
-2. Creates the data folders, each reachable by SYSTEM, Administrators and the service account only, with
+3. Creates the data folder and its folders, owned by Administrators and reachable by SYSTEM, Administrators and the service account only, with
    inheritance off: `settings` (the service reads it, never changes it), `keys`, `tls`, `credentials`, `logs`
    (the service may change these). Goldmark refuses to start if one of them is wider, and says which.
-3. Writes `settings\goldmark.json`: the database, the service account, `Goldmark:Database:CheckRightsAtStart`,
-   migrations as the administrator (`Goldmark:Migration:Login: Administrator`), the folders. No password is ever
-   written to it, except the recovery code you may add (below).
-4. Runs `bootstrap-db migrate` as you (or the SQL administrator you typed; that password stays in the command's
+4. Writes `settings\goldmark.json`: the database, the service account, `Goldmark:Database:CheckRightsAtStart`,
+   migrations as the administrator (`Goldmark:Migration:Login: Administrator`), the folders. On an upgrade it
+   changes only these and keeps everything else in the file (`Goldmark:Https:Hsts`, `Goldmark:Logging:RetainedFiles`,
+   the recovery setting). No password is ever written to it, except the recovery code you may add (below). The
+   file grants only what its folder does: the service refuses to start if the file itself grants anyone else.
+5. Runs `bootstrap-db migrate` as you (or the SQL administrator you typed; that password stays in the command's
    environment only). Under Windows authentication it creates `CREATE LOGIN [CORP\svc-goldmark$] FROM WINDOWS`
    and its user in `goldmark_runtime`; there is no migration login.
-5. Registers the Application log source `Goldmark`, opens the HTTPS port in the firewall, starts the service and
+6. Registers the Application log source `Goldmark`, opens the HTTPS port in the firewall, starts the service and
    waits for `/health/ready`.
 
 ## What runs where
@@ -119,8 +127,10 @@ The setup token is in the log file (event 3001); the installer prints which file
 
 ## Upgrade
 
-Unpack the new zip and run `.\Install-Goldmark.ps1` again: it keeps the settings, stops the service, replaces the
-program, migrates the database as you, and starts it.
+Unpack the new zip and run `.\Install-Goldmark.ps1` again: it finds the service's data folder, keeps the settings,
+stops the service, replaces the program, migrates the database as you, and starts it. A domain user's password
+isn't asked for again (Windows keeps it); give `-ServiceAccountPassword` only when it changed. Changing the
+service account isn't supported yet: the installer refuses before it changes anything.
 
 ## Rotating database passwords
 

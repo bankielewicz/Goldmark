@@ -87,7 +87,10 @@ run would break the app's new connections until it restarted. A password changes
   ```
 
   If it stops part-way, run it again, or let the next `db-init` apply the files it already wrote.
-  The administrator's own file is replaced only after its login has changed. On Windows:
+  The administrator's new password waits in `admin.json.new` until its login has changed; if a run stopped
+  between the two, the next `rotate-db-credentials` or `db-init` finds that the login takes the waiting
+  password and moves it into place. Only one rotation runs at a time: a second one is refused with
+  nothing changed. On Windows:
   `Rotate-GoldmarkCredentials.ps1` ([windows-service.md](windows-service.md)).
 
 ## Upgrading a stack created before generated credentials

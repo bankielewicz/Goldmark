@@ -6,12 +6,15 @@ SQL Server and checks the "Done when" items that only Windows can show. Run elev
 .DESCRIPTION
 1. Windows authentication as NT SERVICE\Goldmark: the install, readiness and the sign-in page, owner-only
    folders, the log file, nothing secret in the Application log, the encrypted key ring, the Windows login in
-   goldmark_runtime and no migration login.
+   goldmark_runtime and no migration login. 1b: an upgrade finds the service's data folder, keeps the settings it
+   doesn't manage, clears an optional value given empty, and replaces the program folder whole.
 2. Refusals: a right that reaches the service only through a Windows group stops it at start, and so does an
-   invalid setting; each is written to the Application log, and Windows doesn't restart it.
+   invalid setting; each is written to the Application log, and Windows doesn't restart it. A group's user in
+   another database stops it too, until that finding is accepted.
 3. Uninstall keeps the data.
-4. A SQL login: the service encrypts its credential file to itself; rotation; uninstall with the data.
-Everything it creates (two GoldmarkSmoke* databases, their logins, a local group and a SQL administrator login
+4. A data folder that is a link is refused. A SQL login: the service encrypts its credential file to itself;
+   rotation; uninstall with the data.
+Everything it creates (three GoldmarkSmoke* databases, their logins, a local group and a SQL administrator login
 for step 4, the folders under -Root) is removed at the end. The SQL Server instance must already present a
 certificate Goldmark can pin (tests/windows/Set-SqlTestCertificate.ps1).
 #>
@@ -31,7 +34,7 @@ Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
 $script:failures = 0
 $suffix = Get-Random -Minimum 10000 -Maximum 99999
-$databases = @("GoldmarkSmokeWin$suffix", "GoldmarkSmokeSql$suffix")
+$databases = @("GoldmarkSmokeWin$suffix", "GoldmarkSmokeSql$suffix", "GoldmarkSmokeOther$suffix")
 $group = "GoldmarkSmoke$suffix"
 $adminLogin = "goldmark_smoke_admin_$suffix"
 $adminPassword = 'Sm0ke-' + [Guid]::NewGuid().ToString('N')
@@ -189,11 +192,31 @@ try {
 
     Write-Host '== 1b. Upgrade: the installer again, with the same data'
     $keysBefore = @(Get-ChildItem (Join-Path $data1 'keys') -Filter 'key-*.xml' | ForEach-Object Name) -join ','
-    $null = & (Join-Path $unpacked 'Install-Goldmark.ps1') -NonInteractive -SqlCertificatePath $SqlCertificateFile -InstallDirectory $program -DataDirectory $data1
-    Check 'an upgrade with only the folders given finishes (exit 0), from the existing settings' { $LASTEXITCODE -eq 0 }
+    # Settings the installer doesn't manage, an accepted finding to clear, and a file the new release doesn't have.
+    $settingsFile = Join-Path $data1 'settings\goldmark.json'
+    $edited = Get-Content -Raw $settingsFile | ConvertFrom-Json
+    $edited.Goldmark.Logging | Add-Member -NotePropertyName RetainedFiles -NotePropertyValue 40 -Force
+    $edited.Goldmark.Https | Add-Member -NotePropertyName Hsts -NotePropertyValue ([pscustomobject]@{ MaxAgeDays = 100 }) -Force
+    $edited.Goldmark.Bootstrap.AcceptedFindings = (@($AcceptedFindings, 'guest-connect:GoldmarkSmokeNone') | Where-Object { $_ }) -join ','
+    $edited | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsFile -Encoding UTF8
+    Set-Content -Path (Join-Path $program 'wwwroot\stale-asset.js') -Value '// from an older release'
+    # No -DataDirectory: the service's own is used. -AcceptedFindings as given, even empty, replaces the old value.
+    $null = & (Join-Path $unpacked 'Install-Goldmark.ps1') -NonInteractive -SqlCertificatePath $SqlCertificateFile -InstallDirectory $program -AcceptedFindings $AcceptedFindings
+    Check 'an upgrade without -DataDirectory finishes (exit 0), from the existing settings' { $LASTEXITCODE -eq 0 }
     Check 'after the upgrade it is ready, with the same database and sign-in keys' {
-        (Ready $data1) -and ((Get-Content -Raw (Join-Path $data1 'settings\goldmark.json') | ConvertFrom-Json).Goldmark.Database.Name -eq $databases[0]) -and
+        (Ready $data1) -and ((Get-Content -Raw $settingsFile | ConvertFrom-Json).Goldmark.Database.Name -eq $databases[0]) -and
         ((@(Get-ChildItem (Join-Path $data1 'keys') -Filter 'key-*.xml' | ForEach-Object Name) -join ',') -eq $keysBefore)
+    }
+    $upgraded = Get-Content -Raw $settingsFile | ConvertFrom-Json
+    Check 'the upgrade kept the settings it does not manage (Logging:RetainedFiles, Https:Hsts)' {
+        $upgraded.Goldmark.Logging.RetainedFiles -eq 40 -and $upgraded.Goldmark.Https.Hsts.MaxAgeDays -eq 100
+    }
+    Check 'a given -AcceptedFindings replaced the old value, also when empty' { $upgraded.Goldmark.Bootstrap.AcceptedFindings -eq $AcceptedFindings }
+    Check 'the program folder was replaced, not added to' { -not (Test-Path (Join-Path $program 'wwwroot\stale-asset.js')) }
+    Check 'the settings file is owned by Administrators and grants only what its folder does' {
+        $acl = Get-Acl $settingsFile
+        $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq 'S-1-5-32-544' -and
+        -not ($acl.GetAccessRules($true, $false, [Security.Principal.SecurityIdentifier]).Count)
     }
 
     Write-Host '== 2. Refusals'
@@ -216,7 +239,32 @@ try {
     Start-Service Goldmark
     Check 'with the right removed, it is ready again' { Ready $data1 }
 
-    $settingsFile = Join-Path $data1 'settings\goldmark.json'
+    # Owner, 2026-10-22 (DEC-043 item 11): a user for one of the service's groups in another database stops it,
+    # and an operator may accept that finding by its ID.
+    & net.exe localgroup $group /add | Out-Null
+    & net.exe localgroup $group $account /add | Out-Null
+    Sql "CREATE LOGIN [$env:COMPUTERNAME\$group] FROM WINDOWS; CREATE DATABASE [$($databases[2])];" | Out-Null
+    Sql "CREATE USER [$env:COMPUTERNAME\$group] FOR LOGIN [$env:COMPUTERNAME\$group];" $databases[2] | Out-Null
+    $since = Get-Date
+    Restart-Service Goldmark -ErrorAction SilentlyContinue
+    for ($i = 0; $i -lt 60 -and (Get-Service Goldmark).Status -ne 'Stopped'; $i++) { Start-Sleep -Seconds 1 }
+    $refusal = (Goldmark-Event 3 $since | Select-Object -First 1)
+    $accept = if ($refusal -and $refusal.Message -match '\[(group-database-access:[^\]]+)\]') { $Matches[1] } else { '' }
+    Check "a Windows group's user in another database stops the start, as group-database-access" {
+        (Get-Service Goldmark).Status -eq 'Stopped' -and $accept -like "group-database-access:$($databases[2]):*"
+    }
+    $saved = Get-Content -Raw $settingsFile
+    $accepting = $saved | ConvertFrom-Json
+    $accepting.Goldmark.Bootstrap.AcceptedFindings = (@($AcceptedFindings, $accept) | Where-Object { $_ }) -join ','
+    $accepting | ConvertTo-Json -Depth 10 | Set-Content -Path $settingsFile -Encoding UTF8
+    Start-Service Goldmark
+    Check 'accepted by its ID, it starts and is ready' { Ready $data1 }
+    Set-Content -Path $settingsFile -Value $saved -Encoding UTF8
+    Sql "ALTER DATABASE [$($databases[2])] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [$($databases[2])]; DROP LOGIN [$env:COMPUTERNAME\$group];" | Out-Null
+    & net.exe localgroup $group /delete | Out-Null
+    Restart-Service Goldmark
+    Check 'with the user removed and nothing accepted, it is ready again' { Ready $data1 }
+
     $saved = Get-Content -Raw $settingsFile
     $broken = $saved | ConvertFrom-Json
     $broken.Goldmark.Https.Port = 0
@@ -244,7 +292,19 @@ try {
             Where-Object { $_.ProviderName -in '.NET Runtime', 'Application Error' -and $_.Message -like '*Goldmark.Api*' })
     }
 
-    Write-Host '== 4. A SQL login, and rotation'
+    Write-Host '== 4. A data folder the installer can''t trust, then a SQL login, and rotation'
+    # Codex on #39: settings in a folder someone else made could send the administrator's password elsewhere.
+    $planted = Join-Path $Root 'planted'
+    New-Item -ItemType Directory -Force -Path (Join-Path $planted 'settings') | Out-Null
+    '{"Goldmark": {"Database": {"Host": "attacker.invalid"}}}' | Set-Content -Path (Join-Path $planted 'settings\goldmark.json')
+    $linked = Join-Path $Root 'data-linked'
+    New-Item -ItemType Junction -Path $linked -Target $planted | Out-Null
+    Check 'a data folder that is a link is refused, before anything changes' {
+        (Install $linked @{ Database = 'GoldmarkSmokeNever'; Authentication = 'Windows'; AdminAuthentication = 'Windows' }) -ne 0 -and
+        -not (Get-Service Goldmark -ErrorAction SilentlyContinue)
+    }
+    [IO.Directory]::Delete($linked)
+
     Sql "CREATE LOGIN [$adminLogin] WITH PASSWORD = N'$adminPassword', CHECK_POLICY = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER [$adminLogin];" | Out-Null
     $secure = ConvertTo-SecureString $adminPassword -AsPlainText -Force
     if ((Install $data2 @{ Database = $databases[1]; Authentication = 'Sql'; AdminAuthentication = 'Sql'; SqlAdminUser = $adminLogin; SqlAdminPassword = $secure }) -ne 0) {
