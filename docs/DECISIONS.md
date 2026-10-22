@@ -1628,6 +1628,14 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        told the owner 2026-10-22); `bootstrap-db`'s check by impersonation is an early warning only.
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
+  12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**
+     (owner, 2026-10-22). The principal audit's baseline (DEC-031) was measured on the Linux image; on the owner's
+     Windows SQL Server 2025 Developer, `public` also holds `SELECT` on `master.sys.dm_pal_cpu_stats`,
+     `dm_pal_disk_stats`, `dm_pal_vm_stats`, `dm_pal_net_stats` and `msdb.dbo.external_libraries_installed`, so
+     `bootstrap-db` refused before changing anything. The CI job measures a fresh SQL Server 2025 Express on
+     Windows; exactly those grants join the baseline as Windows entries, and anything else is still refused or
+     accepted by ID. Rejected: B, every Windows install accepts them by ID; C, a built-in exception for the
+     `dm_pal_*` views without measuring.
 
 ---
 

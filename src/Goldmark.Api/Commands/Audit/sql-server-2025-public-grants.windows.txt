@@ -1,0 +1,10 @@
+# Grants to public and guest that SQL Server 2025 on Windows creates in the system databases beyond the
+# baseline measured on the Linux image (sql-server-2025-public-grants.txt; DEC-031, DEC-043 item 12). The
+# principal audit adds these when sys.dm_os_host_info reports Windows. Same format as the Linux file.
+# Measured on SQL Server 2025 Developer (17.x, Windows 11, 2026-10-22); the Windows CI job measures a fresh
+# Express and its test WindowsBaselineTests fails, printing the measured lines, when this file differs.
+master|public|SELECT|OBJECT|[sys].[dm_pal_cpu_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_disk_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_net_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_vm_stats]
+msdb|public|SELECT|OBJECT|[dbo].[external_libraries_installed]

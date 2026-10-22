@@ -35,13 +35,16 @@ public sealed class RightsAtStartTests(SqlServerFixture sql)
         var (installation, _) = await sql.ProvisionAsync();
         await sql.AsAdminAsync("master", $"GRANT VIEW SERVER STATE TO [{installation.RuntimeUser}];");
         await using var app = new GoldmarkApp(sql, installation, Path.Combine(sql.NewDirectory(), "keys"), Check);
+        // Taken before the refusal: once Goldmark stops itself, the host disposes its services.
+        var rights = app.Services.GetRequiredService<RuntimeRights>();
+        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 
         var refused = await app.EventAsync(1005);
 
         Assert.Contains("holds more than goldmark_runtime", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
         Assert.Contains("VIEW SERVER STATE", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.Equal(3, app.Services.GetRequiredService<RuntimeRights>().ExitCode);
-        Assert.True(app.Services.GetRequiredService<IHostApplicationLifetime>().ApplicationStopping.IsCancellationRequested);
-        Assert.False(app.Services.GetRequiredService<RuntimeRights>().Checked);
+        Assert.Equal(3, rights.ExitCode);
+        Assert.True(lifetime.ApplicationStopping.IsCancellationRequested);
+        Assert.False(rights.Checked);
     }
 }

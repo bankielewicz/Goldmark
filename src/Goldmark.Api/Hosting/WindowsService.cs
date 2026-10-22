@@ -17,8 +17,8 @@ internal static class WindowsService
     public const int InvalidConfigurationEvent = 2;
     public const int RefusedEvent = 3;
 
-    // ERROR_INVALID_DATA, which Windows shows as "The data is invalid."; the Application log says what.
-    private const int RefusedExitCode = 13;
+    /// <summary>ERROR_INVALID_DATA, which Windows shows as "The data is invalid."; the Application log says what.</summary>
+    public const int RefusedExitCode = 13;
 
     public static bool IsRunning => OperatingSystem.IsWindows() && WindowsServiceHelpers.IsWindowsService();
 

@@ -39,6 +39,7 @@ internal sealed partial class RuntimeRightsCheck(
     RuntimeRights rights,
     IConfiguration configuration,
     IHostApplicationLifetime lifetime,
+    IHostLifetime hostLifetime,
     ILogger<RuntimeRightsCheck> logger) : BackgroundService
 {
     public const int Refused = 3;
@@ -76,6 +77,11 @@ internal sealed partial class RuntimeRightsCheck(
                 if (OperatingSystem.IsWindows() && WindowsService.IsRunning)
                 {
                     WindowsService.WriteEvent(reason, WindowsService.RefusedEvent);
+                    if (hostLifetime is System.ServiceProcess.ServiceBase service)
+                    {
+                        // Windows records the stop as a failure, as for a refused start; it doesn't restart it.
+                        service.ExitCode = WindowsService.RefusedExitCode;
+                    }
                 }
 
                 rights.Refuse();

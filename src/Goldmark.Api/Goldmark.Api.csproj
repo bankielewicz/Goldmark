@@ -33,6 +33,7 @@
     <EmbeddedResource Include="..\..\db\migrations\*.sql" LogicalName="Goldmark.Migrations.%(Filename)%(Extension)" />
     <!-- Measured grants to public/guest in the SQL Server 2025 system databases (principal audit, DEC-031). -->
     <EmbeddedResource Include="Commands\Audit\sql-server-2025-public-grants.txt" LogicalName="Goldmark.Audit.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Commands\Audit\sql-server-2025-public-grants.windows.txt" LogicalName="Goldmark.Audit.%(Filename)%(Extension)" />
     <!-- Common passwords refused at password set time (DEC-038 item 6, DEC-040); rebuilt by
          tools/common-passwords/build-common-passwords.mjs. Its licence ships beside the app. -->
     <EmbeddedResource Include="Security\Passwords\common-passwords.txt" LogicalName="Goldmark.Passwords.%(Filename)%(Extension)" />

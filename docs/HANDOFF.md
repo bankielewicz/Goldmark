@@ -5,16 +5,15 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-21:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24) and **4
-(PR #32)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+**As of 2026-10-22:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+(PR #32) and **4a (PR #38)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
-the audit log and screen 16 (DEC-041). **Slice 4a** (password recovery, #25, approved 2026-10-21) is
-in progress on `slice/04a-password-recovery`: the owner's decisions are DEC-042, the backend is
-built, and its screens are approved (`docs/design/screens/slice-4a/`). The owner placed the Windows
-service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
-the first distribution, not the target deployment (DEC-030, rule 8).
+the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
+**Slice 4b**, the Windows service distribution (approved 2026-10-22, DEC-036, DEC-043), is in progress on
+`slice/04b-windows-service`. Docker Compose is the first distribution, not the target deployment
+(DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -130,8 +129,37 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **in progress**: built
-and tested locally, PR #38. The decisions are DEC-042, with the owner's words.
+Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **in
+progress**: built and tested locally on Linux and on a Windows 11 host. The decisions are DEC-043, with
+the owner's words; the operator guide is `docs/ops/windows-service.md`.
+
+**What it adds:**
+- **The Windows service** (`Microsoft.Extensions.Hosting.WindowsServices`): `Install-Goldmark.ps1` in a
+  self-contained `win-x64` zip (`deploy/windows/`), with `Uninstall-Goldmark.ps1` and
+  `Rotate-GoldmarkCredentials.ps1`; a gMSA, a domain user or (local SQL Server only) `NT SERVICE\Goldmark`.
+- **Windows authentication** to SQL Server (`Goldmark:Database:Authentication`), migrations as the
+  installing administrator (`Goldmark:Migration:Login: Administrator`, no migration login), and the
+  service's own rights check at each start (`Goldmark:Database:CheckRightsAtStart`).
+- **Secrets at rest:** owner-only folders everywhere (`PrivateDirectory`; on Windows a protected ACL and a
+  wider folder refused, #6), the key ring and a SQL login's password encrypted to the service account.
+- **Logs** as JSON files per day (`Goldmark:Logging:Directory`); refusals in the Application log only.
+- **`rotate-db-credentials`** on Docker and Windows; **#34**: `bootstrap-db` checks the retention period.
+- The audit's baseline gains SQL Server 2025's Windows-only grants (`*.windows.txt`, DEC-043 item 12).
+
+**For the slices that follow:**
+- Rule 8 holds both ways: per-platform defaults live in `DefaultPaths`; Windows APIs behind
+  `OperatingSystem.IsWindows()`.
+- As a Windows service, anything that fails after the host starts looks like a crash and
+  restart-on-failure loops: validate in `Program.cs` before `RunAsync`, refuse through
+  `WindowsService.RefuseStart`, or stop with `ServiceBase.ExitCode` set (DEC-043 item 11).
+- `EXECUTE AS LOGIN` doesn't see a Windows login's group rights; only the login's own token does.
+- Test on Windows from WSL in a copy of the tree (`rsync` to `tmp/`), never the shared `bin/obj`;
+  Windows PowerShell 5.1 drops empty native arguments, misparses `"$name:"`, and turns native stderr
+  into errors under `Stop`.
+- The Windows CI job installs SQL Server 2025 Express on the runner; it can't run Linux containers.
+
+Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **merged** (PR #38,
+`18b46ed`). The decisions are DEC-042, with the owner's words.
 
 **What it adds:**
 - **Reset password** on Users & roles: the old password stops working at once and every session ends;

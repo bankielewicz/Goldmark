@@ -49,6 +49,7 @@ internal static class PrincipalAudit
     public static IReadOnlyCollection<string> AcceptableKindNames => AcceptableKinds;
 
     private const string BaselineResource = "Goldmark.Audit.sql-server-2025-public-grants.txt";
+    private const string WindowsBaselineResource = "Goldmark.Audit.sql-server-2025-public-grants.windows.txt";
 
     /// <summary>System databases whose public/guest grants are compared with the measured baseline.</summary>
     public static readonly string[] SystemDatabases = ["master", "msdb", "tempdb", "model"];
@@ -490,6 +491,11 @@ internal static class PrincipalAudit
     {
         var findings = await QueryAsync(admin, EnvironmentSql, ("@db", database));
         var baseline = Baseline.Value;
+        // SQL Server 2025 on Windows creates a few grants the Linux image doesn't (measured, DEC-043 item 12).
+        var windows = await IsWindowsAsync(admin) ? WindowsBaseline.Value : new Dictionary<string, HashSet<string>>();
+        bool Known(string scope, string key) =>
+            baseline["*"].Contains(key) || (baseline.TryGetValue(scope, out var own) && own.Contains(key))
+            || (windows.TryGetValue("*", out var every) && every.Contains(key)) || (windows.TryGetValue(scope, out var extra) && extra.Contains(key));
         foreach (var system in SystemDatabases)
         {
             await admin.ChangeDatabaseAsync(system);
@@ -501,7 +507,7 @@ internal static class PrincipalAudit
                     continue; // reported as guest-connect by DatabasesAsync (model; the others are SQL Server's default)
                 }
 
-                if (!baseline["*"].Contains(key) && !(baseline.TryGetValue(system, out var own) && own.Contains(key)))
+                if (!Known(system, key))
                 {
                     findings.Add(new AuditFinding("system-grant", [system, grantee, permission, securable, target]));
                 }
@@ -514,7 +520,7 @@ internal static class PrincipalAudit
             await admin.ChangeDatabaseAsync(database);
             foreach (var (grantee, permission, securable, target) in await PublicGrantsAsync(admin))
             {
-                if (!baseline["*"].Contains(BaselineKey(grantee, permission, securable, target)))
+                if (!Known("*", BaselineKey(grantee, permission, securable, target)))
                 {
                     findings.Add(new AuditFinding("goldmark-grant", [database, grantee, permission, securable, target]));
                 }
@@ -593,12 +599,23 @@ internal static class PrincipalAudit
     private static readonly string GuestConnect = BaselineKey("guest", "CONNECT", "DATABASE", "");
 
     /// <summary>Measured baseline: scope ("*" or a database) → grantee|permission|target.</summary>
-    internal static readonly Lazy<Dictionary<string, HashSet<string>>> Baseline = new(LoadBaseline);
+    internal static readonly Lazy<Dictionary<string, HashSet<string>>> Baseline = new(() => LoadBaseline(BaselineResource));
 
-    private static Dictionary<string, HashSet<string>> LoadBaseline()
+    /// <summary>What SQL Server 2025 on Windows adds to <see cref="Baseline"/> (DEC-043 item 12).</summary>
+    internal static readonly Lazy<Dictionary<string, HashSet<string>>> WindowsBaseline = new(() => LoadBaseline(WindowsBaselineResource));
+
+    /// <summary>Whether this SQL Server runs on Windows (<c>sys.dm_os_host_info</c>, readable by any login).</summary>
+    internal static async Task<bool> IsWindowsAsync(SqlConnection connection)
     {
-        using var stream = typeof(PrincipalAudit).Assembly.GetManifestResourceStream(BaselineResource)
-            ?? throw new InvalidOperationException($"Embedded resource {BaselineResource} is missing.");
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT host_platform FROM sys.dm_os_host_info;";
+        return string.Equals(await command.ExecuteScalarAsync() as string, "Windows", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, HashSet<string>> LoadBaseline(string resource)
+    {
+        using var stream = typeof(PrincipalAudit).Assembly.GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException($"Embedded resource {resource} is missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var baseline = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase) { ["*"] = new(StringComparer.Ordinal) };
         while (reader.ReadLine() is { } line)
