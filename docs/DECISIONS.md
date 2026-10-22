@@ -1635,6 +1635,13 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        the service belongs to), after Microsoft's guidance: group membership is its "preferred strategy" for
        access, and Express's `BUILTIN\Users` login can be safely removed. Not covered: a Windows group mapped as a
        user in Goldmark's own database, where the database-level check still refuses (unmeasured).
+     - The service's check at each start also covers every other database its own token can enter (Codex on #39):
+       an administrator's impersonation doesn't see a user that one of the account's Windows groups has there.
+       Owner, 2026-10-22: "A. Refuse; acceptable if via group (Recommended)": a user for one of its groups (such as
+       `NT AUTHORITY\Authenticated Users` in another application's database) is the finding
+       `group-database-access`, which an operator can accept by ID like guest access; a user for the account itself
+       stays `database-access`, never acceptable. The check runs at every start, so a later grant to a broad group
+       stops Goldmark at its next restart until it is accepted or reverted.
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**

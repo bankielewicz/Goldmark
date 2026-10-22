@@ -536,6 +536,7 @@ public sealed class AuditFindingTests
     [InlineData("login-disabled", false)]
     [InlineData("server-role", false)]
     [InlineData("database-access", false)]
+    [InlineData("group-database-access", true)] // owner, 2026-10-22: through a Windows group only (DEC-043 item 11)
     [InlineData("mapped-into", false)]
     [InlineData("owns", false)]
     public void Only_findings_about_the_shared_instance_are_acceptable(string kind, bool acceptable) =>
@@ -550,7 +551,7 @@ public sealed class AuditFindingTests
             "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
             "goldmark-database-principal", "goldmark-public-owner", "runtime-role-grant", "login-disabled", "login-policy-off",
             "login-expiration-on", "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential",
-            "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
+            "server-role", "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "group-database-access", "database-role",
             "database-grant", "database-connect-denied", "server-securable", "database-securable",
         ];
         Assert.True(PrincipalAudit.KnownKinds.SetEquals(kinds));

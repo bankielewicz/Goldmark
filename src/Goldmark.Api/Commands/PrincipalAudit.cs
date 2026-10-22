@@ -30,7 +30,7 @@ internal static class PrincipalAudit
     private static readonly HashSet<string> AcceptableKinds = new(StringComparer.Ordinal)
     {
         "guest-connect", "linked-login-all-logins", "remote-login-all-logins", "system-grant",
-        "cross-db-chaining", "database-unreadable",
+        "cross-db-chaining", "database-unreadable", "group-database-access",
     };
 
     public static bool IsAcceptableKind(string kind) => AcceptableKinds.Contains(kind);
@@ -42,7 +42,7 @@ internal static class PrincipalAudit
         "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
         "goldmark-database-principal", "goldmark-public-owner", "runtime-role-grant", "login-disabled", "login-policy-off", "login-expiration-on",
         "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential", "server-role",
-        "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
+        "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "group-database-access", "database-role",
         "database-grant", "database-connect-denied", "server-securable", "database-securable",
     };
 
@@ -409,7 +409,17 @@ internal static class PrincipalAudit
                 BEGIN TRY
                     SET @exec = QUOTENAME(@name) + N'.sys.sp_executesql';
                     EXEC @exec N'SELECT @user = USER_NAME();', N'@user sysname OUTPUT', @user = @user OUTPUT;
-                    IF @user <> N'guest' INSERT @f VALUES (N'database-access', @me, @name, @user, NULL);
+                    -- A user of this login's own is never acceptable. Without one, the users of its Windows groups that
+                    -- let it in can be accepted by ID, like guest access (owner, 2026-10-22, DEC-043 item 11).
+                    IF @user <> N'guest' INSERT @f EXEC @exec N'
+                        IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE sid = SUSER_SID())
+                            AND EXISTS (SELECT 1 FROM sys.database_principals AS p JOIN sys.login_token AS t ON t.sid = p.sid
+                                WHERE p.type = N''G'' AND t.type = N''WINDOWS GROUP'')
+                            SELECT N''group-database-access'', DB_NAME(), p.name, NULL, NULL
+                            FROM sys.database_principals AS p JOIN sys.login_token AS t ON t.sid = p.sid
+                            WHERE p.type = N''G'' AND t.type = N''WINDOWS GROUP'';
+                        ELSE
+                            SELECT N''database-access'', @me, DB_NAME(), USER_NAME(), NULL;', N'@me sysname', @me = @me;
                     ELSE IF @name NOT IN (N'master', N'tempdb', N'msdb') INSERT @f VALUES (N'guest-connect', @name, NULL, NULL, NULL);
                 END TRY
                 BEGIN CATCH
@@ -731,6 +741,8 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
         "remote-login" => $"login '{P(0)}' has a remote-login mapping on server '{P(1)}'. Fix: EXEC sp_dropremotelogin @remoteserver = {L(P(1))}, @loginame = {L(P(0))};",
         "mapped-into" => $"login '{P(0)}' has a user in database '{P(1)}' and holds that user's rights there. Fix: drop that user, or configure another login.",
         "database-access" => $"login '{P(0)}' can enter database '{P(1)}' as user '{P(2)}'. Fix: drop that user (or the group's), or configure another login.",
+        "group-database-access" => $"database '{P(0)}' has a user for the Windows group '{P(1)}', which Goldmark's login belongs to, so Goldmark can enter it " +
+            $"with that user's rights. Fix: USE {Q(P(0))}; DROP USER {Q(P(1))}; or accept this finding if every member of the group is meant to have that access.",
         "database-role" => $"the database user of login '{P(0)}' is a member of database role {P(1)}. Fix: ALTER ROLE {Q(P(1))} DROP MEMBER {Q(P(0))};",
         "database-grant" => $"the database user of login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))} directly; Goldmark's rights come only through its role. " +
             $"Fix: REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM {Q(P(0))}{Cascade(P(1))};",

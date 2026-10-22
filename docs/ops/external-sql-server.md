@@ -169,6 +169,7 @@ Acceptable kinds (about the shared instance):
 | `remote-login-all-logins:<server>` | A remote-login mapping for every login (#3) |
 | `system-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in master, msdb, tempdb or model beyond SQL Server 2025's own (#4; measured baseline in `src/Goldmark.Api/Commands/Audit/`) |
 | `cross-db-chaining` | The server option `cross db ownership chaining` is on |
+| `group-database-access:<db>:<group>` | Under Windows authentication, checked by the service at each start: a Windows group that Goldmark's service account belongs to (for example `NT AUTHORITY\Authenticated Users` or `CORP\Domain Users`) has a user in another database, so Goldmark can enter it with that user's rights. Accept it only if every member of the group is meant to have that access; a user for the service account itself is `database-access` and can't be accepted |
 | `database-unreadable:<db>:<error or state>` | A database could not be checked: it is not online (`OFFLINE`, `RESTORING`, …) or could not be read (for example a non-readable secondary). It may come online later with rights nobody checked |
 
 Kinds that must be fixed (about Goldmark's logins or database):
@@ -188,7 +189,7 @@ Kinds that must be fixed (about Goldmark's logins or database):
 | `server-role:<login>:<role>`, `server-grant:<login>:<permission>:<class>[:<target>]` | Server-level rights held directly |
 | `owns:<login>:<kind>:<name>` | The login owns a database, a schema, an object or another securable (everything Goldmark uses is owned by `dbo`, DEC-029) |
 | `linked-login:<login>:<server>`, `remote-login:<login>:<server>` | A mapping for this login (#3) |
-| `mapped-into:<login>:<db>`, `database-access:<login>:<db>:<user>` | The login has a user in another database (directly or through a group) |
+| `mapped-into:<login>:<db>`, `database-access:<login>:<db>:<user>` | The login has a user of its own in another database (through one of its Windows groups: `group-database-access`) |
 | `database-role:<login>:<role>`, `database-grant:<login>:<permission>:<class>[:<target>]` | In the Goldmark database, a role or a direct grant besides the expected ones (rights come only through `goldmark_runtime`, or `db_owner` for the migration login). When adopting, the same-name user that would be remapped to the login is checked before anything changes |
 | `database-connect-denied:<login>:<grantee>` | `CONNECT` on the Goldmark database is denied |
 | `server-securable:<login>:<class>:<name>:<permission>` | A right on another login, server role or endpoint (for example `IMPERSONATE`) |

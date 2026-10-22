@@ -212,6 +212,10 @@ public sealed class WindowsProtectionTests : IDisposable
         acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Read, AccessControlType.Allow));
         folder.SetAccessControl(acl);
 
+        // Before: only encrypting a plain file checked the folder, and this file is already encrypted.
+        DatabaseOptionsValidator.ApplyCredentialFile(options, protectPlain: true);
+        Assert.Null(options.CredentialFileProblem);
+
         var result = validator.Validate(null, options);
 
         Assert.False(result.Succeeded);
@@ -234,6 +238,7 @@ public sealed class WindowsProtectionTests : IDisposable
         acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Read, AccessControlType.Allow));
         info.SetAccessControl(acl);
 
+        Assert.Null(PrivateDirectory.Problem(Setting, folder, serviceAccount: null)); // the folder check, all the start had
         Assert.Contains("grants access to BUILTIN\\Users", PrivateDirectory.FileProblem(Setting, file, serviceAccount: null), StringComparison.Ordinal);
     }
 
