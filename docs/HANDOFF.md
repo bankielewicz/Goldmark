@@ -358,6 +358,8 @@ And for slice 24:
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | 4a (DEC-042), PR #38; the command became the recovery setting (item 6) |
 | #36 Windows sign-in (Kerberos) for domain users on the Windows service | 25b (owner, 2026-10-21; DEC-042 item 12) |
 | #37 LDAP sign-in: a directory password over LDAPS, every distribution | 25c (owner, 2026-10-21; DEC-042 item 12) |
+| #40 Windows: a private folder where the service account can't write passes the start check, and the write fails later | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
+| #41 Windows installer: changing the service account on an upgrade (refused before anything changes until then) | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |

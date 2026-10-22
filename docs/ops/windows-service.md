@@ -130,7 +130,7 @@ The setup token is in the log file (event 3001); the installer prints which file
 Unpack the new zip and run `.\Install-Goldmark.ps1` again: it finds the service's data folder, keeps the settings,
 stops the service, replaces the program, migrates the database as you, and starts it. A domain user's password
 isn't asked for again (Windows keeps it); give `-ServiceAccountPassword` only when it changed. Changing the
-service account isn't supported yet: the installer refuses before it changes anything.
+service account isn't supported yet (#41): the installer refuses before it changes anything.
 
 ## Rotating database passwords
 

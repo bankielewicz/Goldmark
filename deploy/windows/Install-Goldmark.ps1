@@ -396,7 +396,7 @@ if ($existingService) {
     $current = Get-AccountSid $existingService.StartName
     $wanted = Get-AccountSid $ServiceAccount
     if (-not $current -or -not $wanted -or $current.Value -ne $wanted.Value) {
-        Fail "the service runs as $($existingService.StartName), and changing its account isn't supported yet. Run this again with -ServiceAccount '$($existingService.StartName)'."
+        Fail "the service runs as $($existingService.StartName), and changing its account isn't supported yet (#41). Run this again with -ServiceAccount '$($existingService.StartName)'."
     }
     $sameAccount = $true
 }
