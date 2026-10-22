@@ -33,6 +33,18 @@ internal static class SettingsFile
             return $"{Key} must name an existing settings file by its full path.";
         }
 
+        // Read once on its own first: the host loads a source as it is added, so a file that isn't valid JSON would
+        // crash the start (a restart loop for a Windows service) instead of refusing it. The exception's message
+        // may quote the file, so only its type is named.
+        try
+        {
+            new ConfigurationBuilder().AddJsonFile(path, optional: false, reloadOnChange: false).Build();
+        }
+        catch (Exception ex) when (ex is InvalidDataException or FormatException or IOException or UnauthorizedAccessException)
+        {
+            return $"{Key} names a file that can't be read as JSON settings ({ex.GetType().Name}): fix it or restore it from a backup.";
+        }
+
         var source = new JsonConfigurationSource { Path = path, Optional = false, ReloadOnChange = false };
         source.ResolveFileProvider();
         // The host also reads DOTNET_- and ASPNETCORE_-prefixed variables before appsettings.json; the file

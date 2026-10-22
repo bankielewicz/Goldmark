@@ -23,6 +23,7 @@ internal static class GoldmarkApplication
 
         builder.Services.AddOptions<ServiceOptions>().BindConfiguration(ServiceOptions.SectionName);
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
+        builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, CredentialFolderValidator>();
         builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart()
             .PostConfigure<IHostEnvironment>((db, environment) =>
             {

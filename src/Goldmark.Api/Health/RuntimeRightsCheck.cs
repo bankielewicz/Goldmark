@@ -110,7 +110,9 @@ internal sealed partial class RuntimeRightsCheck(
 
         var refused = await CommandSql.FindingsAsync(connection, MigrateCommand.VerifyRuntimeSql);
         var policy = FindingPolicy.Parse(configuration[FindingPolicy.Setting]);
-        var findings = policy.Refused(await PrincipalAudit.SelfAsync(connection, database.Value.Name, runtime: true, databases: false), TextWriter.Null, "start");
+        // Other databases too: a user there for one of this login's Windows groups shows only in its own token
+        // (bootstrap-db's pass, by impersonation, can't see it; Codex on #39).
+        var findings = policy.Refused(await PrincipalAudit.SelfAsync(connection, database.Value.Name, runtime: true, databases: true), TextWriter.Null, "start");
         refused.AddRange(findings.Select(f => $"[{f.Id}] {f.Description}"));
         return refused;
     }

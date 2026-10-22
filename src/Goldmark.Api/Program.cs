@@ -37,9 +37,10 @@ else
         var account = builder.Configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>()?.Account;
         errors.AddRange(LoggingSetup.Errors(builder.Configuration, builder.Environment.ContentRootPath, account));
         if (SettingsFile.Path() is { } settings
-            && Goldmark.Api.Security.PrivateDirectory.Problem($"{SettingsFile.Key}'s folder", Path.GetDirectoryName(settings)!, account) is { } folder)
+            && (Goldmark.Api.Security.PrivateDirectory.Problem($"{SettingsFile.Key}'s folder", Path.GetDirectoryName(settings)!, account)
+                ?? Goldmark.Api.Security.PrivateDirectory.FileProblem(SettingsFile.Key, settings, account)) is { } exposed)
         {
-            errors.Add(folder);
+            errors.Add(exposed);
         }
     }
 }

@@ -193,7 +193,8 @@ internal static class PrincipalAudit
     private const string DatabasesSql = $"""
         SET NOCOUNT ON;
         {FindingsTable}
-        DECLARE @sid1 varbinary(85) = SUSER_SID(@login1), @sid2 varbinary(85) = SUSER_SID(@login2);
+        -- With one login, the other is empty: SUSER_SID(N'') is the caller's own SID, so NULLIF.
+        DECLARE @sid1 varbinary(85) = SUSER_SID(NULLIF(@login1, N'')), @sid2 varbinary(85) = SUSER_SID(NULLIF(@login2, N''));
         DECLARE @name sysname, @id int, @sql nvarchar(max), @guest int, @mapped1 int, @mapped2 int;
         DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR SELECT name, database_id FROM sys.databases WHERE state = 0 AND name <> @db;
         OPEN dbs;
@@ -305,7 +306,7 @@ internal static class PrincipalAudit
         INSERT @f SELECT DISTINCT N'goldmark-database-principal', DB_NAME(), u.name, NULL, NULL
         FROM sys.database_principals AS u
         WHERE u.type NOT IN ('R') AND u.principal_id > 4
-            AND u.sid NOT IN (ISNULL(SUSER_SID(@login1), 0x00), ISNULL(SUSER_SID(@login2), 0x00))
+            AND u.sid NOT IN (ISNULL(SUSER_SID(NULLIF(@login1, N'')), 0x00), ISNULL(SUSER_SID(NULLIF(@login2, N'')), 0x00))
             AND (EXISTS (SELECT 1 FROM sys.database_role_members AS m WHERE m.member_principal_id = u.principal_id)
                 OR EXISTS (SELECT 1 FROM sys.database_permissions AS p WHERE p.grantee_principal_id = u.principal_id
                     AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT' AND p.state = 'G'))

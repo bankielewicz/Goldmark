@@ -201,3 +201,17 @@ internal sealed class DatabaseOptionsValidator : IValidateOptions<DatabaseOption
         }
     }
 }
+
+/// <summary>
+/// On Windows, the runtime credential file's folder must be owner-only at every start (DEC-043 item 5, #6), not only
+/// when a plain password is encrypted into it (Codex on #39). On Unix the file is written 0600 in a 0700 folder.
+/// </summary>
+internal sealed class CredentialFolderValidator(IOptions<ServiceOptions> service) : IValidateOptions<DatabaseOptions>
+{
+    public ValidateOptionsResult Validate(string? name, DatabaseOptions options) =>
+        OperatingSystem.IsWindows() && !string.IsNullOrWhiteSpace(options.CredentialFile)
+            && Path.GetDirectoryName(options.CredentialFile) is { Length: > 0 } folder
+            && Security.PrivateDirectory.Problem($"{DatabaseOptions.SectionName}:CredentialFile's folder", folder, service.Value.Account) is { } problem
+            ? ValidateOptionsResult.Fail(problem)
+            : ValidateOptionsResult.Success;
+}

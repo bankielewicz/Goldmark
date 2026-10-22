@@ -197,6 +197,46 @@ public sealed class WindowsProtectionTests : IDisposable
         Assert.False(validator.Validate(null, inherits).Succeeded);
     }
 
+    [Fact]
+    public void The_credential_folder_is_checked_at_start_even_when_its_file_is_already_encrypted()
+    {
+        // Codex on #39: only a plain file's encryption checked the folder, so a widened folder went unnoticed.
+        RequireWindows();
+        var path = Path.Combine(_root, "credentials", "runtime.json");
+        CredentialFile.Write(path, new LoginCredential("goldmark_app_eeeeeeeeee", Password));
+        var validator = new CredentialFolderValidator(Microsoft.Extensions.Options.Options.Create(new ServiceOptions()));
+        var options = new DatabaseOptions { CredentialFile = path };
+        Assert.True(validator.Validate(null, options).Succeeded);
+        var folder = new DirectoryInfo(Path.GetDirectoryName(path)!);
+        var acl = folder.GetAccessControl();
+        acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Read, AccessControlType.Allow));
+        folder.SetAccessControl(acl);
+
+        var result = validator.Validate(null, options);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains("Goldmark:Database:CredentialFile's folder", result.FailureMessage, StringComparison.Ordinal);
+        Assert.Contains("grants access to BUILTIN\\Users", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void A_file_in_a_private_folder_that_grants_someone_else_is_refused()
+    {
+        // Codex on #39: the settings file's own ACL decides who reads it; every user may pass through its folder.
+        RequireWindows();
+        var folder = Path.Combine(_root, "settings");
+        Assert.Null(PrivateDirectory.Problem(Setting, folder, serviceAccount: null));
+        var file = Path.Combine(folder, "goldmark.json");
+        File.WriteAllText(file, "{}");
+        Assert.Null(PrivateDirectory.FileProblem(Setting, file, serviceAccount: null));
+        var info = new FileInfo(file);
+        var acl = info.GetAccessControl();
+        acl.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.Read, AccessControlType.Allow));
+        info.SetAccessControl(acl);
+
+        Assert.Contains("grants access to BUILTIN\\Users", PrivateDirectory.FileProblem(Setting, file, serviceAccount: null), StringComparison.Ordinal);
+    }
+
     private static IEnumerable<SecurityIdentifier> Allowed(DirectorySecurity acl) =>
         acl.GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier)).Cast<FileSystemAccessRule>()
             .Where(r => r.AccessControlType == AccessControlType.Allow).Select(r => (SecurityIdentifier)r.IdentityReference).Distinct();

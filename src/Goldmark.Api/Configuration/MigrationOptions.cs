@@ -24,6 +24,29 @@ public sealed class MigrationOptions
 
     public bool UsesAdministrator => Login == AdministratorLogin;
 
+    /// <summary>
+    /// Both modes known, and no migration login under Windows authentication, where its password would be stored
+    /// on the server (DEC-043 items 2 and 5). <c>bootstrap-db</c> checks the same; <c>migrate</c> and
+    /// <c>rotate-db-credentials</c> also run on their own.
+    /// </summary>
+    public static IEnumerable<string> ModeErrors(DatabaseOptions db, MigrationOptions migration)
+    {
+        if (db.Authentication is not (DatabaseOptions.SqlAuthentication or DatabaseOptions.WindowsAuthentication))
+        {
+            yield return $"{DatabaseOptions.SectionName}:Authentication must be '{DatabaseOptions.SqlAuthentication}' or '{DatabaseOptions.WindowsAuthentication}'.";
+        }
+
+        if (migration.Login is not (DedicatedLogin or AdministratorLogin))
+        {
+            yield return $"{SectionName}:Login must be '{DedicatedLogin}' or '{AdministratorLogin}'.";
+        }
+        else if (db.UsesWindowsAuthentication && !migration.UsesAdministrator)
+        {
+            yield return $"{SectionName}:Login must be '{AdministratorLogin}' with {DatabaseOptions.SectionName}:Authentication " +
+                $"'{DatabaseOptions.WindowsAuthentication}'.";
+        }
+    }
+
     /// <summary>No default: set it with <see cref="Password"/>, or leave both empty and let <c>bootstrap-db</c> generate them (<see cref="CredentialFile"/>).</summary>
     public string User { get; set; } = "";
     public string Password { get; set; } = "";

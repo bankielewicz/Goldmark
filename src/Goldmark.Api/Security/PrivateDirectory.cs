@@ -43,6 +43,14 @@ internal static class PrivateDirectory
         }
     }
 
+    /// <summary>
+    /// On Windows, a file in such a folder: its own ACL decides who may open it, since every user may pass through
+    /// the folder ("bypass traverse checking"), so a grant on the file to anyone else is refused like one on the
+    /// folder (Codex on #39). Null on Unix, and when the file is private.
+    /// </summary>
+    public static string? FileProblem(string setting, string file, string? serviceAccount) =>
+        OperatingSystem.IsWindows() ? WindowsFileProblem(setting, file, serviceAccount) : null;
+
     /// <summary>As <see cref="Problem"/>, for a writer: throws <see cref="IOException"/> with the problem.</summary>
     public static void Ensure(string setting, string directory, string? serviceAccount)
     {
@@ -129,6 +137,41 @@ internal static class PrivateDirectory
         }
 
         return null;
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static string? WindowsFileProblem(string setting, string file, string? serviceAccount)
+    {
+        var account = ServiceAccountSid(serviceAccount, out var accountProblem);
+        if (accountProblem is not null)
+        {
+            return accountProblem;
+        }
+
+        var allowed = Allowed(account);
+        var fix = "Remove the other permissions from the file, or let the installer write it again (docs/ops/windows-service.md).";
+        try
+        {
+            var acl = new FileInfo(file).GetAccessControl(AccessControlSections.Access | AccessControlSections.Owner);
+            if (acl.GetOwner(typeof(SecurityIdentifier)) is not SecurityIdentifier owner || !allowed.Contains(owner))
+            {
+                return $"{setting} ({file}) is owned by an account other than SYSTEM, Administrators or the service account. {fix}";
+            }
+
+            foreach (FileSystemAccessRule rule in acl.GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier)))
+            {
+                if (rule.AccessControlType == AccessControlType.Allow && !allowed.Contains((SecurityIdentifier)rule.IdentityReference))
+                {
+                    return $"{setting} ({file}) grants access to {Name((SecurityIdentifier)rule.IdentityReference)}. {fix}";
+                }
+            }
+
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"{setting} ({file}) could not be checked by this process ({ex.GetType().Name}).";
+        }
     }
 
     /// <summary>SYSTEM, Administrators, this process's account and the service account, if set.</summary>

@@ -333,6 +333,7 @@ internal static class BootstrapDatabaseCommand
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
             service = configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>() ?? service;
             var audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? new AuditOptions();
+            await RotateCredentialsCommand.FinishStagedAdministratorAsync(db, bootstrap.AdminCredentialFile, bootstrap.WaitSeconds, output, Name);
             errors = PlanCredentials(db, migration, bootstrap, out sources, out generatedAdmin);
             if (errors.Count == 0)
             {

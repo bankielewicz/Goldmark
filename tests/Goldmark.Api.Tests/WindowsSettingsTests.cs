@@ -144,6 +144,79 @@ public sealed class WindowsSettingsTests : IDisposable
         Assert.Equal("1444", configuration["Goldmark:Database:Port"]);
     }
 
+    [Theory]
+    [InlineData("""{"Goldmark": {"Auth": {"RecoverAdminCode": "Secret123456" """)]
+    [InlineData("""["Secret123456"]""")]
+    [InlineData("""{"a": 1, "A": 2}""")]
+    public void A_settings_file_that_is_not_valid_json_is_refused_without_its_content(string content)
+    {
+        // Codex on #39: the host loads a source as it is added, so this threw out of SettingsFile.Add and a Windows
+        // service crashed (and restarted) instead of refusing its start with the setting's name.
+        var file = Path.Combine(_root, "goldmark.json");
+        File.WriteAllText(file, content);
+        var builder = new ConfigurationManager();
+        var before = builder.Sources.Count;
+
+        var problem = SettingsFile.Add(builder, file);
+
+        Assert.NotNull(problem);
+        Assert.StartsWith("Goldmark:SettingsFile names a file that can't be read as JSON settings", problem, StringComparison.Ordinal);
+        Assert.DoesNotContain("Secret123456", problem, StringComparison.Ordinal);
+        Assert.Equal(before, builder.Sources.Count);
+    }
+
+    [Fact]
+    public void A_settings_file_with_comments_and_trailing_commas_is_still_accepted()
+    {
+        var file = Path.Combine(_root, "goldmark.json");
+        File.WriteAllText(file, "// written by hand\n{\"Goldmark\": {\"Database\": {\"Host\": \"sql01\",},},}\n");
+        var builder = new ConfigurationManager();
+
+        Assert.Null(SettingsFile.Add(builder, file));
+        Assert.Equal("sql01", builder["Goldmark:Database:Host"]);
+    }
+
+    [Fact]
+    public void Migrate_and_rotation_refuse_a_migration_login_under_Windows_authentication_or_an_unknown_mode()
+    {
+        // Codex on #39: only bootstrap-db checked this; migrate and rotate-db-credentials run on their own too.
+        var (db, _, bootstrap, service) = WindowsLayout();
+        var dedicated = new MigrationOptions { User = "goldmark_migrator", Password = "Migrator-Pa55word-1" };
+
+        Assert.Contains("Goldmark:Migration:Login must be 'Administrator' with Goldmark:Database:Authentication 'Windows'.",
+            MigrateCommand.Validate(db, dedicated, bootstrap, service));
+        Assert.Contains("Goldmark:Migration:Login must be 'Dedicated' or 'Administrator'.",
+            MigrateCommand.Validate(db, new MigrationOptions { Login = "administrator" }, bootstrap, service));
+        Assert.Contains("Goldmark:Database:Authentication must be 'Sql' or 'Windows'.",
+            MigrateCommand.Validate(new DatabaseOptions { Host = "sql01", Authentication = "windows" }, new MigrationOptions { Login = MigrationOptions.AdministratorLogin }, bootstrap, service));
+    }
+
+    [Theory]
+    [InlineData("Windows", "Dedicated", "Goldmark:Migration:Login must be 'Administrator' with Goldmark:Database:Authentication 'Windows'.")]
+    [InlineData("Windows", "Bogus", "Goldmark:Migration:Login must be 'Dedicated' or 'Administrator'.")]
+    [InlineData("Kerberos", "Administrator", "Goldmark:Database:Authentication must be 'Sql' or 'Windows'.")]
+    public async Task Rotation_refuses_unknown_or_mismatched_modes_before_reading_a_credential(string authentication, string login, string expected)
+    {
+        var migrator = Path.Combine(_root, "migrator.json");
+        File.WriteAllText(migrator, """{"user": "goldmark_migrator", "password": "Migrator-Pa55word-1"}""");
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Goldmark:Database:Host"] = "sql01",
+            ["Goldmark:Database:Authentication"] = authentication,
+            ["Goldmark:Migration:Login"] = login,
+            ["Goldmark:Migration:CredentialFile"] = migrator,
+            ["Goldmark:Bootstrap:AdminAuthentication"] = "Windows",
+            ["Goldmark:Service:Account"] = "CORP\\svc-goldmark$",
+        }).Build();
+        using var output = new StringWriter();
+        using var error = new StringWriter();
+
+        var code = await ContainerCommands.RunAsync(["rotate-db-credentials"], configuration, output, error);
+
+        Assert.Equal(2, code);
+        Assert.Contains(expected, error.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void A_missing_or_relative_settings_file_is_named()
     {

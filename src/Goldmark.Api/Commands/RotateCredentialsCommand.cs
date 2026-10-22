@@ -50,6 +50,15 @@ internal static class RotateCredentialsCommand
         EXEC sys.sp_executesql @sql, N'@action nvarchar(64), @logins nvarchar(max)', @action = @action, @logins = @logins;
         """;
 
+    // One rotation at a time (Codex on #39): two interleaved runs could leave a file and its login with different
+    // passwords. Session-owned, in master: released when the connection closes. A second run doesn't wait.
+    private const string LockSql = """
+        DECLARE @result int;
+        EXEC @result = sys.sp_getapplock @Resource = N'goldmark:rotate-db-credentials', @LockMode = N'Exclusive',
+            @LockOwner = N'Session', @LockTimeout = 0;
+        SELECT @result;
+        """;
+
     private sealed record Target(string Purpose, string Setting, string File, string Login, string? Marker);
 
     public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
@@ -63,6 +72,12 @@ internal static class RotateCredentialsCommand
         LoginCredential? generatedAdmin = null;
         if (errors.Count == 0)
         {
+            // The modes decide which logins are Goldmark's to rotate (Codex on #39).
+            errors.AddRange(MigrationOptions.ModeErrors(db, migration));
+        }
+
+        if (errors.Count == 0)
+        {
             if (!db.UsesWindowsAuthentication)
             {
                 AddTarget(targets, errors, "runtime", DatabaseOptions.SectionName, db.CredentialFile, db.Password, BootstrapDatabaseCommand.RuntimeMarkerValue);
@@ -73,6 +88,7 @@ internal static class RotateCredentialsCommand
                 AddTarget(targets, errors, "migration", MigrationOptions.SectionName, migration.CredentialFile, migration.Password, BootstrapDatabaseCommand.MigrationMarkerValue);
             }
 
+            await FinishStagedAdministratorAsync(db, bootstrap.AdminCredentialFile, bootstrap.WaitSeconds, output, Name);
             if (!string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile) && CredentialFile.Exists(bootstrap.AdminCredentialFile))
             {
                 if (CredentialFile.TryRead(bootstrap.AdminCredentialFile, out var admin, out var problem))
@@ -117,6 +133,11 @@ internal static class RotateCredentialsCommand
             if (await ScalarAsync(connection, BootstrapDatabaseCommand.AdminRightsSql) != "1")
             {
                 return await RefuseAsync(error, "the administrator needs CONTROL SERVER (for example sysadmin). Nothing was changed.");
+            }
+
+            if (int.Parse(await ScalarAsync(connection, LockSql) ?? "-1", System.Globalization.CultureInfo.InvariantCulture) < 0)
+            {
+                return await RefuseAsync(error, "another rotate-db-credentials run is in progress; run this again when it has finished. Nothing was changed.");
             }
 
             // 1. Read-only: every login must be one Goldmark manages, before anything changes.
@@ -171,6 +192,52 @@ internal static class RotateCredentialsCommand
             return 1;
         }
     }
+
+    /// <summary>
+    /// The generated administrator's new password waits in "<paramref name="file"/>.new" until its login has changed
+    /// (step 2). A run interrupted between the two leaves the login on the staged password and the file on the old
+    /// one, and nothing could sign in (Codex on #39). Before the file is read, a staged password the login accepts
+    /// replaces it; one it refuses is stale, and the next rotation overwrites it. Shared with <c>bootstrap-db</c>.
+    /// </summary>
+    internal static async Task FinishStagedAdministratorAsync(DatabaseOptions db, string? file, int waitSeconds, TextWriter output, string command)
+    {
+        var staged = file + ".new";
+        if (string.IsNullOrWhiteSpace(file) || !CredentialFile.Exists(staged) || !CredentialFile.TryRead(staged, out var credential, out _))
+        {
+            return;
+        }
+
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(waitSeconds);
+        while (true)
+        {
+            try
+            {
+                var builder = SqlConnectionFactory.Build(db, credential.User, credential.Password, database: "master");
+                builder.Pooling = false;
+                await using var connection = new SqlConnection(builder.ConnectionString);
+                await connection.OpenAsync();
+                break;
+            }
+            catch (SqlException ex) when (ex.Number is LoginFailed or LoginDisabled || DateTime.UtcNow >= deadline)
+            {
+                return;
+            }
+            catch (SqlException)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(3)); // SQL Server is still starting
+            }
+            catch (ArgumentException)
+            {
+                return; // settings that validation reports next
+            }
+        }
+
+        File.Move(staged, file, overwrite: true);
+        await output.WriteLineAsync($"{command}: finished an interrupted rotation: the generated administrator's new password is now in {file}");
+    }
+
+    private const int LoginFailed = 18456;
+    private const int LoginDisabled = 18470;
 
     /// <summary>A login Goldmark generated: its file is configured and no password is set in settings.</summary>
     private static void AddTarget(List<Target> targets, List<string> errors, string purpose, string section, string? file, string? password, string marker)

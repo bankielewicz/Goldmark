@@ -25,11 +25,12 @@ internal static class MigrateCommand
     private const int Refused = 3;
 
     // Run as the administrator when there is no migration login (DEC-043 item 2): it must be able to
-    // change the schema, i.e. be db_owner of this database or more (sysadmin maps to dbo).
+    // change the schema, i.e. hold CONTROL of this database, effectively: as its owner or db_owner, or through
+    // CONTROL SERVER, which the installer asks for (item 13) and which IS_MEMBER(N'db_owner') doesn't see (Codex on #39).
     private const string AdministratorSql = """
         SET NOCOUNT ON;
-        SELECT CAST(N'not db_owner' AS nvarchar(40)), SUSER_SNAME() COLLATE DATABASE_DEFAULT
-        WHERE ISNULL(IS_MEMBER(N'db_owner'), 0) <> 1;
+        SELECT CAST(N'no CONTROL' AS nvarchar(40)), SUSER_SNAME() COLLATE DATABASE_DEFAULT
+        WHERE ISNULL(HAS_PERMS_BY_NAME(DB_NAME(), N'DATABASE', N'CONTROL'), 0) <> 1;
         """;
 
     // Whether this login may impersonate the runtime login, to check its rights when it can't sign in
@@ -230,7 +231,7 @@ internal static class MigrateCommand
                 if (await CommandSql.FindingsAsync(connection, AdministratorSql) is { Count: > 0 } notOwner)
                 {
                     return await RefuseAsync(error,
-                        $"the administrator must be db_owner of '{db.Name}' or more to migrate: {string.Join("; ", notOwner)}. Nothing was changed.");
+                        $"the administrator needs CONTROL of '{db.Name}' to migrate (its owner, db_owner or CONTROL SERVER): {string.Join("; ", notOwner)}. Nothing was changed.");
                 }
             }
             else
@@ -461,7 +462,10 @@ internal static class MigrateCommand
             errors.Add($"{DatabaseOptions.SectionName}:User must be a simple identifier and not a reserved name.");
         }
 
-        if (migration.UsesAdministrator)
+        // The login checks below depend on the mode.
+        var mode = MigrationOptions.ModeErrors(db, migration).ToList();
+        errors.AddRange(mode);
+        if (mode.Count == 0 && migration.UsesAdministrator)
         {
             // migrate runs as the administrator bootstrap-db uses (DEC-043 item 2).
             if (!bootstrap.AdminUsesWindows && (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword)))
@@ -476,7 +480,7 @@ internal static class MigrateCommand
                     $"needs {MigrationOptions.SectionName}:Login '{MigrationOptions.DedicatedLogin}'.");
             }
         }
-        else
+        else if (mode.Count == 0)
         {
             if (!SqlIdentifier.IsValid(migration.User) || SqlIdentifier.IsReservedPrincipal(migration.User)
                 || string.Equals(migration.User, db.User, StringComparison.OrdinalIgnoreCase))

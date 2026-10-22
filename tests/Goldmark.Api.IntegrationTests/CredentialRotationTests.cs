@@ -39,6 +39,30 @@ public sealed class CredentialRotationTests(SqlServerFixture sql)
         sql.AdminScalarAsync<int>("master", $"SELECT PWDCOMPARE(N'{password}', password_hash) FROM sys.sql_logins WHERE name = N'{login}';");
 
     [Fact]
+    public async Task A_second_rotation_while_one_runs_is_refused_with_nothing_changed()
+    {
+        // Codex on #39: two interleaved runs could leave a file and its login with different passwords.
+        var installation = sql.NewInstallation();
+        var files = NewFiles();
+        var provisioned = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], FromFiles(files));
+        Assert.True(provisioned.Code == 0, provisioned.ToString());
+        var before = (Read(files.Runtime), Read(files.Migration));
+        await using var running = await sql.OpenAsync(SqlServerFixture.AdminUser, sql.AdminPassword, "master");
+        await using (var take = running.CreateCommand())
+        {
+            take.CommandText = "EXEC sys.sp_getapplock @Resource = N'goldmark:rotate-db-credentials', @LockMode = N'Exclusive', @LockOwner = N'Session';";
+            await take.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var refused = await sql.RunAsync(installation, ["rotate-db-credentials"], FromFiles(files));
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains("another rotate-db-credentials run is in progress", refused.Error, StringComparison.Ordinal);
+        Assert.Equal(before, (Read(files.Runtime), Read(files.Migration)));
+        Assert.Equal(1, await PasswordMatchesAsync(before.Item1.User, before.Item1.Password));
+    }
+
+    [Fact]
     public async Task Both_generated_logins_get_new_passwords_their_files_first_and_the_run_is_audited()
     {
         var installation = sql.NewInstallation();
