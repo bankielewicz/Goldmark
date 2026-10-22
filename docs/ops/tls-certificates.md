@@ -33,10 +33,13 @@ per-installation certificate:
   the certificate on disk) does not notice. Restart the app at least once in
   the last 30 days of the certificate's life (the expiry date is logged at
   start-up with the fingerprint); any routine update or host reboot does this.
-- **Windows dev hosts:** the 0700/0600 modes apply on Linux only. On Windows the
-  generated directory (`.goldmark/tls` under the project when run with
-  `dotnet run`) inherits the parent folder's permissions, so keep the checkout
-  in a folder other local users cannot read, such as under your user profile.
+- **Windows** (the Windows service, `%ProgramData%\Goldmark\tls`, and dev hosts,
+  `.goldmark/tls` under the project when run with `dotnet run`): Goldmark creates
+  the folder readable by SYSTEM, Administrators and the account it runs as, with
+  inheritance off (DEC-043, #6). A folder that already exists and inherits its
+  permissions or grants anyone else is refused at start, naming
+  `Goldmark:Https:GeneratedCertificateDirectory`: remove it (Goldmark generates a
+  new certificate) or restrict it.
 
 The SHA-256 fingerprint is logged at start-up (event 2003 or 2005), so you can
 compare it with what your browser shows:

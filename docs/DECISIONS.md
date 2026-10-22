@@ -1635,7 +1635,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      `bootstrap-db` refused before changing anything. The CI job measures a fresh SQL Server 2025 Express on
      Windows; exactly those grants join the baseline as Windows entries, and anything else is still refused or
      accepted by ID. Rejected: B, every Windows install accepts them by ID; C, a built-in exception for the
-     `dm_pal_*` views without measuring.
+     `dm_pal_*` views without measuring. Measured by CI on PR #39 (2026-10-22): a fresh Express has the four
+     `dm_pal_*` grants and `EXECUTE` for `public` on 20 SQL Server 2025 procedures in `master` (warehouse,
+     managed delta table and clone metadata), not the `msdb` grant, which comes with the owner's Machine
+     Learning Services; that installation accepts it by ID.
   13. **Who runs the installer: "A. Correct the record: CONTROL SERVER (Recommended)"** (owner, 2026-10-22).
      Item 2's option said "a sysadmin, or a db_owner after a DBA's Mode Existing setup"; in the build,
      `bootstrap-db` audits the instance before every change (DEC-031), which needs CONTROL SERVER, and the

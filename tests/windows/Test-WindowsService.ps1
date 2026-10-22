@@ -21,6 +21,9 @@ param(
     [Parameter(Mandatory)][string]$SqlCertificateFile,
     [string]$SqlHost = 'localhost',
     [string]$Root = (Join-Path $env:ProgramData 'Goldmark-test'),
+    # Principal-audit findings this instance has beyond SQL Server 2025's defaults (for example a Developer
+    # edition with Machine Learning Services); none on CI's fresh Express.
+    [string]$AcceptedFindings = '',
     [int]$HttpsPort = 18444
 )
 
@@ -64,7 +67,7 @@ function Sql([string]$Text, [string]$Database = 'master') {
 function Install([string]$Data, [hashtable]$Extra) {
     $arguments = @{
         NonInteractive = $true; SqlHost = $SqlHost; SqlCertificatePath = $SqlCertificateFile; ServiceAccount = $account
-        HttpsPort = $HttpsPort; Hostnames = 'localhost'; InstallDirectory = $program; DataDirectory = $Data
+        HttpsPort = $HttpsPort; Hostnames = 'localhost'; InstallDirectory = $program; DataDirectory = $Data; AcceptedFindings = $AcceptedFindings
     }
     foreach ($key in $Extra.Keys) { $arguments[$key] = $Extra[$key] }
     $null = & (Join-Path $unpacked 'Install-Goldmark.ps1') @arguments

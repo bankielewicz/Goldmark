@@ -25,7 +25,8 @@ login's, read-only, and receives no password in its environment.
   uses the native `json` type; `bootstrap-db` refuses an older server (exit 3)
   before it creates anything.
 - **TCP** reachable from the Docker host, SQL Server authentication enabled (mixed
-  mode). Windows authentication is not supported yet.
+  mode). Windows authentication needs the Windows service
+  ([windows-service.md](windows-service.md)), not Docker.
 - **Encryption.** `GOLDMARK_DB_ENCRYPT=Strict` (TDS 8, default) or `Mandatory`
   (TLS-encrypted TDS 7.x). The server certificate is always validated:
   - pin it with `GOLDMARK_SQL_SERVER_CERT_FILE` (an absolute host path, or `./…`
@@ -195,8 +196,9 @@ Kinds that must be fixed (about Goldmark's logins or database):
 
 ## Changing passwords
 
-Generated passwords are not rotated automatically ([database-credentials.md](database-credentials.md#rotation)).
-In Mode `Create`, set the login's pair in `deploy/.env` and run `docker compose … up -d`:
+Generated passwords are not rotated automatically; `rotate-db-credentials` gives them new
+ones on demand ([database-credentials.md](database-credentials.md#rotation)).
+To choose a password yourself in Mode `Create`, set the login's pair in `deploy/.env` and run `docker compose … up -d`:
 `db-init` rotates the login's password and rewrites its credential file. In Mode
 `Existing`, the DBA changes the password first, then you update `deploy/.env`. Either
 way, recreate the app afterwards (`up -d --force-recreate app`): it reads its login
@@ -208,7 +210,8 @@ next run. In Mode `Create` you can then delete the four settings.
 
 ## Not supported yet
 
-- Windows authentication and group logins (planned with the Windows service
-  deployment).
+- Windows authentication from Docker: it needs the Windows service
+  ([windows-service.md](windows-service.md)), where the runtime login is the service
+  account's own Windows login (never a group's).
 - Availability groups and other multi-instance setups.
 - Running without the administrator login after installation.

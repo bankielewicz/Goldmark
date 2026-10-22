@@ -242,8 +242,10 @@ it, and ask first if the PRD did not anticipate it.
   anything not on the allow-list and any SSR/RSC package.
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
-  `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`.
-  Commit the updated `packages.lock.json` files. Restore fails on any package
+  `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and
+  `dotnet restore tests/sql-gate/fixture -p:RestoreLockedMode=false --force-evaluate`
+  (that fixture references the API but isn't in the solution; then run
+  `tests/sql-gate/check-sql-gate.sh`). Commit the updated `packages.lock.json` files. Restore fails on any package
   with a known vulnerability, or without a valid nuget.org signature.
 
 ## Repository layout

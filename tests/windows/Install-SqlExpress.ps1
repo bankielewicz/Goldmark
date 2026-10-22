@@ -45,9 +45,11 @@ $connection.Open()
 $command = $connection.CreateCommand()
 $command.CommandText = "SELECT CAST(SERVERPROPERTY('ProductMajorVersion') AS int)"
 $major = [int]$command.ExecuteScalar()
+$command.CommandText = "SELECT CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)) + N' ' + CAST(SERVERPROPERTY('Edition') AS nvarchar(128))"
+$version = [string]$command.ExecuteScalar()
 $connection.Close()
 if ($major -ne 17) { throw "Expected SQL Server 2025 (major version 17), got $major." }
-Write-Host "SQL Server 2025 Express is installed (major version $major)."
+Write-Host "SQL Server 2025 is installed: $version."
 
 & (Join-Path $PSScriptRoot 'Set-SqlTestCertificate.ps1') -Instance MSSQLSERVER -StateFile (Join-Path $Work 'certificate.json') -CertificateFile $CertificateFile
 exit 0

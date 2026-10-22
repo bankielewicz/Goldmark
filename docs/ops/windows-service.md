@@ -178,5 +178,8 @@ CI has no domain, so this is checked by hand on a domain-joined test server:
 
 - The service stops at once: the Application log, source `Goldmark`, event 2 (a setting) or 3 (its rights).
 - `bootstrap-db` reports SQL Server error -2146893019 or 10054: SQL Server's certificate (see "Before you start").
+- `bootstrap-db` refuses a `system-grant` finding: an edition or feature (Machine Learning Services, for
+  example) granted `public` more than a fresh SQL Server 2025 does on Windows. Check it is the product's own
+  grant, then run the installer again with `-AcceptedFindings <its ID>` (DEC-031, DEC-043 item 12).
 - A folder "inherits its permissions" or "grants access to ...": restrict it, or remove it and run the installer
   again.
