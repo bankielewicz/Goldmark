@@ -52,6 +52,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-037 | Fluent UI under the CSP: a per-response style nonce | Security |
 | DEC-038 | Slice 3: authentication decisions (audit, invitations, QR, Dapper, keys, defaults, setup token) | Security |
 | DEC-039 | Design system approved | Front end |
+| DEC-040 | Slice 3: sign-in on Identity's plug-in points, screens approved, password list | Security |
+| DEC-041 | Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited | Security |
+| DEC-042 | Slice 4a: password recovery, dual control for links that need none of the person's factors | Security |
+| DEC-043 | Slice 4b: the Windows service, its installer, secrets, logs and rotation | Deployment |
 
 ---
 
@@ -1530,6 +1534,73 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   - The nav's approvals count (item 9) is read when a page opens and after Users & roles changes
     something, never on a timer: every request counts as activity, so polling would keep an idle
     Admin signed in past `Goldmark:Auth:SessionIdleMinutes` (a side agent's note).
+
+## DEC-043 Slice 4b: the Windows service, its installer, secrets, logs and rotation
+
+- **Decision (owner, 2026-10-22, asked in the HANDOFF rule-6 format; each answer quoted).** Slice 4b
+  was approved to start ("approved"). Its choices, left open by DEC-030, DEC-034 and DEC-036:
+  1. **Service account: "A. gMSA, domain account fallback (Recommended)".** A gMSA where possible; a
+     domain user is accepted (its password typed once into Windows' service settings, never stored by
+     Goldmark); the virtual account `NT SERVICE\Goldmark` only when SQL Server is on the same server;
+     never LocalSystem or NetworkService. Rejected: B, gMSA only (no workgroup installs); C, any account,
+     because LocalSystem and NetworkService reach a remote SQL Server as the computer account
+     (`CORP\APP01$`), which every other such service on that server shares: the known broadening
+     DEC-037's rule avoids.
+  2. **Migrations under Windows authentication: "A. The installing person, as themselves
+     (Recommended)".** The installer runs `bootstrap-db` and `migrate` under the operator's own Windows
+     login (a sysadmin, or a `db_owner` after a DBA's Mode Existing setup); no migration secret is stored
+     on the server; the service account never gets DDL. The same reach Docker's `db-init` has with the
+     administrator's file. Rejected: B, a second gMSA run through a scheduled task (more AD setup per
+     install); C, a generated SQL login (needs mixed-mode authentication, a stored password).
+  3. **Installer: "A. PowerShell wizard in a zip (Recommended)".** `Install-Goldmark.ps1` asks in the
+     terminal, calls the program's own commands and creates the service with its recovery actions and
+     ACLs; upgrading is running it again; an MSI can wrap it later. Its prompts are a text spec in the PR,
+     not a Claude Design board (rule 3). The package `Microsoft.Extensions.Hosting.WindowsServices`
+     (Microsoft; not in the shared framework) was approved with this answer. Rejected: B, an MSI with
+     WiX (dialogs need a design handoff; WiX v6 and later binaries are under the Open Source Maintenance
+     Fee EULA, which v7 enforces at build, a licensing question while Goldmark's own is open, DEC-001);
+     C, a graphical setup program.
+  4. **Logs: "A. JSON files, Administrators only (Recommended)".** The same JSON as on stdout, one file
+     per day in `%ProgramData%\Goldmark\logs`, readable by the service account, SYSTEM and
+     Administrators only. A start that fails on its configuration also writes the setting names to the
+     Application log. Asked as a security choice: the log carries the setup token (event 3001) and the
+     recovery link's path (3004), and older Microsoft documentation gives Interactive Users read access to
+     the Application log (to verify on a current server). No new package: `Serilog.Sinks.File` is already
+     in the lock file through `Serilog.AspNetCore`. Rejected: B, the Event Log only (new package; the
+     two secrets readable by anyone signed in on the server); C, both.
+  5. **Secrets at rest: "A. ACLs + DPAPI to the service account (Recommended)".** The folders for the
+     sign-in keys, the TLS key, the credential files, the logs and the settings allow only the service
+     account, SYSTEM and Administrators, with inheritance off, and a start refuses a wider one. The key
+     ring and the runtime login's credential file are encrypted with DPAPI-NG to the service account's
+     SID (Data Protection's own, in the framework). The administrator's and the migration login's
+     passwords are never stored on Windows. That a restore on another server running as the same gMSA
+     still reads them is inferred from Microsoft's documentation; neither this machine nor CI has a domain,
+     so it is part of the gMSA check by hand. The consequence (a side agent's note): the service account
+     is part of the backup. A key ring restored under another account, after a change of account (a
+     domain user to a gMSA), or with the virtual account on a rebuilt server, can't be read, and everyone
+     signs in with a recovery code and sets up two-factor again; the ops guide's backup and restore steps
+     say so. Rejected: B, ACLs only
+     (a copy off the server stays readable); C, DPAPI machine scope (any account on the server decrypts
+     what it can read; a package for the credential file).
+  6. **#6 moves into 4b: "A. Yes, close #6 in 4b (Recommended)".** A scope change: the ACL code of item 5
+     protects the generated TLS key on Windows dev hosts too, and the Windows CI job checks it. HANDOFF
+     moves #6 from slice 24 to 4b.
+  7. **`rotate-db-credentials`: "A. All generated logins, then restart (Recommended)".** For SQL-login
+     mode (Windows authentication has no passwords; a gMSA's rotates itself). Runtime, migration and the
+     bundled administrator get new passwords in one run, each file written before its login changes, so
+     the next run finishes an interrupted one (DEC-034). It prints that Goldmark must be restarted; the
+     Windows wizard restarts the service itself. The SQL container's healthcheck login keeps its own
+     repair script. Rejected: B, one login at a time; C, rotation without a restart.
+  8. **Windows CI: "A. Build, tests, install smoke (Recommended)".** A windows-2025 runner builds, runs
+     the in-process tests, installs SQL Server 2025 Express, installs the service with Windows
+     authentication as `NT SERVICE\Goldmark` and checks `/health/ready`, the folder ACLs and the log
+     file, installs again with a SQL login and rotates, and uninstalls. GitHub's Windows runners can't run
+     Linux containers, so the Testcontainers suite stays on Linux; CI has no domain, so the gMSA path is
+     checked by hand following the ops guide. Rejected: B, build and tests only; C, the integration suite
+     on Windows too (a second database backend in its fixture).
+  9. **Row 4b's "Done when": "A. Approve as written (Recommended)"**, recorded in HANDOFF §1. Settled in
+     the slice, open to veto: the zip carries a self-contained build, so the server needs no .NET
+     install; a rotation is audited as System.
 
 ---
 

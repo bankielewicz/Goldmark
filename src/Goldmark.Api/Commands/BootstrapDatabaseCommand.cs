@@ -1,3 +1,4 @@
+using Goldmark.Api.Audit;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Data;
 using Microsoft.Data.SqlClient;
@@ -321,11 +322,16 @@ internal static class BootstrapDatabaseCommand
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
+            var audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? new AuditOptions();
             errors = PlanCredentials(db, migration, bootstrap, out sources, out generatedAdmin);
             if (errors.Count == 0)
             {
                 errors = Validate(db, migration, bootstrap);
             }
+
+            // migrate applies the retention period, but db-init runs bootstrap-db first: a period migrate
+            // would refuse is refused here, before anything changes (#34).
+            errors.AddRange(AuditOptions.Errors(audit));
         }
 
         if (errors.Count > 0)
