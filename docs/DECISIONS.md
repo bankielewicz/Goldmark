@@ -1548,7 +1548,7 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      DEC-037's rule avoids.
   2. **Migrations under Windows authentication: "A. The installing person, as themselves
      (Recommended)".** The installer runs `bootstrap-db` and `migrate` under the operator's own Windows
-     login (a sysadmin, or a `db_owner` after a DBA's Mode Existing setup); no migration secret is stored
+     login (with CONTROL SERVER: item 13 corrects the option's "or a `db_owner`"); no migration secret is stored
      on the server; the service account never gets DDL. The same reach Docker's `db-init` has with the
      administrator's file. Rejected: B, a second gMSA run through a scheduled task (more AD setup per
      install); C, a generated SQL login (needs mixed-mode authentication, a stored password).
@@ -1636,6 +1636,12 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      Windows; exactly those grants join the baseline as Windows entries, and anything else is still refused or
      accepted by ID. Rejected: B, every Windows install accepts them by ID; C, a built-in exception for the
      `dm_pal_*` views without measuring.
+  13. **Who runs the installer: "A. Correct the record: CONTROL SERVER (Recommended)"** (owner, 2026-10-22).
+     Item 2's option said "a sysadmin, or a db_owner after a DBA's Mode Existing setup"; in the build,
+     `bootstrap-db` audits the instance before every change (DEC-031), which needs CONTROL SERVER, and the
+     installer runs it on every install and upgrade. So the installing person needs CONTROL SERVER: a DBA runs
+     the installer, or grants it for the run. `migrate` alone still runs as a `db_owner`. Rejected: B, an
+     upgrade switch that runs `migrate` only (upgrades would no longer re-audit the instance).
 
 ---
 
@@ -1823,17 +1829,18 @@ policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose
 
 Same status vocabulary as slice 1. Local runs, 2026-10-22: on the owner's WSL machine, 428 in-process tests
 (10 Windows-only ones skipped) and the integration suite (232 tests, the Windows baseline one skipped); on the
-owner's Windows 11 host, the same 428 in-process tests (2 POSIX-only ones skipped) and all 32 checks of
-`tests/windows/Test-WindowsService.ps1` against SQL Server 2025 Developer with a test certificate.
+owner's Windows 11 host, the same 428 in-process tests (2 POSIX-only ones skipped) and all 35 checks of
+`tests/windows/Test-WindowsService.ps1` against SQL Server 2025 Developer with a test certificate; the Compose
+smoke test, with a rotation check added, passes (Playwright 10/10).
 
 | # | Criterion (row 4b, DEC-043) | Status | Evidence |
 |---|---|---|---|
-| 1 | The installer sets up the service on Windows Server against SQL Server 2025, Windows authentication or a SQL login; the installing person's login runs `bootstrap-db migrate`; gMSA, domain user, or `NT SERVICE\Goldmark` for a local SQL Server only, never LocalSystem or NetworkService; ready and the sign-in page; upgrade = run again; uninstall keeps the data | **Met on Windows 11**; Windows Server in CI (windows-2025); gMSA and domain user by hand | `deploy/windows/Install-Goldmark.ps1`; `Test-WindowsService.ps1` phases 1, 3 and 4; the installer refuses LocalSystem, NetworkService and a virtual account for a remote server |
+| 1 | The installer sets up the service on Windows Server against SQL Server 2025, Windows authentication or a SQL login; the installing person's login runs `bootstrap-db migrate`; gMSA, domain user, or `NT SERVICE\Goldmark` for a local SQL Server only, never LocalSystem or NetworkService; ready and the sign-in page; upgrade = run again; uninstall keeps the data | **Met on Windows 11**; Windows Server in CI (windows-2025); gMSA and domain user by hand | `deploy/windows/Install-Goldmark.ps1`; `Test-WindowsService.ps1` phases 1, 1b (an upgrade keeps the database and the sign-in keys), 3 and 4; the installer refuses LocalSystem, NetworkService and a virtual account for a remote server; it needs CONTROL SERVER (item 13) |
 | 2 | Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the audit covers Windows logins and group rights; the password path only for SQL logins | **Met** | `bootstrap-db` creates `FROM WINDOWS` logins and checks them by impersonation; `RuntimeRightsCheck` checks as the service itself (a right through a Windows group is refused: smoke phase 2); `WindowsSettingsTests` |
 | 3 | Owner-only folders, a start refuses a wider one; the key ring and a SQL login's password encrypted to the service account; administrator and migration passwords never stored on Windows; #6 | **Met**; DPAPI-NG to a gMSA by hand | `PrivateDirectory`, `CredentialProtector`, `KeyRingEncryption`; `WindowsProtectionTests` (run on Windows); smoke phase 1 (folders, encrypted keys) and 4 (the service encrypts its file) |
 | 4 | JSON log files per day; a configuration failure in the Application log with setting names only; 3001 and 3004 never in the Event Log | **Met** | `LoggingSetup`; smoke phase 1 (the token is in the file, nothing in the Application log) and phase 2 (event 2 names `Goldmark:Https:Port`) |
 | 5 | Restart after a crash; a configuration error stops without a loop | **Met** (measured) | DEC-043 item 11; `WindowsService.RefuseStart`; the rights refusal sets `ServiceBase.ExitCode`; smoke phase 2: both stop with exit code 13 and stay stopped past the restart delay |
-| 6 | `rotate-db-credentials` on Docker and Windows: every generated SQL login, file before login, audited as System, then a restart; nothing under Windows authentication | **Met** | `RotateCredentialsCommand`; `CredentialRotationTests`, `GeneratedAdministratorTests`, `WindowsSettingsTests`; smoke phase 4 (`Rotate-GoldmarkCredentials.ps1`) |
+| 6 | `rotate-db-credentials` on Docker and Windows: every generated SQL login, file before login, audited as System, then a restart; nothing under Windows authentication | **Met** | `RotateCredentialsCommand`; `CredentialRotationTests`, `GeneratedAdministratorTests`, `WindowsSettingsTests`; Compose smoke (the documented `docker compose run --rm db-init rotate-db-credentials`, then a restart); Windows smoke phase 4 (`Rotate-GoldmarkCredentials.ps1`) |
 | 7 | The recovery setting in the settings file; the link's path in the log file | **Met** (configuration) | `Goldmark__SettingsFile` (`SettingsFile`); the installer keeps `Goldmark:Auth` on an upgrade; `docs/ops/windows-service.md`. The recovery flow itself is unchanged and tested in slice 4a |
 | 8 | #34: `bootstrap-db` refuses an out-of-range retention period before connecting; a test proves nothing changes | **Met** | `AuditRetentionTests.Db_init_refuses_a_period_under_the_floor_before_bootstrap_db_changes_anything` (fails on the old code); `ContainerCommandsTests` |
 | 9 | Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express, the install smoke, a SQL-login install with rotate, uninstall; the gMSA by hand | **Not executed** | Job `windows-service`; runs on the PR. Hand check: `docs/ops/windows-service.md` "Checking a gMSA by hand" |

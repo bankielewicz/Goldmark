@@ -178,6 +178,20 @@ try {
         (Sql "SELECT COUNT(*) FROM sys.extended_properties WHERE name = N'goldmark:managed' AND CAST(value AS nvarchar(64)) = N'migration-login';" $databases[0]) -eq 0
     }
     Check 'Windows restarts the service after a crash' { (& sc.exe qfailure Goldmark | Out-String) -match 'RESTART' }
+    Check 'the service can read its settings but not change them' {
+        $sid = (New-Object Security.Principal.NTAccount $account).Translate([Security.Principal.SecurityIdentifier])
+        $rules = @((Get-Acl (Join-Path $data1 'settings')).GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference -eq $sid })
+        $rules.Count -gt 0 -and -not ($rules | Where-Object { $_.FileSystemRights -band [Security.AccessControl.FileSystemRights]::WriteData })
+    }
+
+    Write-Host '== 1b. Upgrade: the installer again, with the same data'
+    $keysBefore = @(Get-ChildItem (Join-Path $data1 'keys') -Filter 'key-*.xml' | ForEach-Object Name) -join ','
+    $null = & (Join-Path $unpacked 'Install-Goldmark.ps1') -NonInteractive -SqlCertificatePath $SqlCertificateFile -InstallDirectory $program -DataDirectory $data1
+    Check 'an upgrade with only the folders given finishes (exit 0), from the existing settings' { $LASTEXITCODE -eq 0 }
+    Check 'after the upgrade it is ready, with the same database and sign-in keys' {
+        (Ready $data1) -and ((Get-Content -Raw (Join-Path $data1 'settings\goldmark.json') | ConvertFrom-Json).Goldmark.Database.Name -eq $databases[0]) -and
+        ((@(Get-ChildItem (Join-Path $data1 'keys') -Filter 'key-*.xml' | ForEach-Object Name) -join ',') -eq $keysBefore)
+    }
 
     Write-Host '== 2. Refusals'
     $since = Get-Date

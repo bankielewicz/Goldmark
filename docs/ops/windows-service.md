@@ -17,7 +17,8 @@ check for a gMSA. The decisions, with the owner's words, are DEC-043.
   issued by an authority that is not trusted". Give the instance a certificate first (SQL Server Configuration
   Manager, or your PKI).
 - **The service account** (next section), and **CONTROL SERVER** (for example sysadmin) for whoever runs the
-  installer: `bootstrap-db` audits the instance before it changes anything (DEC-031).
+  installer, on every install and upgrade: `bootstrap-db` audits the instance before it changes anything
+  (DEC-031, DEC-043 item 13). A DBA runs the installer, or grants it for the run.
 
 ## The service account
 
@@ -79,9 +80,9 @@ What it does, in order:
 1. Stops the service if it runs (an upgrade), copies the program, and creates or updates the service: start
    delayed-automatic, as the service account (never LocalSystem, not even for a moment), the environment
    variable `Goldmark__SettingsFile`, and restart after a crash (after a minute, twice, then not again that day).
-2. Creates the data folders, each readable by SYSTEM, Administrators and the service account only, with
-   inheritance off: `settings`, `keys`, `tls`, `credentials`, `logs`. Goldmark refuses to start if one of them
-   is wider, and says which.
+2. Creates the data folders, each reachable by SYSTEM, Administrators and the service account only, with
+   inheritance off: `settings` (the service reads it, never changes it), `keys`, `tls`, `credentials`, `logs`
+   (the service may change these). Goldmark refuses to start if one of them is wider, and says which.
 3. Writes `settings\goldmark.json`: the database, the service account, `Goldmark:Database:CheckRightsAtStart`,
    migrations as the administrator (`Goldmark:Migration:Login: Administrator`), the folders. No password is ever
    written to it, except the recovery code you may add (below).

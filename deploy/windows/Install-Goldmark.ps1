@@ -113,8 +113,9 @@ function Test-LocalHost([string]$Name) {
     return $local -contains $Name
 }
 
-# Owner-only folder: SYSTEM, Administrators and the service account, inheritance off (DEC-043 item 5).
-function New-PrivateFolder([string]$Path, [Security.Principal.SecurityIdentifier]$Account) {
+# Owner-only folder: SYSTEM, Administrators and the service account, inheritance off (DEC-043 item 5). The
+# service gets only what it needs: read for the settings, which it never writes; modify for the others.
+function New-PrivateFolder([string]$Path, [Security.Principal.SecurityIdentifier]$Account, [string]$AccountRights) {
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
     $acl = New-Object Security.AccessControl.DirectorySecurity
     $acl.SetAccessRuleProtection($true, $false)
@@ -122,10 +123,10 @@ function New-PrivateFolder([string]$Path, [Security.Principal.SecurityIdentifier
     $none = [Security.AccessControl.PropagationFlags]::None
     foreach ($sid in @(
             (New-Object Security.Principal.SecurityIdentifier 'S-1-5-18'),
-            (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'),
-            $Account)) {
+            (New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'))) {
         $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', $inherit, $none, 'Allow')))
     }
+    $acl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule($Account, $AccountRights, $inherit, $none, 'Allow')))
     $acl.SetOwner((New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'))
     Set-Acl -Path $Path -AclObject $acl
 }
@@ -246,11 +247,11 @@ if ($virtual -and -not $local) {
     Fail 'NT SERVICE\Goldmark reaches a remote SQL Server as this computer''s account; use a gMSA or a domain user (DEC-043 item 1).'
 }
 $managed = $ServiceAccount.EndsWith('$')
-$AdminAuthentication = Value 'AdminAuthentication' $AdminAuthentication $null `
+$AdminAuthentication = Value 'AdminAuthentication' $AdminAuthentication (Get-Setting $existing 'Goldmark', 'Bootstrap', 'AdminAuthentication') `
     'How you sign in to SQL Server to set up the database: Windows (as you) or Sql (an administrator login)' 'Windows'
 $adminPassword = $null
 if ($AdminAuthentication -eq 'Sql') {
-    $SqlAdminUser = Value 'SqlAdminUser' $SqlAdminUser $null 'SQL administrator login (CONTROL SERVER)'
+    $SqlAdminUser = Value 'SqlAdminUser' $SqlAdminUser (Get-Setting $existing 'Goldmark', 'Bootstrap', 'AdminUser') 'SQL administrator login (CONTROL SERVER)'
     $adminPassword = Plain (Secret 'SqlAdminPassword' $SqlAdminPassword "Password of $SqlAdminUser")
 }
 $SqlCertificatePath = Value 'SqlCertificatePath' $SqlCertificatePath (Get-Setting $existing 'Goldmark', 'Database', 'ServerCertificatePath') `
@@ -315,8 +316,9 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -N
 # --- 3. Data folders and the settings file ---------------------------------------------------------------
 Step "Data: $DataDirectory (SYSTEM, Administrators and $ServiceAccount only)"
 New-Item -ItemType Directory -Force -Path $DataDirectory | Out-Null
-foreach ($folder in 'settings', 'keys', 'tls', 'credentials', 'logs') {
-    New-PrivateFolder (Join-Path $DataDirectory $folder) $accountSid
+New-PrivateFolder (Join-Path $DataDirectory 'settings') $accountSid 'ReadAndExecute'
+foreach ($folder in 'keys', 'tls', 'credentials', 'logs') {
+    New-PrivateFolder (Join-Path $DataDirectory $folder) $accountSid 'Modify'
 }
 
 $settings = [ordered]@{

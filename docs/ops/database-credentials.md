@@ -23,7 +23,7 @@ An existing SQL Server: [external-sql-server.md](external-sql-server.md).
   directory owned by the app user (uid 1654), written atomically. The paths are
   settings (`Goldmark:Database:CredentialFile`, `Goldmark:Migration:CredentialFile`,
   `Goldmark:Bootstrap:AdminCredentialFile`), so another deployment can keep them
-  elsewhere: the Windows service will use DPAPI (DEC-030).
+  elsewhere: on the Windows service the password is encrypted to the service account (DEC-043).
 - **The app** reads its login from `credential.json` at start and never receives a
   password in its environment. If the file is missing or invalid, it exits 2 naming
   `Goldmark:Database:CredentialFile`.
@@ -76,7 +76,19 @@ run would break the app's new connections until it restarted. A password changes
   or the migration pair, with the external-SQL file): `db-init` sets it and rewrites the
   file. Restart the app afterwards (`docker compose … up -d --force-recreate app`).
 
-An explicit rotate command is a later slice's work.
+- **you rotate them** (slice 4b, DEC-043 item 7): `rotate-db-credentials` gives every login Goldmark
+  generated (runtime, migration, the bundled administrator) a new password in one run, each file before
+  its login, and audits it as System ("Database passwords changed"). A password given in settings is
+  yours to change there. Then restart the app, which reads its file only at start:
+
+  ```sh
+  docker compose -f deploy/docker-compose.yml run --rm db-init rotate-db-credentials
+  docker compose -f deploy/docker-compose.yml restart app
+  ```
+
+  If it stops part-way, run it again, or let the next `db-init` apply the files it already wrote.
+  The administrator's own file is replaced only after its login has changed. On Windows:
+  `Rotate-GoldmarkCredentials.ps1` ([windows-service.md](windows-service.md)).
 
 ## Upgrading a stack created before generated credentials
 
