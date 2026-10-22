@@ -31,7 +31,8 @@ internal sealed record UserAccountState(string State, DateTimeOffset? LockedUnti
 /// </summary>
 internal sealed record OpenLink(string Purpose, DateTime ExpiresAt, bool Expired, bool AwaitingApproval, LinkRequester? RequestedBy);
 
-internal sealed record LinkRequester(Guid Id, string DisplayName);
+/// <summary>The Admin who asked for a link under dual control, and when (DEC-042).</summary>
+internal sealed record LinkRequester(Guid Id, string DisplayName, DateTime AskedAt);
 
 /// <summary>Read queries for screen 17: every person with roles, account state and open link, in one query.</summary>
 internal sealed class UserDirectory(DbSession db, TimeProvider time)
@@ -46,7 +47,7 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
             CAST(CASE WHEN u.PasswordResetAt IS NULL THEN 0 ELSE 1 END AS bit) AS PasswordResetPending,
             i.Purpose AS LinkPurpose, i.ExpiresAt AS LinkExpiresAt,
             CAST(CASE WHEN i.ApprovalRequired = 1 AND i.ApprovedAt IS NULL THEN 1 ELSE 0 END AS bit) AS LinkAwaitingApproval,
-            i.CreatedBy AS LinkCreatedBy, c.DisplayName AS LinkCreatedByName
+            i.CreatedBy AS LinkCreatedBy, c.DisplayName AS LinkCreatedByName, i.CreatedAt AS LinkCreatedAt
         FROM cmdb.UserAccount AS u
         LEFT JOIN cmdb.UserInvitation AS i ON i.UserId = u.Id AND i.RedeemedAt IS NULL AND i.RevokedAt IS NULL
         LEFT JOIN cmdb.UserAccount AS c ON c.Id = i.CreatedBy
@@ -119,7 +120,9 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
         var now = time.GetUtcNow();
         var link = row.LinkPurpose is { } purpose && row.LinkExpiresAt is { } expires
             ? new OpenLink(PurposeName(purpose), expires, expires <= now.UtcDateTime, row.LinkAwaitingApproval,
-                row.LinkAwaitingApproval && row.LinkCreatedBy is { } by ? new LinkRequester(by, row.LinkCreatedByName ?? "") : null)
+                row.LinkAwaitingApproval && row.LinkCreatedBy is { } by && row.LinkCreatedAt is { } asked
+                    ? new LinkRequester(by, row.LinkCreatedByName ?? "", asked)
+                    : null)
             : null;
         var state = row switch
         {
@@ -178,5 +181,7 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
         public Guid? LinkCreatedBy { get; set; }
 
         public string? LinkCreatedByName { get; set; }
+
+        public DateTime? LinkCreatedAt { get; set; }
     }
 }

@@ -45,6 +45,27 @@ internal static class LinkSecrets
             : null;
     }
 
+    public const int RecoveryCodeMinLength = 12;
+    public const int RecoveryCodeMaxLength = 64;
+
+    /// <summary>
+    /// An operator's recovery code (<c>GOLDMARK_RECOVER_CODE</c>, DEC-042 item 6), without spaces or
+    /// hyphens, upper case; null unless it is <see cref="RecoveryCodeMinLength"/> to
+    /// <see cref="RecoveryCodeMaxLength"/> ASCII letters and digits.
+    /// </summary>
+    public static string? NormalizeRecoveryCode(string? code)
+    {
+        if (code is null || code.Length > 2 * RecoveryCodeMaxLength)
+        {
+            return null;
+        }
+
+        var normalized = string.Concat(code.Where(c => c is not (' ' or '-'))).ToUpperInvariant();
+        return normalized.Length is >= RecoveryCodeMinLength and <= RecoveryCodeMaxLength && normalized.All(char.IsAsciiLetterOrDigit)
+            ? normalized
+            : null;
+    }
+
     public static byte[] HashToken(string token) => SHA256.HashData(Encoding.UTF8.GetBytes(token));
 
     /// <summary>SHA-256 of the token and the normalized code (<see cref="NormalizeCode"/>).</summary>

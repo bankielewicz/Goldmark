@@ -33,9 +33,17 @@ public sealed class AuthOptions
     /// <summary>
     /// The way back in when no administrator can sign in (DEC-042 item 6; <c>GOLDMARK_RECOVER_ADMIN</c>):
     /// the username of an enabled Admin. While set, each start logs a one-time password-and-two-factor
-    /// link and code for them. Empty: off.
+    /// link for them, which works for an hour with <see cref="RecoverAdminCode"/>. Empty: off, and a
+    /// start ends any unused recovery link.
     /// </summary>
     public string RecoverAdmin { get; set; } = "";
+
+    /// <summary>
+    /// The recovery link's code (<c>GOLDMARK_RECOVER_CODE</c>), chosen by the operator and never logged,
+    /// so reading the log alone is not enough (owner, DEC-042 item 6): 12 to 64 letters and digits.
+    /// Required with <see cref="RecoverAdmin"/>.
+    /// </summary>
+    public string RecoverAdminCode { get; set; } = "";
 
     public TimeSpan Lockout => TimeSpan.FromMinutes(LockoutMinutes);
 
@@ -65,6 +73,12 @@ internal sealed class AuthOptionsValidator : IValidateOptions<AuthOptions>
         {
             // Names the setting only: never print a configured value.
             failures.Add($"{AuthOptions.SectionName}:RecoverAdmin must be a username of at most {MaxUserNameLength} characters, or empty.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(options.RecoverAdmin) && LinkSecrets.NormalizeRecoveryCode(options.RecoverAdminCode) is null)
+        {
+            failures.Add($"{AuthOptions.SectionName}:RecoverAdminCode is required with RecoverAdmin: {LinkSecrets.RecoveryCodeMinLength} to " +
+                $"{LinkSecrets.RecoveryCodeMaxLength} letters and digits (spaces and hyphens are ignored).");
         }
 
         if (failures.Count == 0 && options.SessionIdle > options.SessionLifetime)

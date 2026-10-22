@@ -86,6 +86,9 @@ internal static class AuditActions
     public const string RequestDeclined = "user.approval.declined";
     public const string RequestCancelled = "user.approval.cancelled";
 
+    // The recovery setting's link (DEC-042 item 6): nothing changes until it is used, so not "Password reset".
+    public const string RecoveryLinkIssued = "user.recovery-link.issued";
+
     public const string ConfirmationFailed = "account.confirmation.failed";
     public const string RecoveryCodesRegenerated = "account.recovery-codes.regenerated";
     public const string AuthenticatorChanged = "account.authenticator.changed";

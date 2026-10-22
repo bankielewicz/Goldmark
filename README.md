@@ -99,22 +99,24 @@ recovery codes are written down and kept in a safe, used only when no other Admi
 sign in. Every sign-in shows in the audit log, so check it there, and every 90 days
 check that the account still signs in.
 
-If no administrator can sign in at all, set `GOLDMARK_RECOVER_ADMIN` in `deploy/.env`
-to the username of an enabled Admin and restart the app:
+If no administrator can sign in at all, set two values in `deploy/.env` and restart the
+app: `GOLDMARK_RECOVER_ADMIN`, the username of an enabled Admin, and
+`GOLDMARK_RECOVER_CODE`, a code you choose (12 to 64 letters and digits; spaces and
+hyphens are ignored).
 
 ```sh
 docker compose -f deploy/docker-compose.yml up -d app
 docker compose -f deploy/docker-compose.yml logs app | grep RecoveryLink
 ```
 
-The app log then shows, once, a link path and a separate code for that Admin. Open the
-path on Goldmark's address in a browser, enter the code, and set a new password and
-authenticator; that ends every session of theirs. Nothing changes on the account until
-then. Anyone who can read the app log can use the link until it expires, as with the
-setup token. While the setting is set, each start prints a new link and the previous
-one stops working, so empty it and restart once the Admin can sign in. An Admin whom
-another administrator locked stays locked: name another Admin. The reset is recorded
-in the audit log (DEC-042).
+The app log then shows, once, a link path for that Admin; the code is never logged, so
+reading the log alone is not enough. Within an hour, open the path on Goldmark's address
+in a browser, enter your code, and set a new password and authenticator; that ends every
+session of theirs. Nothing changes on the account until then. While the setting is set,
+each start prints a new link and the previous one stops working. Once the Admin can sign
+in, empty both values and restart: a start without them also ends any unused recovery
+link. An Admin whom another administrator locked stays locked: name another Admin. The
+reset is recorded in the audit log (DEC-042).
 
 The audit log keeps each entry for 365 days by default
 (`GOLDMARK_AUDIT_RETENTION_DAYS`: 365 to 36500, or 0 to keep entries

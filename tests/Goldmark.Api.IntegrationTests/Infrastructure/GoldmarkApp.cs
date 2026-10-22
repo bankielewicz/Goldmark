@@ -68,15 +68,16 @@ public sealed class GoldmarkApp(SqlServerFixture sql, Installation installation,
     }
 
     /// <summary>
-    /// The recovery link this instance logged at start (the setting <c>Goldmark:Auth:RecoverAdmin</c>;
-    /// waits for the database to answer): the token in its path, and its code.
+    /// The token of the recovery link this instance logged at start (the setting
+    /// <c>Goldmark:Auth:RecoverAdmin</c>; waits for the database to answer). Its code is the operator's
+    /// and is never logged.
     /// </summary>
-    public async Task<(string Token, string Code)> RecoveryLinkAsync()
+    public async Task<string> RecoveryLinkAsync()
     {
         var link = await EventAsync(3004);
         var path = Text(link, "RecoveryPath");
         Assert.StartsWith("/password-reset#t=", path, StringComparison.Ordinal);
-        return (path["/password-reset#t=".Length..], Text(link, "RecoveryCode"));
+        return path["/password-reset#t=".Length..];
     }
 
     /// <summary>The first event with this ID that this instance logs (starts the host; waits up to 30 seconds).</summary>

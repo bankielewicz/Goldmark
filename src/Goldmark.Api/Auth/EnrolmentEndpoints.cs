@@ -160,7 +160,8 @@ internal static class EnrolmentEndpoints
             return LinkPending();
         }
 
-        var code = LinkSecrets.NormalizeCode(request.Code);
+        // A recovery link's code is the operator's own (DEC-042 item 6); every other code is generated.
+        var code = link.IsRecovery ? LinkSecrets.NormalizeRecoveryCode(request.Code) : LinkSecrets.NormalizeCode(request.Code);
         if (code is null || !links.CodeMatches(link, request.Token!, code))
         {
             return await db.InTransactionAsync(async () =>

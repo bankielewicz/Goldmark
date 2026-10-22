@@ -46,6 +46,7 @@ internal static class AuditCatalog
         new(AuditActions.RequestApproved, "Users & roles", "Request approved", Succeeded),
         new(AuditActions.RequestDeclined, "Users & roles", "Request declined", Succeeded),
         new(AuditActions.RequestCancelled, "Users & roles", "Request cancelled", Succeeded),
+        new(AuditActions.RecoveryLinkIssued, "Users & roles", "Recovery link issued", Succeeded),
 
         new(AuditActions.ConfirmationFailed, "Own account", "Password or code wrong at confirmation", Failed),
         new(AuditActions.RecoveryCodesRegenerated, "Own account", "New recovery codes", Succeeded),

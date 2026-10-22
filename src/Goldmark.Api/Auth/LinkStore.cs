@@ -37,6 +37,12 @@ internal sealed record LinkRow(
 
     /// <summary>Asked for under dual control and not approved yet: it has no code, so it cannot be used (DEC-042).</summary>
     public bool IsAwaitingApproval => ApprovalRequired && ApprovedAt is null;
+
+    /// <summary>
+    /// Issued by the recovery setting (DEC-042 item 6), the one link no account issues: its code is the
+    /// operator's (<see cref="LinkSecrets.NormalizeRecoveryCode"/>), not a generated one.
+    /// </summary>
+    public bool IsRecovery => CreatedBy is null;
 }
 
 /// <summary>
@@ -47,6 +53,9 @@ internal sealed record IssuedLink(string Token, string Code, DateTime ExpiresAt,
 
 /// <summary>A link asked for under dual control, shown once to the one who asked: the token only (DEC-042).</summary>
 internal sealed record RequestedLink(string Token, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
+
+/// <summary>A recovery link (DEC-042 item 6): its token only, since the operator chose its code.</summary>
+internal sealed record RecoveryLink(string Token, DateTime ExpiresAt, int CodeAttempts);
 
 /// <summary>The code of an approved link, shown once to the approving administrator (DEC-042).</summary>
 internal sealed record ApprovedCode(string Code, DateTime ExpiresAt, int ExpiryHours, int CodeAttempts);
@@ -89,9 +98,9 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
 
     /// <summary>
     /// Revokes the person's open link, if any, and issues a new one with its code. <paramref name="createdBy"/>
-    /// is null for a recovery link, which the recovery setting issues (<see cref="RecoverAdminService"/>).
+    /// is never null here: a recovery link is <see cref="IssueRecoveryAsync"/>'s.
     /// </summary>
-    public async Task<IssuedLink> IssueAsync(Guid userId, string purpose, Guid? createdBy)
+    public async Task<IssuedLink> IssueAsync(Guid userId, string purpose, Guid createdBy)
     {
         var token = LinkSecrets.NewToken();
         var code = LinkSecrets.NewCode();
@@ -115,6 +124,46 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
             });
         return new IssuedLink(token, code, expires, options.Value.LinkExpiryHours, options.Value.LinkCodeAttempts);
     }
+
+    /// <summary>How long a recovery link works (owner, DEC-042 item 6: "1 hour, ended at a clean restart").</summary>
+    public static readonly TimeSpan RecoveryLinkLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>
+    /// Revokes the person's open link, if any, and issues a password-and-two-factor link for the recovery
+    /// setting (DEC-042 item 6): no issuing account, the operator's code (normalized), one hour.
+    /// </summary>
+    public async Task<RecoveryLink> IssueRecoveryAsync(Guid userId, string normalizedCode)
+    {
+        var token = LinkSecrets.NewToken();
+        var now = Now;
+        var expires = now + RecoveryLinkLifetime;
+        await RevokeOpenAsync(userId, LinkClosure.Replaced);
+        await db.ExecuteAsync("""
+            INSERT INTO cmdb.UserInvitation (Id, UserId, Purpose, TokenHash, CodeHash, CreatedAt, CreatedBy, ExpiresAt)
+            VALUES (@id, @userId, 'CombinedReset', @tokenHash, @codeHash, @now, NULL, @expires);
+            """,
+            new
+            {
+                id = Guid.CreateVersion7(),
+                userId,
+                tokenHash = LinkSecrets.HashToken(token),
+                codeHash = LinkSecrets.HashCode(token, normalizedCode),
+                now,
+                expires,
+            });
+        return new RecoveryLink(token, expires, options.Value.LinkCodeAttempts);
+    }
+
+    /// <summary>
+    /// Revokes every unused recovery link (a start without the recovery setting, DEC-042 item 6), so
+    /// emptying the setting and restarting ends a copy of the link left in a log. Returns whose they were.
+    /// </summary>
+    public Task<IReadOnlyList<Guid>> RevokeRecoveryLinksAsync() =>
+        db.QueryAsync<Guid>("""
+            UPDATE cmdb.UserInvitation SET RevokedAt = @now, RevokeReason = 'Revoked'
+            OUTPUT inserted.UserId
+            WHERE CreatedBy IS NULL AND Purpose = 'CombinedReset' AND RedeemedAt IS NULL AND RevokedAt IS NULL;
+            """, new { now = Now });
 
     /// <summary>
     /// Revokes the person's open link, if any, and asks for a new one under dual control: a token and no

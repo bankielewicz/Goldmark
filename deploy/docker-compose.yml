@@ -114,6 +114,7 @@ services:
       Goldmark__Logging__MinimumLevel: ${GOLDMARK_LOG_LEVEL:-Information}
       # The way back in when no administrator can sign in (DEC-042 item 6); empty = off.
       Goldmark__Auth__RecoverAdmin: ${GOLDMARK_RECOVER_ADMIN:-}
+      Goldmark__Auth__RecoverAdminCode: ${GOLDMARK_RECOVER_CODE:-}
     ports:
       - "${GOLDMARK_HTTPS_PORT:-8443}:8443"
     volumes:

@@ -9,11 +9,14 @@ namespace Goldmark.Api.Auth;
 /// The way back in when no administrator can sign in (issue #25; DEC-042 item 6). While
 /// <see cref="AuthOptions.RecoverAdmin"/> names an enabled Admin who accepted their invitation and is
 /// not locked by an administrator, each start issues a password-and-two-factor link for them, with no
-/// issuing account, and logs its path and code once at Warning under its own event ID, as the setup
-/// token is logged. The link replaces any open link of theirs and changes nothing on the account until
-/// it is used; using it ends every session and sets a new password and authenticator. With the setting
-/// naming anyone else, a warning says so and no link is made. The recovery link and the setup token are
-/// the two secrets Goldmark ever logs.
+/// issuing account, and logs its path once at Warning under its own event ID, as the setup token is
+/// logged. Its code is the operator's <see cref="AuthOptions.RecoverAdminCode"/>, never logged, so
+/// reading the log alone is not enough; the link works for an hour (owner: "A. Operator sets it in
+/// .env" and "A. 1 hour, ended at a clean restart"). It replaces any open link of theirs and changes
+/// nothing on the account until it is used, so it is audited "Recovery link issued", not "Password reset";
+/// using it ends every session and sets a new password and authenticator. With the setting naming anyone else, a warning says so and no link is made. A start
+/// without the setting ends every unused recovery link, so emptying it and restarting ends a copy left
+/// in a log.
 /// </summary>
 internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, IOptions<AuthOptions> options, ILogger<RecoverAdminService> logger)
     : BackgroundService
@@ -25,11 +28,6 @@ internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, I
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var name = options.Value.RecoverAdmin.Trim();
-        if (name.Length == 0)
-        {
-            return;
-        }
-
         var delay = TimeSpan.FromSeconds(1);
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -41,7 +39,15 @@ internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, I
                 if (SchemaMigrations.DatabaseVersion(await db.QueryAsync<string>(SchemaMigrations.AppliedScriptsSql, cancellationToken: stoppingToken))
                     == SchemaMigrations.ExpectedVersion)
                 {
-                    await IssueAsync(scope.ServiceProvider, db, name);
+                    if (name.Length == 0)
+                    {
+                        await EndRecoveryLinksAsync(scope.ServiceProvider, db);
+                    }
+                    else
+                    {
+                        await IssueAsync(scope.ServiceProvider, db, name);
+                    }
+
                     return;
                 }
 
@@ -79,26 +85,45 @@ internal sealed partial class RecoverAdminService(IServiceScopeFactory scopes, I
             return;
         }
 
+        // The validator has checked the code's shape (AuthOptionsValidator).
+        var code = LinkSecrets.NormalizeRecoveryCode(options.Value.RecoverAdminCode)!;
         var links = services.GetRequiredService<LinkStore>();
         var audit = services.GetRequiredService<AuditTrail>();
         // No HTTP request: the audit entry has no address, and its actor is System.
         var link = await db.InTransactionAsync(async () =>
         {
-            var issued = await links.IssueAsync(user.Id, LinkPurpose.CombinedReset, createdBy: null);
-            await audit.WriteAsync(AuditActions.PasswordReset, AuditActor.System, "User", user.Id,
-                new { userName = user.UserName, twoFactorToo = true, issuedBy = LinkIssuers.ServerSetting, expiresAt = issued.ExpiresAt });
+            var issued = await links.IssueRecoveryAsync(user.Id, code);
+            // Nothing changes until the link is used: then "Password reset completed" records the reset.
+            await audit.WriteAsync(AuditActions.RecoveryLinkIssued, AuditActor.System, "User", user.Id,
+                new { userName = user.UserName, expiresAt = issued.ExpiresAt });
             return issued;
         });
-        LogRecoveryLink(logger, user.Id, $"/password-reset#t={link.Token}", link.Code, link.ExpiresAt, link.CodeAttempts);
+        LogRecoveryLink(logger, user.Id, $"/password-reset#t={link.Token}", link.ExpiresAt, link.CodeAttempts);
+    }
+
+    private static async Task EndRecoveryLinksAsync(IServiceProvider services, DbSession db)
+    {
+        var links = services.GetRequiredService<LinkStore>();
+        var audit = services.GetRequiredService<AuditTrail>();
+        await db.InTransactionAsync(async () =>
+        {
+            foreach (var userId in await links.RevokeRecoveryLinksAsync())
+            {
+                await audit.WriteAsync(AuditActions.LinkInvalidated, AuditActor.System, "User", userId,
+                    new { purpose = LinkPurpose.CombinedReset, reason = "recovery-setting-removed" });
+            }
+
+            return 0;
+        });
     }
 
     [LoggerMessage(EventId = 3004, EventName = "RecoveryLink", Level = LogLevel.Warning,
-        Message = "Recovery link for the Admin that the setting GOLDMARK_RECOVER_ADMIN names (user {UserId}): in a browser, open {RecoveryPath} on the " +
-            "address people use for Goldmark, then enter the code {RecoveryCode}. It sets a new password and authenticator and ends every " +
-            "session; nothing changes until then. It works until {ExpiresAt:yyyy-MM-dd HH:mm} UTC, and {CodeAttempts} wrong codes end it. " +
-            "While the setting is set, each start prints a new link and the previous one stops working: remove the setting once they can sign in.")]
-    private static partial void LogRecoveryLink(ILogger logger, Guid userId, string recoveryPath, string recoveryCode, DateTime expiresAt,
-        int codeAttempts);
+        Message = "Recovery link for the Admin that the setting GOLDMARK_RECOVER_ADMIN names (user {UserId}): in a browser, open {RecoveryPath} " +
+            "on the address people use for Goldmark, then enter the code set in GOLDMARK_RECOVER_CODE (it is never logged). It sets a new " +
+            "password and authenticator and ends every session; nothing changes until then. It works until {ExpiresAt:yyyy-MM-dd HH:mm} UTC, " +
+            "and {CodeAttempts} wrong codes end it. Each start prints a new link while the setting is set: once they can sign in, empty both " +
+            "settings and restart, which also ends this link.")]
+    private static partial void LogRecoveryLink(ILogger logger, Guid userId, string recoveryPath, DateTime expiresAt, int codeAttempts);
 
     [LoggerMessage(EventId = 3005, EventName = "RecoveryRefused", Level = LogLevel.Warning,
         Message = "The setting GOLDMARK_RECOVER_ADMIN does not name an enabled Admin who has accepted their invitation, so no recovery link " +

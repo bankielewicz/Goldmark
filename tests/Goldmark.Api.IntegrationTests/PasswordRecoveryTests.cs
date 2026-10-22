@@ -133,6 +133,10 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         Assert.True(link.GetProperty("awaitingApproval").GetBoolean());
         Assert.Equal(JsonValueKind.Null, link.GetProperty("code").ValueKind);
         var rileyId = created.Body.GetProperty("user").GetProperty("id").GetGuid();
+        // The list says who asked and when, for the Approve dialog.
+        var asked = created.Body.GetProperty("user").GetProperty("account").GetProperty("link").GetProperty("requestedBy");
+        Assert.Equal("Pat Admin", asked.GetProperty("displayName").GetString());
+        Assert.True(asked.GetProperty("askedAt").GetDateTime() > DateTime.UtcNow.AddMinutes(-5));
         var person = scenario.App.Client();
         Assert.Equal("pending", AuthScenario.Ok(await person.PostAsync("/api/v1/links/check", new { token = Token(link) })).Value("status"));
         Assert.Equal("link-pending", (await person.PostAsync("/api/v1/links/redeem", new { token = Token(link), code = "K7Q-2MX" })).Code);
@@ -237,7 +241,7 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
     }
 
     [Fact]
-    public async Task The_recovery_setting_logs_a_link_that_changes_nothing_until_used_and_a_new_one_at_each_start()
+    public async Task The_recovery_setting_logs_a_link_whose_code_only_the_operator_has_and_that_changes_nothing_until_used()
     {
         await using var scenario = await AuthScenario.StartAsync(sql);
         var (_, adminPerson) = await scenario.SetUpAsync();
@@ -259,12 +263,15 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
             await sql.AsAdminAsync(scenario.Installation.Database, "REVOKE INSERT ON OBJECT::cmdb.AuditLog FROM goldmark_runtime;");
         }
 
-        var (first, firstCode) = await scenario.App.RecoveryLinkAsync();
+        var first = await scenario.App.RecoveryLinkAsync();
         Assert.Equal(LogEventLevel.Warning, Assert.Single(scenario.App.Logs.Events, GoldmarkApp.IsRecoveryLink).Level);
+        // It works for an hour (owner, DEC-042 item 6), whatever the link lifetime setting says.
+        Assert.Equal(60, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            "SELECT DATEDIFF(minute, CreatedAt, ExpiresAt) FROM cmdb.UserInvitation WHERE Purpose = 'CombinedReset' AND RevokedAt IS NULL;"));
 
         // A second start with the setting still set prints a new link, and the first stops working.
         await scenario.RestartAsync(recover);
-        var (token, code) = await scenario.App.RecoveryLinkAsync();
+        var token = await scenario.App.RecoveryLinkAsync();
         var person = scenario.App.Client();
         Assert.Equal("invalid", AuthScenario.Ok(await person.PostAsync("/api/v1/links/check", new { token = first })).Value("status"));
 
@@ -272,7 +279,10 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         var before = await scenario.SignInAsync(adminPerson);
         AuthScenario.Ok(await before.GetAsync("/api/v1/users"));
 
-        Assert.Equal("combined-reset", AuthScenario.Ok(await person.PostAsync("/api/v1/links/redeem", new { token, code })).Value("purpose"));
+        // The log holds the link but never its code: a generated-looking code or a guess is a wrong try.
+        Assert.Equal("wrong-code", (await person.PostAsync("/api/v1/links/redeem", new { token, code = "K7Q-2MX" })).Code);
+        Assert.Equal("combined-reset", AuthScenario.Ok(await person.PostAsync("/api/v1/links/redeem",
+            new { token, code = RecoveryCode.ToLowerInvariant().Replace(' ', '-') })).Value("purpose"));
         AuthScenario.Ok(await person.PostAsync("/api/v1/enrolment/password", new { password = NewPassword }));
         var authenticator = new Authenticator(AuthScenario.Ok(await person.PostAsync("/api/v1/enrolment/authenticator")).Value("key"));
         AuthScenario.Ok(await person.PostAsync("/api/v1/enrolment/complete", new { code = await authenticator.NextCodeAsync() }));
@@ -283,21 +293,52 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
         Assert.Equal("invalid-credentials", (await scenario.App.Client().PostAsync("/api/v1/auth/sign-in",
             new { userName = adminPerson.UserName, password = AuthScenario.AdminPassword })).Code);
 
-        var resets = await scenario.AuditAsync("user.password.reset");
-        Assert.Equal(2, resets.Count);
-        Assert.All(resets, row => Assert.Contains("|System||", row, StringComparison.Ordinal));
-        Assert.All(resets, row => Assert.Contains("\"issuedBy\":\"server-setting\"", row, StringComparison.Ordinal));
+        // Each start's link is "Recovery link issued" by System; only its use is a reset (nothing changed before).
+        var issued = await scenario.AuditAsync("user.recovery-link.issued");
+        Assert.Equal(2, issued.Count);
+        Assert.All(issued, row => Assert.Contains("|System||", row, StringComparison.Ordinal));
+        Assert.Empty(await scenario.AuditAsync("user.password.reset"));
         Assert.Contains("\"issuedBy\":\"server-setting\"", Assert.Single(await scenario.AuditAsync("user.password.reset-completed")),
             StringComparison.Ordinal);
 
-        // The second secret Goldmark logs (after the setup token): once, in one line, and never in the audit log.
+        // The log holds the link once and the code never; the audit log holds neither.
         Assert.Single(scenario.App.Logs.RenderEach(), line => line.Contains(token, StringComparison.Ordinal));
-        Assert.Single(scenario.App.Logs.RenderEach(), line => line.Contains(code, StringComparison.Ordinal));
+        var logs = scenario.App.Logs.RenderAll();
         var audit = await scenario.AuditTextAsync() ?? "";
-        foreach (var secret in new[] { first, firstCode, token, code })
+        foreach (var code in new[] { RecoveryCode, "HARBOURLANTERN2026" })
         {
-            Assert.DoesNotContain(secret, audit, StringComparison.Ordinal);
+            Assert.DoesNotContain(code, logs, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(code, audit, StringComparison.OrdinalIgnoreCase);
         }
+
+        Assert.DoesNotContain(first, audit, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, audit, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_start_without_the_recovery_setting_ends_an_unused_recovery_link()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (_, adminPerson) = await scenario.SetUpAsync();
+        await scenario.RestartAsync(Recover(adminPerson.UserName));
+        var token = await scenario.App.RecoveryLinkAsync();
+
+        await scenario.RestartAsync();
+        _ = scenario.App.Services;
+        await scenario.App.Logs.WaitForAsync(_ => false, TimeSpan.FromSeconds(3));
+        var person = scenario.App.Client();
+        Assert.Equal("invalid", AuthScenario.Ok(await person.PostAsync("/api/v1/links/check", new { token })).Value("status"));
+        Assert.Contains("\"reason\":\"recovery-setting-removed\"", Assert.Single(await scenario.AuditAsync("user.link.invalidated")),
+            StringComparison.Ordinal);
+        Assert.Equal("Revoked", await sql.AdminScalarAsync<string>(scenario.Installation.Database,
+            "SELECT RevokeReason FROM cmdb.UserInvitation WHERE Purpose = 'CombinedReset';"));
+
+        // Another clean start finds nothing more to end.
+        await scenario.RestartAsync();
+        _ = scenario.App.Services;
+        await scenario.App.Logs.WaitForAsync(_ => false, TimeSpan.FromSeconds(3));
+        Assert.Single(await scenario.AuditAsync("user.link.invalidated"));
+        AuthScenario.Ok(await (await scenario.SignInAsync(adminPerson)).GetAsync("/api/v1/users"));
     }
 
     [Fact]
@@ -320,7 +361,7 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
             Assert.DoesNotContain(scenario.App.Logs.Events, GoldmarkApp.IsRecoveryLink);
         }
 
-        Assert.Empty(await scenario.AuditAsync("user.password.reset"));
+        Assert.Empty(await scenario.AuditAsync("user.recovery-link.issued"));
         Assert.Equal(0, await sql.AdminScalarAsync<int>(scenario.Installation.Database,
             "SELECT COUNT(*) FROM cmdb.UserInvitation WHERE Purpose = 'CombinedReset';"));
     }
@@ -365,5 +406,12 @@ public sealed class PasswordRecoveryTests(SqlServerFixture sql)
 
     private static string Code(JsonElement link) => link.GetProperty("code").GetString()!;
 
-    private static Dictionary<string, string?> Recover(string userName) => new() { ["Goldmark:Auth:RecoverAdmin"] = userName };
+    /// <summary>The operator's recovery code in these tests (GOLDMARK_RECOVER_CODE); matched ignoring case, spaces and hyphens.</summary>
+    private const string RecoveryCode = "HARBOUR LANTERN 2026";
+
+    private static Dictionary<string, string?> Recover(string userName) => new()
+    {
+        ["Goldmark:Auth:RecoverAdmin"] = userName,
+        ["Goldmark:Auth:RecoverAdminCode"] = RecoveryCode,
+    };
 }

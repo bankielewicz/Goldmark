@@ -258,11 +258,41 @@ public sealed class AuthPrimitivesTests
     }
 
     [Theory]
+    [InlineData("", "")]
+    [InlineData("", "a stale code is ignored")]
+    [InlineData("pat.admin", "harbour-lantern-2026")]
+    [InlineData(" pat.admin ", "HARBOUR LANTERN 2026")]
+    public void An_empty_recovery_setting_or_a_username_with_its_code_is_accepted(string name, string code) =>
+        Assert.True(new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = name, RecoverAdminCode = code }).Succeeded);
+
+    [Theory]
     [InlineData("")]
-    [InlineData("pat.admin")]
-    [InlineData(" pat.admin ")]
-    public void An_empty_recovery_setting_or_a_username_is_accepted(string value) =>
-        Assert.True(new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = value }).Succeeded);
+    [InlineData("short2026")]
+    [InlineData("harbour_lantern_2026")]
+    [InlineData("hárbourlantern2026")]
+    public void The_recovery_setting_needs_its_own_code_and_never_prints_it(string code)
+    {
+        var result = new AuthOptionsValidator().Validate(null, new AuthOptions { RecoverAdmin = "pat.admin", RecoverAdminCode = code });
+
+        Assert.True(result.Failed);
+        Assert.Contains("Goldmark:Auth:RecoverAdminCode is required with RecoverAdmin", result.FailureMessage, StringComparison.Ordinal);
+        if (code.Length > 0)
+        {
+            Assert.DoesNotContain(code, result.FailureMessage, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void A_recovery_code_ignores_case_spaces_and_hyphens_and_must_be_12_to_64_letters_and_digits()
+    {
+        Assert.Equal("HARBOURLANTERN2026", LinkSecrets.NormalizeRecoveryCode("harbour-lantern 2026"));
+        Assert.Equal(LinkSecrets.NormalizeRecoveryCode("HARBOURLANTERN2026"), LinkSecrets.NormalizeRecoveryCode("harbour lantern-2026"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode("abc-def-ghi"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode(new string('q', 65)));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode("harbour.lantern.2026"));
+        Assert.Null(LinkSecrets.NormalizeRecoveryCode(null));
+        Assert.NotNull(LinkSecrets.NormalizeRecoveryCode(new string('q', 64)));
+    }
 
     private sealed class ManualTime(DateTimeOffset start) : TimeProvider
     {

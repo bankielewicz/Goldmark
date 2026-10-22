@@ -1451,12 +1451,22 @@ private, the agent's GitHub API token could not see it (public-repository scope 
      until it is used, so a setting left in place only prints a new link at each start (the previous one
      stops working) rather than resetting the Admin again; using it signs the Admin out everywhere and
      sets a new password and authenticator. The recovery link becomes the second secret Goldmark ever
-     logs, after the setup token.
+     logs, after the setup token. Then a side agent noted that logs reach more people than the server's
+     operators (`docker compose logs`, central log tools, saved files) and outlive the reset, so the
+     owner was asked again (2026-10-21) and chose "A. Operator sets it in .env (Recommended)" and "A. 1
+     hour, ended at a clean restart (Recommended)": the operator sets `GOLDMARK_RECOVER_CODE` (12 to 64
+     letters and digits) with the username, the log carries the link's path only and never the code,
+     the link works for one hour whatever the link lifetime setting says, and a start without the
+     setting ends every unused recovery link (audited "Link stopped working", reason
+     `recovery-setting-removed`). Five wrong codes still end it. Settled in the slice, open to veto (a
+     side agent's note): issuing the link is audited "Recovery link issued", not "Password reset", since
+     nothing changes until it is used, as a waiting combined reset is "Approval requested" (item 8); its
+     use is "Password reset completed", Link issued by "server-setting".
   7. **The password-and-two-factor reset is never for an Admin ("A. Not for an Admin (Recommended)").**
      A link and code alone never yield an Admin session, as for invitations (DEC-038 item 2): Remove
      Admin first; add it again after their first sign-in. The recovery setting (item 6) is the one,
-     deliberate, exception: whoever can set it and read the log already holds the runtime login and the
-     key ring.
+     deliberate, exception: whoever can set it and its code already holds the server, with the runtime
+     login and the key ring.
   8. **Dual control for invitations and the password-and-two-factor reset ("B. Dual control now,
      both").** Asked after a side agent noted that the Admin who issues such a link holds both values
      and could finish it as the person; the owner: "how can we harden this as it doesn't seem secure?
@@ -1500,7 +1510,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     if the person became an Admin meanwhile. Nobody approves their own request or one about
     themselves.
   - The recovery setting is read by a hosted service once the database is ready; it issues the link
-    through the same link store (scheme 1, no issuing account) and never resets the account itself.
+    through the same link store (scheme 1, no issuing account, the operator's code, one hour) and never
+    resets the account itself. A link with no issuing account is a recovery link and only that: other
+    links always name their issuer, and the redeem step checks a recovery link's code against the
+    operator code's shape, every other code against the generated one's.
 
 ---
 
