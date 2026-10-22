@@ -78,6 +78,8 @@ services:
       Goldmark__Https__Hsts__Enabled: ${GOLDMARK_HSTS_ENABLED:-}
       Goldmark__Https__Hsts__MaxAgeDays: ${GOLDMARK_HSTS_MAX_AGE_DAYS:-365}
       Goldmark__Logging__MinimumLevel: ${GOLDMARK_LOG_LEVEL:-Information}
+      # The way back in when no administrator can sign in (DEC-042 item 6); empty = off.
+      Goldmark__Auth__RecoverAdmin: ${GOLDMARK_RECOVER_ADMIN:-}
     ports:
       - "${GOLDMARK_HTTPS_PORT:-8443}:8443"
     volumes:

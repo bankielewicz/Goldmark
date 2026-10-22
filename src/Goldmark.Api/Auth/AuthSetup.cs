@@ -88,6 +88,7 @@ internal static class AuthSetup
         services.AddScoped<Users.UserDirectory>();
         services.AddSingleton<SetupState>();
         services.AddHostedService<SetupTokenService>();
+        services.AddHostedService<RecoverAdminService>();
         services.AddSingleton<SessionTicketStore>();
         services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, SessionStoreSetup>();
         services.AddSingleton<UnknownUserThrottle>();

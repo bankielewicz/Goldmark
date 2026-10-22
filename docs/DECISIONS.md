@@ -1408,6 +1408,100 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     show the period. Editing it in the UI would need the app to write `cmdb.AuditRetention`, which is
     exactly what item 1 prevents. Changing that goes back to the owner.
 
+## DEC-042 Slice 4a: password recovery, dual control for links that need none of the person's factors
+
+- **Decision (owner, 2026-10-21, asked in the HANDOFF rule-6 format; each answer quoted).**
+  1. **Placements.** Issue #25 (forgotten passwords) becomes its own slice, **4a**, before 4b ("A. Own
+     slice, before 4b (Recommended)"), approved to start in a fresh session ("A. APPROVED: #25 first
+     (Recommended)"). #31 (trusted proxies) goes to slice 24 ("A. Slice 24 (Recommended)"). #34 (the
+     retention period checked before `bootstrap-db`) goes to slice 4b ("A. Slice 4b (Recommended)").
+     The placements are commented on #25, #31 and #34 when the slice PR opens ("A. Comment on all
+     three (Recommended)").
+  2. **One "Reset password…" action, with "Also reset two-factor" for a person who lost both ("A. One
+     action, a checkbox (Recommended)").** Otherwise a person who forgot their password and lost their
+     authenticator could finish neither reset: the two-factor reset asks for the current password, the
+     password reset for the authenticator. With the box ticked the link runs the invitation's steps,
+     proof by the link and its separate code alone, the same level as enrolment (ASVS 5.0 6.4.4).
+  3. **A password reset ends with the person's own authenticator ("A. Yes, then signed in
+     (Recommended)").** New password, then a 6-digit code or a recovery code; nothing changes until it
+     checks out, and wrong codes count toward lockout as at sign-in. ASVS 5.0 6.4.3: a password reset
+     must not bypass two-factor.
+  4. **The old password stops working at once ("A. Stops working at once (Recommended)").** Sessions
+     end; the old password then fails like any wrong password, and those failures go through the
+     unknown-user throttle, so the account does not lock before the person finishes the reset.
+  5. **Change password for a signed-in person, in this slice ("A. Yes, in slice 4a (Recommended)";
+     scope change, ASVS 5.0 6.2.2 and 6.2.3).** Current password, new password under the policy; other
+     sessions end, this one continues.
+  6. **The way back in when no Admin can sign in: emergency-Admin guidance plus a startup setting, not a
+     command ("A + startup setting (Recommended)").** First built as a typed command, `recover-admin`
+     (from #25's second criterion and the owner's answers "A. Password and two-factor (Recommended)" and
+     "A. Path and code (Recommended)"); the owner then said "commands are not meant to be run on a server
+     such as recover-admin ingrid.m. when was this designed?" and asked how professional applications,
+     Active Directory and Microsoft Entra handle it. Researched (vendor documentation, 2026-10-21): every
+     self-hosted product falls back to server access (Jira and Confluence's recovery mode is a startup
+     property; GitLab, Grafana and Keycloak have commands); Entra recommends two or more emergency access
+     accounts. So: the README prescribes Microsoft's pattern adapted to Goldmark (a second Admin not
+     tied to a person, its password and recovery codes kept in a safe, its use visible in the audit log,
+     checked every 90 days), and the last resort is the setup-token pattern #25 named: the operator sets
+     `GOLDMARK_RECOVER_ADMIN=<username>` and restarts; Goldmark logs a one-time password-and-two-factor
+     link and code for that enabled Admin, once per start, as it logs the setup token (DEC-038 item 7),
+     audits it as System, and warns in the log while the setting is set. An administrator's lock is kept
+     (the owner's chosen text said a lockout from failed attempts ends; a side agent noted the command
+     had lifted every lock). Settled in the slice, open to veto: the link changes nothing on the account
+     until it is used, so a setting left in place only prints a new link at each start (the previous one
+     stops working) rather than resetting the Admin again; using it signs the Admin out everywhere and
+     sets a new password and authenticator. The recovery link becomes the second secret Goldmark ever
+     logs, after the setup token.
+  7. **The password-and-two-factor reset is never for an Admin ("A. Not for an Admin (Recommended)").**
+     A link and code alone never yield an Admin session, as for invitations (DEC-038 item 2): Remove
+     Admin first; add it again after their first sign-in. The recovery setting (item 6) is the one,
+     deliberate, exception: whoever can set it and read the log already holds the runtime login and the
+     key ring.
+  8. **Dual control for invitations and the password-and-two-factor reset ("B. Dual control now,
+     both").** Asked after a side agent noted that the Admin who issues such a link holds both values
+     and could finish it as the person; the owner: "how can we harden this as it doesn't seem secure?
+     let's consult with /advisor for guidance/best practices". The Admin who asks gets the link only;
+     another enabled Admin (not the one who asked, not the person) approves and gets the code, made at
+     approval. With no such Admin the one who asks gets both, audited "only-admin" (the fallback the
+     owner accepted with option B, as is the audited bypass of first removing another Admin's role).
+     Not for the password-only and two-factor-only resets, which each still need one of the person's
+     own factors. Settled on the boards and approved with them: a combined reset changes nothing on
+     the account until approved; a request waits up to the link lifetime, and the link's own lifetime
+     counts from the approval; the approving Admin in the samples is Morgan Okafor. An invitation that
+     waits still writes "Invitation created" (detail: approval requested), so a filter on it finds every
+     invitation; a combined reset writes "Approval requested", since nothing changed yet.
+  9. **Waiting requests are visible ("A. Nav count + time left (Recommended)"; raised by a side agent:
+     Goldmark sends no email).** Every Admin sees a count on the "Users & roles" nav item on every page;
+     the requester's row shows the time left and, once it lapses, "approval request ended"; the README
+     says to tell the approving Admin yourself.
+  10. **Row 4a's "Done when" as proposed ("A. As proposed (Recommended)").**
+  11. **The boards are approved (owner, 2026-10-21, "approved.").** Version 28 (`1792617023-b865`) of
+      https://claude.ai/artifact/Bzpjzj8maiwQGfPJ31KCy3, copied to `docs/design/screens/slice-4a/`. The
+      approvals count and the requester's time-left wording (item 9) came after; they get a board
+      before their UI.
+  12. **Windows and LDAP sign-in are filed, not built.** Asked whether Goldmark supports NT
+      authentication: not in the PRD (A3: local accounts with TOTP; OIDC, slice 25). The owner's
+      decisions are in #36 (Windows sign-in, Kerberos only, its own slice after 25) and #37 (LDAP
+      sign-in over LDAPS, its own slice after #36).
+- **How it is built.**
+  - `cmdb.UserAccount.PasswordResetAt` (migration 0005) marks a reset password; the hash stays until
+    the person chooses a new one. A link has a purpose (`PasswordReset`, `CombinedReset` added), and a
+    link asked for under dual control has a token and no code (`ApprovalRequired`, `ApprovedAt`,
+    `ApprovedBy`) until approved.
+  - **Code hashes, two schemes.** Scheme 1 (0003) hashes the code with the token, which is never
+    stored; it serves every code made when the token is known. A code made at approval cannot be, so
+    scheme 2 is HMAC-SHA-256 under a random key of that link's own, stored encrypted with Data
+    Protection: a copy of the database alone still gives no way to test codes. A shared key table was
+    rejected: written once, it would break dual control for good if the key ring were lost. Losing the
+    key ring fails approved, unused links like a wrong code, as DEC-038 item 5 accepts for
+    authenticator keys.
+  - **Guards, in the API whatever the UI shows.** A two-factor reset is refused while a password reset
+    or a request waits. Admin is not added while a combined reset is open, and an approval is refused
+    if the person became an Admin meanwhile. Nobody approves their own request or one about
+    themselves.
+  - The recovery setting is read by a hosted service once the database is ready; it issues the link
+    through the same link store (scheme 1, no issuing account) and never resets the account itself.
+
 ---
 
 ## Slice 1 acceptance mapping

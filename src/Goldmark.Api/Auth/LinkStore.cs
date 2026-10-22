@@ -89,7 +89,7 @@ internal sealed class LinkStore(DbSession db, IOptions<AuthOptions> options, Tim
 
     /// <summary>
     /// Revokes the person's open link, if any, and issues a new one with its code. <paramref name="createdBy"/>
-    /// is null for recover-admin, which an operator runs on the server.
+    /// is null for a recovery link, which the recovery setting issues (<see cref="RecoverAdminService"/>).
     /// </summary>
     public async Task<IssuedLink> IssueAsync(Guid userId, string purpose, Guid? createdBy)
     {

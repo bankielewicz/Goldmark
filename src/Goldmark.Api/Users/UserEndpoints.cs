@@ -246,7 +246,8 @@ internal static class UserEndpoints
                     "Admin can be added only after the person has signed in once.");
             }
 
-            if (add.Contains(Roles.Admin) && await links.OpenForUserAsync(user.Id) is { Purpose: LinkPurpose.CombinedReset })
+            if (add.Contains(Roles.Admin) && await links.OpenForUserAsync(user.Id) is { Purpose: LinkPurpose.CombinedReset } combined
+                && !links.IsExpired(combined))
             {
                 // That link sets a new password and authenticator from the link and code alone (DEC-042).
                 return ApiProblems.Problem(StatusCodes.Status409Conflict, "combined-reset-open",
@@ -382,7 +383,7 @@ internal static class UserEndpoints
                     "This person's password was reset. Use Reset password with \"Also reset two-factor\" instead.");
             }
 
-            if (await links.OpenForUserAsync(user.Id) is { IsAwaitingApproval: true })
+            if (await WaitingRequestAsync(user, links) is not null)
             {
                 return RequestWaiting();
             }
@@ -488,7 +489,8 @@ internal static class UserEndpoints
                 return AdminTarget();
             }
 
-            if (await links.OpenForUserAsync(user.Id) is { IsAwaitingApproval: true })
+            // A request that ended unapproved no longer counts: asking again replaces it.
+            if (await WaitingRequestAsync(user, links) is not null)
             {
                 return RequestWaiting();
             }

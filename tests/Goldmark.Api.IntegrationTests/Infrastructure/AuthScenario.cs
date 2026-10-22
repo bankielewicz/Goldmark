@@ -34,12 +34,15 @@ public sealed class AuthScenario : IAsyncDisposable
         return new AuthScenario(sql, installation, keys, overrides);
     }
 
-    /// <summary>Stops this instance and starts a new one on the same database and key ring.</summary>
-    public async Task RestartAsync()
+    /// <summary>
+    /// Stops this instance and starts a new one on the same database and key ring, with
+    /// <paramref name="overrides"/> as its only extra settings.
+    /// </summary>
+    public async Task RestartAsync(IDictionary<string, string?>? overrides = null)
     {
         var keys = App.KeyDirectory;
         await App.DisposeAsync();
-        App = new GoldmarkApp(Sql, Installation, keys);
+        App = new GoldmarkApp(Sql, Installation, keys, overrides);
     }
 
     /// <summary>First-run setup through the API; returns the signed-in administrator's client.</summary>

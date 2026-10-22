@@ -379,7 +379,7 @@ internal static class EnrolmentEndpoints
             {
                 var (person, recoveryCodes) = state.Kind == EnrolmentKind.Setup
                     ? await CompleteSetupAsync(state, key, step, users, audit)
-                    : await CompleteLinkAsync(state, user!, key, step, users, links, audit);
+                    : await CompleteLinkAsync(state, user!, key, step, users, links, db, audit);
                 // The session row commits with the account: if it cannot be written, nothing is, and
                 // the step can be tried again (the recovery codes were never shown).
                 return (await AuthEndpoints.StartSessionAsync(context, users, person), recoveryCodes);
@@ -427,7 +427,7 @@ internal static class EnrolmentEndpoints
     }
 
     private static async Task<(GoldmarkUser, IReadOnlyList<string>)> CompleteLinkAsync(EnrolmentState state, GoldmarkUser user, string key,
-        long step, GoldmarkUserManager users, LinkStore links, AuditTrail audit)
+        long step, GoldmarkUserManager users, LinkStore links, DbSession db, AuditTrail audit)
     {
         var link = await links.FindAsync(state.LinkId!.Value);
         if (link is null || !await links.RedeemAsync(link.Id))
@@ -441,6 +441,9 @@ internal static class EnrolmentEndpoints
         }
         else if (state.Kind == EnrolmentKind.CombinedReset)
         {
+            // An administrator's reset already ended the sessions; a recovery link (DEC-042 item 6) changed
+            // nothing until now, so its sessions end here, before this one starts.
+            await SessionTicketStore.EndAllAsync(db, user.Id);
             Check(await users.CompletePasswordResetAsync(user, state.PasswordHash!));
         }
 
@@ -549,11 +552,11 @@ internal static class EnrolmentEndpoints
 
     /// <summary>
     /// Who issued and who approved a link, by display name and username as they are now, for its audit
-    /// entry (DEC-042). A link from recover-admin has no issuer: an operator ran it on the server.
+    /// entry (DEC-042). A recovery link has no issuer: an operator set the recovery setting on the server.
     /// </summary>
     private static async Task<(string IssuedBy, string? ApprovedBy)> LinkPeopleAsync(LinkRow link, GoldmarkUserManager users)
     {
-        return (link.CreatedBy is null ? "server-command" : await NameAsync(link.CreatedBy) ?? "removed-account", await NameAsync(link.ApprovedBy));
+        return (link.CreatedBy is null ? LinkIssuers.ServerSetting : await NameAsync(link.CreatedBy) ?? "removed-account", await NameAsync(link.ApprovedBy));
 
         async Task<string?> NameAsync(Guid? id) =>
             id is { } value && await users.FindByIdAsync(value.ToString("D")) is { } person ? $"{person.DisplayName} ({person.UserName})" : null;

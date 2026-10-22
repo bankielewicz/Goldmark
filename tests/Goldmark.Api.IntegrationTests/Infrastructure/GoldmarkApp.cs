@@ -67,7 +67,32 @@ public sealed class GoldmarkApp(SqlServerFixture sql, Installation installation,
         return ((ScalarValue)token).Value as string ?? throw new InvalidOperationException("No setup token.");
     }
 
+    /// <summary>
+    /// The recovery link this instance logged at start (the setting <c>Goldmark:Auth:RecoverAdmin</c>;
+    /// waits for the database to answer): the token in its path, and its code.
+    /// </summary>
+    public async Task<(string Token, string Code)> RecoveryLinkAsync()
+    {
+        var link = await EventAsync(3004);
+        var path = Text(link, "RecoveryPath");
+        Assert.StartsWith("/password-reset#t=", path, StringComparison.Ordinal);
+        return (path["/password-reset#t=".Length..], Text(link, "RecoveryCode"));
+    }
+
+    /// <summary>The first event with this ID that this instance logs (starts the host; waits up to 30 seconds).</summary>
+    public async Task<LogEvent> EventAsync(int eventId)
+    {
+        _ = Services;
+        await Logs.WaitForAsync(e => e.Any(x => IsEvent(x, eventId)), TimeSpan.FromSeconds(30));
+        return Assert.Single(Logs.Events, e => IsEvent(e, eventId));
+    }
+
     public static bool IsSetupToken(LogEvent e) => IsEvent(e, 3001);
+
+    public static bool IsRecoveryLink(LogEvent e) => IsEvent(e, 3004);
+
+    private static string Text(LogEvent e, string property) =>
+        ((ScalarValue)e.Properties[property]).Value as string ?? throw new InvalidOperationException($"No {property}.");
 
     public static bool IsEvent(LogEvent e, int eventId) =>
         e.Properties.TryGetValue("EventId", out var id) && id is StructureValue s

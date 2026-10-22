@@ -70,10 +70,19 @@ internal sealed class GoldmarkUserManager(
         return UpdateSecurityStampAsync(user);
     }
 
-    /// <summary>Installs the password chosen through a reset link, which ends the reset.</summary>
+    /// <summary>
+    /// Installs the password chosen through a reset link, which ends the reset. A lockout from failed
+    /// attempts ends too (a recovery link changed nothing before); an administrator's lock stays.
+    /// </summary>
     public Task<IdentityResult> CompletePasswordResetAsync(GoldmarkUser user, string passwordHash)
     {
         user.PasswordResetAt = null;
+        user.AccessFailedCount = 0;
+        if (!user.IsLockedByAdministrator)
+        {
+            user.LockoutEnd = null;
+        }
+
         return SetPasswordHashAsync(user, passwordHash);
     }
 

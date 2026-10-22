@@ -30,6 +30,13 @@ public sealed class AuthOptions
     /// <summary>Sign-in, setup and link requests allowed per client address per minute (HTTP 429 after).</summary>
     public int RequestsPerMinute { get; set; } = 30;
 
+    /// <summary>
+    /// The way back in when no administrator can sign in (DEC-042 item 6; <c>GOLDMARK_RECOVER_ADMIN</c>):
+    /// the username of an enabled Admin. While set, each start logs a one-time password-and-two-factor
+    /// link and code for them. Empty: off.
+    /// </summary>
+    public string RecoverAdmin { get; set; } = "";
+
     public TimeSpan Lockout => TimeSpan.FromMinutes(LockoutMinutes);
 
     public TimeSpan SessionIdle => TimeSpan.FromMinutes(SessionIdleMinutes);
@@ -41,6 +48,9 @@ public sealed class AuthOptions
 
 internal sealed class AuthOptionsValidator : IValidateOptions<AuthOptions>
 {
+    /// <summary><c>cmdb.UserAccount.UserName</c> is <c>nvarchar(64)</c> (migration 0003).</summary>
+    private const int MaxUserNameLength = 64;
+
     public ValidateOptionsResult Validate(string? name, AuthOptions options)
     {
         var failures = new List<string>();
@@ -51,6 +61,12 @@ internal sealed class AuthOptionsValidator : IValidateOptions<AuthOptions>
         Range(failures, nameof(AuthOptions.LinkExpiryHours), options.LinkExpiryHours, 1, 168);
         Range(failures, nameof(AuthOptions.LinkCodeAttempts), options.LinkCodeAttempts, 1, 20);
         Range(failures, nameof(AuthOptions.RequestsPerMinute), options.RequestsPerMinute, 1, 10000);
+        if (options.RecoverAdmin is { Length: > 0 } recover && (string.IsNullOrWhiteSpace(recover) || recover.Trim().Length > MaxUserNameLength))
+        {
+            // Names the setting only: never print a configured value.
+            failures.Add($"{AuthOptions.SectionName}:RecoverAdmin must be a username of at most {MaxUserNameLength} characters, or empty.");
+        }
+
         if (failures.Count == 0 && options.SessionIdle > options.SessionLifetime)
         {
             failures.Add($"{AuthOptions.SectionName}:SessionIdleMinutes must not exceed SessionLifetimeHours.");

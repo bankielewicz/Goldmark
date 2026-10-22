@@ -42,7 +42,8 @@ Details settled on the boards (Notes board, "Settled on these boards"), approved
 
 In the handoff (`tmp/screen-handoff-slice4a.md`) but not drawn: the Add user panel's button reading
 "Create and ask for approval", the Account filter value "Awaiting approval", the "Request declined"
-Toast, and the reset variant of the Approve dialog's wording. `recover-admin` has no screen.
+Toast, and the reset variant of the Approve dialog's wording. The recovery setting
+(`GOLDMARK_RECOVER_ADMIN`, DEC-042 item 6) has no screen.
 
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas,
 pull the file back here first.
