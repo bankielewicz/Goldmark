@@ -6,6 +6,7 @@ import { followLink, navigate, useLocation } from '../router';
 import { useSession } from '../session';
 import {
   AuthenticatorSetup,
+  CodeInput,
   CopyButton,
   ErrorBar,
   Notice,
@@ -51,16 +52,23 @@ const useStyles = makeStyles({
   hint: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
   mono: { fontFamily: tokens.fontFamilyMonospace, letterSpacing: '0.1em' },
   shortCode: { fontFamily: tokens.fontFamilyMonospace, letterSpacing: '0.1em', maxWidth: '180px' },
+  recoveryCode: { fontFamily: tokens.fontFamilyMonospace, letterSpacing: '0.1em', maxWidth: '240px' },
 });
 
-export type EnrolmentFlow = 'setup' | 'invite' | 'reset';
+/**
+ * `reset` is the two-factor reset; `password` the password reset (confirmed with the person's own
+ * authenticator); `both` the password-and-two-factor reset, which runs the invitation's steps (DEC-042).
+ */
+export type EnrolmentFlow = 'setup' | 'invite' | 'reset' | 'password' | 'both';
 type Step = 1 | 2 | 3 | 4 | 'done';
-type Terminal = 'expired' | 'invalid' | 'dead' | 'complete' | 'completed-elsewhere';
+type Terminal = 'expired' | 'invalid' | 'dead' | 'pending' | 'complete' | 'completed-elsewhere';
 
 const labels: Record<EnrolmentFlow, string[]> = {
   setup: ['Setup token', 'Admin account', 'Two-factor', 'Recovery codes'],
   invite: ['Confirm code', 'Password', 'Two-factor', 'Recovery codes'],
   reset: ['Confirm code', 'Your password', 'Two-factor', 'Recovery codes'],
+  password: ['Confirm code', 'New password', 'Authenticator'],
+  both: ['Confirm code', 'New password', 'Two-factor', 'Recovery codes'],
 };
 
 const headings: Record<EnrolmentFlow, string[]> = {
@@ -77,7 +85,34 @@ const headings: Record<EnrolmentFlow, string[]> = {
     'Set up two-factor authentication',
     'Save your recovery codes',
   ],
+  password: ['Confirm your code', 'Choose a new password', 'Confirm with your authenticator'],
+  both: ['Confirm your code', 'Choose a new password', 'Set up two-factor authentication', 'Save your recovery codes'],
 };
+
+const welcomes: Record<EnrolmentFlow, { title: string; text: string }> = {
+  setup: { title: '', text: '' },
+  invite: { title: 'Welcome, ', text: 'You’re invited to Goldmark as' },
+  reset: { title: 'Set up two-factor again, ', text: 'An administrator reset your two-factor. Your roles:' },
+  password: { title: 'Choose a new password, ', text: 'An administrator reset your password. Your roles:' },
+  both: {
+    title: 'Set up your account again, ',
+    text: 'An administrator reset your password and two-factor. Your roles:',
+  },
+};
+
+/** The link's purpose, as `/links/check` and `/links/redeem` name it, to its flow. */
+function flowOf(purpose: string | undefined): EnrolmentFlow {
+  switch (purpose) {
+    case 'two-factor-reset':
+      return 'reset';
+    case 'password-reset':
+      return 'password';
+    case 'combined-reset':
+      return 'both';
+    default:
+      return 'invite';
+  }
+}
 
 interface Person {
   userName: string;
@@ -86,9 +121,10 @@ interface Person {
 }
 
 /**
- * Screen 2 (first-run setup, US-02) and screen 1b (accept an invitation, or set up two-factor again
- * after a reset; DEC-038): one wizard. Nothing is stored until the code from the new authenticator
- * is verified; then the person is signed in and sees their recovery codes once.
+ * Screen 2 (first-run setup, US-02) and screen 1b (accept an invitation, set up two-factor again after
+ * a reset, or choose a new password after a password reset; DEC-038, DEC-042): one wizard. Nothing is
+ * stored until the last step checks out (a code from the new authenticator, or for a password reset
+ * a code from the person's own authenticator or a recovery code); then the person is signed in.
  */
 export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
   const styles = useStyles();
@@ -117,6 +153,10 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
   const [qrVersion, setQrVersion] = useState(0);
   const [totp, setTotp] = useState('');
   const [totpError, setTotpError] = useState<string | null>(null);
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryCodeError, setRecoveryCodeError] = useState<string | null>(null);
+  const [recoveryCodesLeft, setRecoveryCodesLeft] = useState<number | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [stored, setStored] = useState(false);
   const [signedInUser, setSignedInUser] = useState<SessionUser | null>(null);
@@ -155,10 +195,11 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
           );
           if (cancelled) return;
           if (data.status !== 'valid') {
-            setTerminal(data.status === 'expired' ? 'expired' : 'invalid');
+            // Opened before another Admin approved it (DEC-042): no code exists yet, so no code field.
+            setTerminal(data.status === 'expired' ? 'expired' : data.status === 'pending' ? 'pending' : 'invalid');
             return;
           }
-          setFlow(data.purpose === 'two-factor-reset' ? 'reset' : 'invite');
+          setFlow(flowOf(data.purpose));
         }
         setStep(1);
       } catch (error) {
@@ -198,6 +239,8 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
         setTerminal('invalid');
       } else if (error.code === 'link-invalidated') {
         setTerminal('dead');
+      } else if (error.code === 'link-pending') {
+        setTerminal('pending');
       } else if (
         error.isUnavailable ||
         error.status === 429 ||
@@ -232,6 +275,9 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
       case 'invalid-code':
         setTotpError('That code didn’t work. Codes change every 30 seconds.');
         return;
+      case 'invalid-recovery-code':
+        setRecoveryCodeError('That recovery code didn’t work, or it was already used.');
+        return;
       case 'validation': {
         const errors: Record<string, string> = {};
         for (const [field, codes] of Object.entries(error.fieldErrors)) {
@@ -262,7 +308,7 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
             { signedIn: false },
           );
           setPerson({ userName: data.userName, displayName: data.displayName, roles: data.roles });
-          setFlow(data.purpose === 'two-factor-reset' ? 'reset' : 'invite');
+          setFlow(flowOf(data.purpose));
         }
         setStep(2);
       });
@@ -284,8 +330,18 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
         setCommonPassword(false);
         setPassword('');
         setConfirmation('');
-        await newAuthenticator();
+        if (flow === 'password') {
+          // The person's own authenticator confirms the new password (DEC-042 item 3).
+          setTotp('');
+          setTotpError(null);
+          setRecoveryCodeError(null);
+          setStep(3);
+        } else {
+          await newAuthenticator();
+        }
       });
+    } else if (step === 3 && flow === 'password') {
+      await confirmPasswordReset();
     } else if (step === 3) {
       if (totp.length !== 6) {
         setTotpError('Enter the 6-digit code from the app.');
@@ -311,6 +367,37 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
     }
   }
 
+  async function confirmPasswordReset() {
+    if (!useRecoveryCode && totp.length !== 6) {
+      setTotpError('Enter the 6-digit code from the app.');
+      return;
+    }
+    if (useRecoveryCode && recoveryCode.trim().length === 0) {
+      setRecoveryCodeError('Enter one of your recovery codes.');
+      return;
+    }
+    await run(async () => {
+      setTotpError(null);
+      setRecoveryCodeError(null);
+      const { data } = await api<{ user: SessionUser; recoveryCodesRemaining?: number | null; next?: string }>(
+        'POST',
+        '/api/v1/enrolment/confirm',
+        useRecoveryCode ? { recoveryCode: recoveryCode.trim() } : { code: totp },
+        { signedIn: false },
+      );
+      if (data.next === 'new-authenticator') {
+        // Goldmark can no longer check the authenticator (its keys were lost, DEC-038 item 5): the
+        // recovery code just used starts setting up a new one, as after such a sign-in.
+        session.signedIn(data.user);
+        navigate('/account/two-factor?authenticator=new', { replace: true });
+        return;
+      }
+      setSignedInUser(data.user);
+      setRecoveryCodesLeft(useRecoveryCode ? (data.recoveryCodesRemaining ?? null) : null);
+      setStep('done');
+    });
+  }
+
   function checkPassword(): Record<string, string> {
     const errors: Record<string, string> = {};
     if (flow === 'setup') {
@@ -327,14 +414,19 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
   }
 
   const current = typeof step === 'number' ? step : 0;
+  const newPassword = flow === 'password' || flow === 'both';
   const heading = terminal
     ? terminal === 'complete' || terminal === 'completed-elsewhere'
       ? 'Setup is already complete'
-      : 'This link can’t be used'
+      : terminal === 'pending'
+        ? 'This link isn’t active yet'
+        : 'This link can’t be used'
     : step === 'done'
       ? flow === 'setup'
         ? 'Goldmark is ready'
-        : 'You’re all set'
+        : flow === 'password'
+          ? 'Your new password is set'
+          : 'You’re all set'
       : current > 0
         ? headings[flow][current - 1]
         : flow === 'setup'
@@ -346,21 +438,21 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
       ? flow === 'setup'
         ? 'Go to the dashboard'
         : 'Go to Goldmark'
-      : (['Continue', flow === 'setup' ? 'Create admin' : 'Continue', 'Verify', 'Finish'][current - 1] ?? 'Continue');
+      : ((flow === 'password'
+          ? ['Continue', 'Continue', 'Change password']
+          : ['Continue', flow === 'setup' ? 'Create admin' : 'Continue', 'Verify', 'Finish'])[current - 1] ??
+        'Continue');
 
   return (
     <UnauthenticatedLayout wide title={flow === 'setup' ? 'Goldmark setup' : 'Goldmark'}>
       {person && !terminal && step !== 'done' ? (
         <div className={styles.welcome}>
           <Text weight="semibold" size={400}>
-            {flow === 'reset' ? `Set up two-factor again, ${person.displayName}` : `Welcome, ${person.displayName}`}
+            {welcomes[flow].title}
+            {person.displayName}
           </Text>
           <div className={styles.roles}>
-            <span>
-              {flow === 'reset'
-                ? 'An administrator reset your two-factor. Your roles:'
-                : 'You’re invited to Goldmark as'}
-            </span>
+            <span>{welcomes[flow].text}</span>
             {person.roles.map((role) => (
               <Badge key={role} appearance="tint" color="subtle">
                 {role}
@@ -372,7 +464,7 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
       {current > 0 && !terminal ? <WizardProgress steps={labels[flow]} current={current} /> : null}
       <PageHeading focusKey={`${flow}-${String(step)}-${terminal ?? ''}`}>{heading}</PageHeading>
       {failure ? (
-        <ErrorBar error={failure.error} onRetry={failure.retry} message={failureMessage(failure.error)} />
+        <ErrorBar error={failure.error} onRetry={failure.retry} message={failureMessage(failure.error, flow)} />
       ) : null}
       {terminal ? (
         <TerminalState terminal={terminal} />
@@ -431,6 +523,12 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
           ) : null}
           {step === 2 && flow !== 'reset' ? (
             <>
+              {flow === 'password' ? (
+                <Text as="p">
+                  Nothing changes yet: your new password takes effect when you confirm with your authenticator in the
+                  next step.
+                </Text>
+              ) : null}
               <Field label="Username" required={flow === 'setup'} {...fieldProps(fieldErrors.userName)}>
                 <Input
                   autoComplete="username"
@@ -444,7 +542,7 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
                   <Input autoComplete="name" value={displayName} onChange={(_, d) => setDisplayName(d.value)} />
                 </Field>
               ) : null}
-              <Field label="Password" required {...fieldProps(fieldErrors.password)}>
+              <Field label={newPassword ? 'New password' : 'Password'} required {...fieldProps(fieldErrors.password)}>
                 <PasswordInput
                   autoComplete="new-password"
                   value={password}
@@ -454,7 +552,11 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
                   }}
                 />
               </Field>
-              <Field label="Confirm password" required {...fieldProps(fieldErrors.confirmation)}>
+              <Field
+                label={newPassword ? 'Confirm new password' : 'Confirm password'}
+                required
+                {...fieldProps(fieldErrors.confirmation)}
+              >
                 <PasswordInput
                   autoComplete="new-password"
                   value={confirmation}
@@ -476,7 +578,48 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
               </Field>
             </>
           ) : null}
-          {step === 3 && authenticatorKey ? (
+          {step === 3 && flow === 'password' ? (
+            <>
+              <Text as="p">
+                {useRecoveryCode
+                  ? 'Enter one of your recovery codes. Each code works once. Your new password takes effect when the code is checked.'
+                  : 'Enter the 6-digit code from your authenticator app. Your new password takes effect when the code is checked.'}
+              </Text>
+              {useRecoveryCode ? (
+                <Field
+                  label="Recovery code"
+                  validationState={recoveryCodeError ? 'error' : 'none'}
+                  {...(recoveryCodeError ? { validationMessage: recoveryCodeError } : {})}
+                >
+                  <Input
+                    className={styles.recoveryCode}
+                    autoComplete="one-time-code"
+                    spellCheck={false}
+                    value={recoveryCode}
+                    readOnly={busy}
+                    onChange={(_, d) => setRecoveryCode(d.value)}
+                  />
+                </Field>
+              ) : (
+                <CodeInput label="6-digit code" value={totp} onChange={setTotp} error={totpError} />
+              )}
+              <div>
+                <Link
+                  as="button"
+                  type="button"
+                  onClick={() => {
+                    setFailure(null);
+                    setTotpError(null);
+                    setRecoveryCodeError(null);
+                    setUseRecoveryCode(!useRecoveryCode);
+                  }}
+                >
+                  {useRecoveryCode ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
+                </Link>
+              </div>
+            </>
+          ) : null}
+          {step === 3 && flow !== 'password' && authenticatorKey ? (
             <AuthenticatorSetup
               keyText={authenticatorKey}
               qrSource={`/api/v1/enrolment/authenticator.svg?v=${qrVersion}`}
@@ -490,7 +633,27 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
             <Notice intent="success">
               {flow === 'setup'
                 ? 'The admin account is ready, with two-factor authentication on. Add other people on the Users & roles page.'
-                : 'Your password and two-factor authentication are set up.'}
+                : flow === 'password'
+                  ? 'You’re signed in.'
+                  : flow === 'both'
+                    ? 'Your new password and two-factor authentication are set up.'
+                    : 'Your password and two-factor authentication are set up.'}
+            </Notice>
+          ) : null}
+          {step === 'done' && recoveryCodesLeft !== null ? (
+            <Notice intent="info">
+              You used a recovery code; {recoveryCodesLeft} {recoveryCodesLeft === 1 ? 'is' : 'are'} left. You can
+              generate new ones on your two-factor page.{' '}
+              <Link
+                href="/account/two-factor"
+                onClick={(event) => {
+                  event.preventDefault();
+                  if (signedInUser) session.signedIn(signedInUser);
+                  navigate('/account/two-factor', { replace: true });
+                }}
+              >
+                Go to your two-factor page
+              </Link>
             </Notice>
           ) : null}
           <Button
@@ -501,6 +664,18 @@ export function EnrolmentPage({ route }: { route: 'setup' | 'link' }) {
           >
             {busy ? 'Checking…' : buttonLabel}
           </Button>
+          {step === 3 && flow === 'password' ? (
+            <Button
+              appearance="subtle"
+              disabled={busy}
+              onClick={() => {
+                setFailure(null);
+                setStep(2);
+              }}
+            >
+              Back
+            </Button>
+          ) : null}
         </form>
       )}
     </UnauthenticatedLayout>
@@ -523,6 +698,12 @@ function TerminalState({ terminal }: { terminal: Terminal }) {
       );
     case 'completed-elsewhere':
       return <Notice intent="info">Setup was completed in another browser. {signIn}</Notice>;
+    case 'pending':
+      return (
+        <Notice intent="info">
+          You’ll get a code by phone or in person once another administrator approves it. Open the link again then.
+        </Notice>
+      );
     default:
       return (
         <>
@@ -545,7 +726,12 @@ function fieldProps(error: string | undefined) {
   return error ? { validationState: 'error' as const, validationMessage: error } : {};
 }
 
-function failureMessage(error: ApiError): string | undefined {
+function failureMessage(error: ApiError, flow: EnrolmentFlow): string | undefined {
+  if (error.code === 'locked' && flow === 'password') {
+    const minutes = typeof error.body.minutes === 'number' ? error.body.minutes : 15;
+    const attempts = typeof error.body.attempts === 'number' ? error.body.attempts : 5;
+    return `This account is locked for ${minutes} minutes after ${attempts} failed attempts. Try again later or ask an administrator to unlock it. This link keeps working until it expires.`;
+  }
   if (error.code === 'locked') {
     return 'This account is locked after too many wrong passwords. Try again later or ask an administrator to unlock it.';
   }

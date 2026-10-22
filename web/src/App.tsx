@@ -28,8 +28,8 @@ function Redirect({ to }: { to: string }) {
 }
 
 /**
- * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite and /reset
- * (their token in the URL fragment). Signed in, inside the app shell: /, /users (Admin only), /audit
+ * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite, /reset and
+ * /password-reset (their token in the URL fragment). Signed in, inside the app shell: /, /users (Admin only), /audit
  * (Admin and Auditor) and /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and
  * back afterwards.
  */
@@ -39,7 +39,9 @@ export function App() {
   const { pathname, search } = useLocation();
 
   if (pathname === '/setup') return <EnrolmentPage route="setup" />;
-  if (pathname === '/invite' || pathname === '/reset') return <EnrolmentPage route="link" />;
+  if (pathname === '/invite' || pathname === '/reset' || pathname === '/password-reset') {
+    return <EnrolmentPage route="link" />;
+  }
 
   if (session.loading) {
     return (

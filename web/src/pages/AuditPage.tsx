@@ -381,13 +381,44 @@ const reasons: Record<string, string> = {
   disabled: 'Account disabled',
   'not-set-up': 'Account not set up yet',
   'two-factor-reset': 'Two-factor was reset',
+  'password-reset-pending': 'Password reset pending',
+  'recovery-setting-removed': 'The recovery setting was removed, and Goldmark restarted',
   'unknown-user': 'Unknown username (the name typed is not recorded)',
 };
 const methods: Record<string, string> = {
   authenticator: 'Password and authenticator code',
   'recovery-code': 'Password and recovery code',
 };
-const purposes: Record<string, string> = { invitation: 'Invitation', 'two-factor-reset': 'Two-factor reset' };
+// A link's purpose as stored (link entries) and as named in request entries (`for`).
+const purposes: Record<string, string> = {
+  Invitation: 'Invitation',
+  TwoFactorReset: 'Two-factor reset',
+  PasswordReset: 'Password reset',
+  CombinedReset: 'Password and two-factor reset',
+  invitation: 'Invitation',
+  'two-factor-reset': 'Two-factor reset',
+  'password-reset': 'Password reset',
+  'combined-reset': 'Password and two-factor reset',
+};
+const confirmations: Record<string, string> = {
+  'authenticator-code': 'Authenticator code',
+  'recovery-code': 'Recovery code',
+  'new-authenticator': 'New authenticator',
+};
+const approvals: Record<string, string> = { requested: 'Requested', 'only-admin': 'Not needed: only one Admin' };
+// Who issued a link that no account issued, or whose issuer was removed (DEC-042).
+const issuers: Record<string, string> = {
+  'server-setting': 'The recovery setting on the server',
+  'removed-account': 'A removed account',
+};
+
+function yesNo(value: unknown): string {
+  return value === true ? 'Yes' : value === false ? 'No' : text(value);
+}
+
+function utc(value: unknown): string {
+  return typeof value === 'string' ? `${formatUtc(value)} UTC` : text(value);
+}
 
 function text(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -469,6 +500,12 @@ function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]
 
   for (const [key, value] of Object.entries(details)) {
     if (shown.has(key)) continue;
+    if (key === 'approvedBy' && value === null) {
+      // Approval wasn't needed: one Admin, or the recovery setting (DEC-042).
+      add(key, 'Approved by', details.issuedBy === 'server-setting' ? 'Not needed' : 'Not needed: only one Admin');
+      continue;
+    }
+    if (value === null) continue;
     switch (key) {
       case 'reason':
         add(key, 'Reason', reasons[text(value)] ?? text(value));
@@ -486,10 +523,36 @@ function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]
         add(key, 'Roles', text(value));
         break;
       case 'expiresAt':
-        add(key, 'Link expires', typeof value === 'string' ? `${formatUtc(value)} UTC` : text(value));
+      case 'linkExpiresAt':
+        add(key, 'Link expires', utc(value));
         break;
       case 'purpose':
+      case 'for':
         add(key, 'For', purposes[text(value)] ?? text(value));
+        break;
+      case 'twoFactorToo':
+        add(key, 'Two-factor reset too', yesNo(value));
+        break;
+      case 'confirmedWith':
+        add(key, 'Confirmed with', confirmations[text(value)] ?? text(value));
+        break;
+      case 'issuedBy':
+        add(key, 'Link issued by', issuers[text(value)] ?? text(value));
+        break;
+      case 'approvedBy':
+        add(key, 'Approved by', text(value));
+        break;
+      case 'approval':
+        add(key, 'Approval', approvals[text(value)] ?? text(value));
+        break;
+      case 'askedBy':
+        add(key, 'Asked by', text(value));
+        break;
+      case 'accountRemoved':
+        add(key, 'Account removed', yesNo(value));
+        break;
+      case 'otherSessionsEnded':
+        add(key, 'Other sessions ended', text(value));
         break;
       case 'triesLeft':
         add(key, 'Tries left', text(value));

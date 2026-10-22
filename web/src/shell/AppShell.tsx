@@ -1,6 +1,7 @@
 import {
   Avatar,
   Button,
+  CounterBadge,
   Menu,
   MenuDivider,
   MenuGroup,
@@ -15,15 +16,21 @@ import {
   NavItem,
   NavSectionHeader,
   Text,
+  Toast,
+  ToastTitle,
+  Toaster,
   Tooltip,
   makeStyles,
   mergeClasses,
   tokens,
+  useId,
+  useToastController,
 } from '@fluentui/react-components';
 import {
   BoardRegular,
   ChevronDownRegular,
   DocumentBulletListClockRegular,
+  KeyRegular,
   NavigationRegular,
   PeopleRegular,
   ShieldCheckmarkRegular,
@@ -33,11 +40,12 @@ import {
 } from '@fluentui/react-icons';
 import { useEffect, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 
-import { ApiError } from '../api';
+import { api, ApiError } from '../api';
 import { usePreferences } from '../preferences';
 import { followLink, navigate, useLocation } from '../router';
 import { canReadAudit, isAdmin, useSession } from '../session';
 import { ErrorBar } from '../ui/common';
+import { ChangePasswordDialog } from './ChangePasswordDialog';
 
 const wideQuery = '(min-width: 1100px)';
 
@@ -96,6 +104,10 @@ const useStyles = makeStyles({
     gap: tokens.spacingVerticalXXS,
   },
   railItem: { width: '40px', height: '40px', minWidth: '40px' },
+  // The count of requests to approve (DEC-042 item 9): after the label, or on the rail's icon.
+  navContent: { flexGrow: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  railIcon: { position: 'relative', display: 'inline-flex' },
+  railCount: { position: 'absolute', top: '-6px', right: '-10px' },
   railCurrent: { backgroundColor: tokens.colorBrandBackground2, color: tokens.colorBrandForeground2 },
   main: {
     flexGrow: 1,
@@ -121,6 +133,43 @@ interface NavEntry {
   group: string;
   path: string;
   icon: ReactElement;
+  /** Requests waiting for this Admin's approval (Users & roles only). */
+  count?: number;
+}
+
+/** Sent by Users & roles after it changes or reloads the list, so the nav count follows at once. */
+export const approvalsChanged = 'goldmark:approvals-changed';
+
+/**
+ * The requests this Admin could approve (DEC-042 item 9; Goldmark sends no email): read when a page
+ * opens and after Users & roles changes something. Never on a timer: every request counts as activity,
+ * so polling would keep an idle Admin's session from ending after Goldmark:Auth:SessionIdleMinutes (a
+ * side agent's note). A failed read leaves the last count.
+ */
+function useApprovals(enabled: boolean, pathname: string): number {
+  const [waiting, setWaiting] = useState(0);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    const refresh = () => {
+      api<{ waiting: number }>('GET', '/api/v1/users/approvals')
+        .then(({ data }) => {
+          if (!cancelled) setWaiting(data.waiting);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    window.addEventListener(approvalsChanged, refresh);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(approvalsChanged, refresh);
+    };
+  }, [enabled, pathname]);
+  return enabled ? waiting : 0;
+}
+
+function countLabel(label: string, count: number): string {
+  return `${label}, ${count} ${count === 1 ? 'request needs' : 'requests need'} your approval`;
 }
 
 /** True at 1100 px and wider: the inline navigation and the wide page layouts (DEC-039). */
@@ -149,7 +198,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const wide = useWide();
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [signOutFailure, setSignOutFailure] = useState<ApiError | null>(null);
+  const [changingPassword, setChangingPassword] = useState(false);
+  const accountButtonId = useId('account-menu');
+  const toasterId = useId('shell-toaster');
+  const { dispatchToast } = useToastController(toasterId);
   const user = session.user;
+  const approvals = useApprovals(isAdmin(user), pathname);
+
+  const closeChangePassword = () => {
+    setChangingPassword(false);
+    // Focus goes back where the dialog was opened from.
+    document.getElementById(accountButtonId)?.focus();
+  };
 
   const signOut = () => {
     setSignOutFailure(null);
@@ -163,7 +223,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
     ...(isAdmin(user)
-      ? [{ value: 'users', label: 'Users & roles', group: 'Administration', path: '/users', icon: <PeopleRegular /> }]
+      ? [
+          {
+            value: 'users',
+            label: 'Users & roles',
+            group: 'Administration',
+            path: '/users',
+            icon: <PeopleRegular />,
+            count: approvals,
+          },
+        ]
       : []),
     ...(canReadAudit(user)
       ? [
@@ -214,8 +283,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   href={entry.path}
                   icon={entry.icon}
                   onClick={(event) => go(event, entry.path)}
+                  {...(entry.count ? { 'aria-label': countLabel(entry.label, entry.count) } : {})}
                 >
-                  {entry.label}
+                  <span className={styles.navContent}>
+                    {entry.label}
+                    {entry.count ? <CounterBadge aria-hidden count={entry.count} color="brand" size="medium" /> : null}
+                  </span>
                 </NavItem>
               ))}
             </div>
@@ -260,6 +333,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <MenuTrigger disableButtonEnhancement>
             <Button
+              id={accountButtonId}
               appearance="subtle"
               aria-label={`Account: ${user?.displayName ?? ''}`}
               icon={<ChevronDownRegular />}
@@ -276,6 +350,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <Text size={200}>{user?.userName}</Text>
                 </MenuGroupHeader>
               </MenuGroup>
+              <MenuItem icon={<KeyRegular />} aria-haspopup="dialog" onClick={() => setChangingPassword(true)}>
+                Change password…
+              </MenuItem>
               <MenuItem icon={<ShieldCheckmarkRegular />} onClick={() => navigate('/account/two-factor')}>
                 Two-factor authentication
               </MenuItem>
@@ -303,12 +380,32 @@ export function AppShell({ children }: { children: ReactNode }) {
           <>
             <nav className={styles.rail} aria-label="Main">
               {entries.map((entry) => (
-                <Tooltip key={entry.value} content={entry.label} relationship="label" positioning="after">
+                <Tooltip
+                  key={entry.value}
+                  content={entry.count ? countLabel(entry.label, entry.count) : entry.label}
+                  relationship="label"
+                  positioning="after"
+                >
                   <Button
                     as="a"
                     href={entry.path}
                     appearance="subtle"
-                    icon={entry.icon}
+                    icon={
+                      entry.count ? (
+                        <span className={styles.railIcon}>
+                          {entry.icon}
+                          <CounterBadge
+                            aria-hidden
+                            className={styles.railCount}
+                            count={entry.count}
+                            color="brand"
+                            size="small"
+                          />
+                        </span>
+                      ) : (
+                        entry.icon
+                      )
+                    }
                     aria-current={selected === entry.value ? 'page' : undefined}
                     className={mergeClasses(styles.railItem, selected === entry.value && styles.railCurrent)}
                     onClick={(event) => go(event, entry.path)}
@@ -330,6 +427,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+      {changingPassword ? (
+        <ChangePasswordDialog
+          onClose={closeChangePassword}
+          onChanged={() => {
+            closeChangePassword();
+            dispatchToast(
+              <Toast>
+                <ToastTitle>Password changed. You’re signed out on your other devices.</ToastTitle>
+              </Toast>,
+              { intent: 'success' },
+            );
+          }}
+        />
+      ) : null}
+      <Toaster toasterId={toasterId} position="bottom-end" />
     </div>
   );
 }

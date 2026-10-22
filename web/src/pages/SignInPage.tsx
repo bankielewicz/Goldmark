@@ -10,6 +10,12 @@ const useStyles = makeStyles({
   form: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalM },
   links: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: tokens.spacingHorizontalS },
   monoInput: { fontFamily: tokens.fontFamilyMonospace, letterSpacing: '0.1em' },
+  caption: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase200,
+    lineHeight: tokens.lineHeightBase200,
+    color: tokens.colorNeutralForeground3,
+  },
 });
 
 type Step = 'credentials' | 'code' | 'recovery';
@@ -150,6 +156,10 @@ export function SignInPage() {
               ? 'Sign in'
               : 'Verify'}
         </Button>
+        {step === 'credentials' ? (
+          // Text, not a link: there is no self-service reset, and Goldmark sends no email (DEC-042).
+          <p className={styles.caption}>Forgot your password? Ask an administrator to reset it.</p>
+        ) : null}
         {step !== 'credentials' ? (
           <div className={styles.links}>
             <Link

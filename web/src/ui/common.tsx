@@ -323,10 +323,13 @@ export function PasswordChecklist({
   password,
   confirmation,
   common,
+  checkedWhen = 'continue',
 }: {
   password: string;
   confirmation: string;
   common: boolean | null;
+  /** When the server checks the common-password rule: on the step's Continue, or a dialog's save. */
+  checkedWhen?: 'continue' | 'save';
 }) {
   const styles = useStyles();
   const length: RuleStatus =
@@ -335,7 +338,9 @@ export function PasswordChecklist({
   const rules: [string, RuleStatus][] = [
     ['12 to 128 characters', length],
     [
-      common === null ? 'Not a commonly used password (checked when you continue)' : 'Not a commonly used password',
+      common === null
+        ? `Not a commonly used password (checked when you ${checkedWhen})`
+        : 'Not a commonly used password',
       common === null ? 'pending' : common ? 'fail' : 'pass',
     ],
     ['Matches the confirmation', matches],
