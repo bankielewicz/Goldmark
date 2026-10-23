@@ -78,12 +78,15 @@ upgrade, the values in the existing settings file are the defaults, and an optio
 
 What it does, in order:
 
-1. Checks what is already there before changing anything: an existing data folder, its five folders and the
-   settings file must be owned by Administrators, SYSTEM, you or the installed service's account, and none may be
-   a link. Every user may create folders in `%ProgramData%`, and settings someone else wrote could send your SQL
-   administrator's password to their server. The program folder must be Goldmark's own, or empty.
+1. Checks what is already there before changing anything. An existing data folder, its five folders and the
+   settings file must be owned by Administrators, SYSTEM, you or the service's account, and none may be a link.
+   Nobody else may change the settings folder or file, nor `keys`, `tls`, `credentials` or `logs` (the service's
+   account may change those four). Every user may create folders in `%ProgramData%`, and settings someone else
+   could write could send your SQL administrator's password to their server. The program folder must be Goldmark's
+   own or empty, and apart from the data folder: an upgrade replaces it whole.
 2. Stops the service if it runs (an upgrade), replaces the program folder with the new one (files the new
-   release doesn't have don't stay behind), and creates or updates the service: start
+   release doesn't have don't stay behind; only SYSTEM and Administrators may change it, so keep it in a folder
+   ordinary users can't rename things in, such as `%ProgramFiles%`), and creates or updates the service: start
    delayed-automatic, as the service account (never LocalSystem, not even for a moment), the environment
    variable `Goldmark__SettingsFile`, and restart after a crash (after a minute, twice, then not again that day).
 3. Creates the data folder and its folders, owned by Administrators and reachable by SYSTEM, Administrators and the service account only, with
@@ -161,8 +164,10 @@ gMSA's password rotates itself.
 & 'C:\Install\Goldmark\Rotate-GoldmarkCredentials.ps1'   # asks for the SQL administrator's password if needed
 ```
 
-It runs `rotate-db-credentials` (a new password, the file before the login, audited as System) and restarts the
-service, which encrypts the new file to itself.
+It finds the service's folders (or takes `-DataDirectory` and `-InstallDirectory`), runs `rotate-db-credentials`
+(a new password, the file before the login, audited as System), restarts the service, which encrypts the new file
+to itself, and waits until it is ready; if it isn't, it prints why and exits 1. Only one rotation or
+`bootstrap-db` changes the logins at a time; another is refused with nothing changed.
 
 ## Emergency Admin: the recovery setting
 
@@ -193,7 +198,9 @@ Back up, together: the database, `%ProgramData%\Goldmark` (`settings`, `keys`, `
 & 'C:\Install\Goldmark\Uninstall-Goldmark.ps1' -RemoveData  # deletes %ProgramData%\Goldmark too
 ```
 
-The database is never dropped; a DBA does that.
+Both find the service's own program and data folders, unless you give `-InstallDirectory` or `-DataDirectory`.
+The database is never dropped; a DBA does that. To install again with data kept in a folder other than the
+default, give that `-DataDirectory`.
 
 ## Checking a gMSA by hand
 

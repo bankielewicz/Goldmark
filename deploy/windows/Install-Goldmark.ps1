@@ -131,15 +131,33 @@ function Get-AccountSid([string]$Name) {
     catch { return $null }
 }
 
+function Get-AccountName([Security.Principal.SecurityIdentifier]$Sid) {
+    try { return $Sid.Translate([Security.Principal.NTAccount]).Value } catch { return $Sid.Value }
+}
+
+# Rights that let someone change a file or folder, or what is in it: write and append data, write attributes and
+# extended attributes, delete (also children), change permissions, take ownership, and GENERIC_ALL/GENERIC_WRITE,
+# which inherited entries such as CREATOR OWNER carry and no FileSystemRights name matches.
+$WriteRights = 0x500D0156
+
 # Why an existing file or folder can't be trusted, or $null (Codex on #39). Every user may create folders in
-# ProgramData, so a data folder someone else made could hold settings that send your SQL administrator's password to
-# their server, or keys they know. This installer makes Administrators the owner of what it creates.
-function Get-UntrustedReason([string]$Path, [string[]]$Owners) {
+# ProgramData, so a data folder someone else made, or one that lets others change it, could hold settings that send
+# your SQL administrator's password to their server, or keys they know. This installer makes Administrators the owner
+# of what it creates. With -Writers, only those accounts may change it.
+function Get-UntrustedReason([string]$Path, [string[]]$Owners, [string[]]$Writers = $null) {
     if ((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return "$Path is a link" }
-    $owner = (Get-Acl -LiteralPath $Path).GetOwner([Security.Principal.SecurityIdentifier])
-    if ($Owners -contains $owner.Value) { return $null }
-    $name = try { $owner.Translate([Security.Principal.NTAccount]).Value } catch { $owner.Value }
-    return "$Path is owned by $name"
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier])
+    if ($Owners -notcontains $owner.Value) { return "$Path is owned by $(Get-AccountName $owner)" }
+    if ($null -eq $Writers) { return $null }
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        $bits = [int64]$rule.FileSystemRights.value__
+        if ($bits -lt 0) { $bits += 0x100000000 }
+        if ($rule.AccessControlType -eq 'Allow' -and ($bits -band $WriteRights) -and $Writers -notcontains $rule.IdentityReference.Value) {
+            return "$Path lets $(Get-AccountName $rule.IdentityReference) change it"
+        }
+    }
+    return $null
 }
 
 # Only what its folder grants, and owned by Administrators, so any administrator's later run trusts it.
@@ -309,25 +327,42 @@ if ($existingService -and $registered) {
     $SettingsFile = Join-Path $DataDirectory 'settings\goldmark.json'
 }
 
-# What was there before, only if Administrators, SYSTEM, you or the installed service's account made it.
-$owners = @('S-1-5-18', 'S-1-5-32-544', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
-if ($existingService -and (Get-AccountSid $existingService.StartName)) { $owners += (Get-AccountSid $existingService.StartName).Value }
+# What was there before, only if Administrators, SYSTEM, you or the service's account made it, and nobody else may
+# change it: the settings only Administrators, SYSTEM and you; the other folders the service's account too, the
+# installed one, the one given or NT SERVICE\Goldmark (whose SID Windows derives from the name, installed or not).
+$administrators = @('S-1-5-18', 'S-1-5-32-544', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+$serviceSids = @()
+if ($existingService -and (Get-AccountSid $existingService.StartName)) { $serviceSids += (Get-AccountSid $existingService.StartName).Value }
+if ($BoundNames -contains 'ServiceAccount' -and (Get-AccountSid $ServiceAccount)) { $serviceSids += (Get-AccountSid $ServiceAccount).Value }
+$virtualSid = (& sc.exe showsid $ServiceName | Where-Object { $_ -match 'SERVICE SID:\s*(S-[0-9-]+)' } | Select-Object -First 1) -replace '.*SERVICE SID:\s*', ''
+if ($virtualSid) { $serviceSids += $virtualSid.Trim() }
 if (Test-Path -LiteralPath $DataDirectory) {
     $reasons = @()
-    foreach ($path in @($DataDirectory, $SettingsFile) + @('settings', 'keys', 'tls', 'credentials', 'logs' | ForEach-Object { Join-Path $DataDirectory $_ })) {
-        if (Test-Path -LiteralPath $path) {
-            $reason = Get-UntrustedReason $path $owners
+    $checks = @(@{ Path = $DataDirectory; Writers = $null }, @{ Path = $SettingsFile; Writers = $administrators },
+        @{ Path = (Join-Path $DataDirectory 'settings'); Writers = $administrators })
+    foreach ($folder in 'keys', 'tls', 'credentials', 'logs') { $checks += @{ Path = (Join-Path $DataDirectory $folder); Writers = ($administrators + $serviceSids) } }
+    foreach ($check in $checks) {
+        if (Test-Path -LiteralPath $check.Path) {
+            $reason = Get-UntrustedReason $check.Path ($administrators + $serviceSids) $check.Writers
             if ($reason) { $reasons += $reason }
         }
     }
     if ($reasons.Count -gt 0) {
         Fail ("$DataDirectory can't be trusted, so nothing in it was used and nothing was changed: $($reasons -join '; '). " +
-            'If an administrator made it, make Administrators its owner (icacls <folder> /setowner *S-1-5-32-544 /T); otherwise remove it, or choose another -DataDirectory.')
+            'If an administrator made it, make Administrators its owner (icacls <folder> /setowner *S-1-5-32-544 /T) and remove the other permissions; ' +
+            "if an account named is Goldmark's own service account, run this again with -ServiceAccount; otherwise remove the folder, or choose another -DataDirectory.")
     }
 }
 
-# The program folder is replaced whole on an upgrade, so it must be Goldmark's own or empty.
+# The program folder is replaced whole on an upgrade, so it must be Goldmark's own or empty, and apart from the data.
 $installFull = [IO.Path]::GetFullPath($InstallDirectory).TrimEnd('\')
+$dataFull = [IO.Path]::GetFullPath($DataDirectory).TrimEnd('\')
+foreach ($programPath in $installFull, "$installFull.new", "$installFull.old") {
+    if ($dataFull -eq $programPath -or $dataFull.StartsWith("$programPath\", [StringComparison]::OrdinalIgnoreCase) -or
+        $programPath.StartsWith("$dataFull\", [StringComparison]::OrdinalIgnoreCase)) {
+        Fail "the data folder $DataDirectory and the program folder $InstallDirectory overlap, and an upgrade replaces the program folder whole: choose separate folders."
+    }
+}
 $sourceFull = (Resolve-Path -LiteralPath $ProgramSource).ProviderPath.TrimEnd('\')
 if ($sourceFull -eq $installFull -or $sourceFull.StartsWith("$installFull\", [StringComparison]::OrdinalIgnoreCase) -or
     $installFull.StartsWith("$sourceFull\", [StringComparison]::OrdinalIgnoreCase)) {
@@ -418,7 +453,19 @@ $staging = "$installFull.new"
 $previous = "$installFull.old"
 foreach ($leftover in $staging, $previous) { if (Test-Path -LiteralPath $leftover) { Remove-Tree $leftover } }
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $installFull) | Out-Null
-Copy-Item -LiteralPath $sourceFull -Destination $staging -Recurse
+# Only SYSTEM and Administrators may change the program, which runs as the service account (Codex on #39): in a
+# folder ordinary users may write to, they could replace it. Set before anything is copied in; Users may read and run it.
+New-Item -ItemType Directory -Path $staging | Out-Null
+$programAcl = New-Object Security.AccessControl.DirectorySecurity
+$programAcl.SetAccessRuleProtection($true, $false)
+$inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+foreach ($entry in @(@('S-1-5-18', 'FullControl'), @('S-1-5-32-544', 'FullControl'), @('S-1-5-32-545', 'ReadAndExecute'))) {
+    $programAcl.AddAccessRule((New-Object Security.AccessControl.FileSystemAccessRule(
+        (New-Object Security.Principal.SecurityIdentifier $entry[0]), $entry[1], $inherit, [Security.AccessControl.PropagationFlags]::None, 'Allow')))
+}
+$programAcl.SetOwner((New-Object Security.Principal.SecurityIdentifier 'S-1-5-32-544'))
+Set-Acl -LiteralPath $staging -AclObject $programAcl
+Copy-Item -Path (Join-Path $sourceFull '*') -Destination $staging -Recurse
 if (Test-Path -LiteralPath $installFull) { Rename-Tree $installFull (Split-Path -Leaf $previous) }
 Rename-Tree $staging (Split-Path -Leaf $installFull)
 if (Test-Path -LiteralPath $previous) { Remove-Tree $previous }
@@ -490,7 +537,12 @@ $operatorKey = if ($CertificatePath) { Copy-Private 'KeyPath' $KeyPath (Join-Pat
 Set-Setting $settings 'Goldmark', 'Https', 'CertificatePath' $operatorCertificate
 Set-Setting $settings 'Goldmark', 'Https', 'KeyPath' $operatorKey
 Set-Setting $settings 'Goldmark', 'Logging', 'Directory' (Join-Path $DataDirectory 'logs')
-# The recovery setting (DEC-042 item 6), Goldmark:Auth, is kept like the rest; set it by editing this file and restarting.
+# Passwords never belong in this file (DEC-043 item 5), and these settings have no use here; an older or hand-edited
+# file may hold them (Codex on #39). The recovery setting (DEC-042 item 6), Goldmark:Auth, is kept like the rest.
+foreach ($obsolete in 'Database:User', 'Database:Password', 'Migration:User', 'Migration:Password', 'Migration:CredentialFile',
+    'Bootstrap:AdminPassword', 'Bootstrap:AdminCredentialFile') {
+    Set-Setting $settings (@('Goldmark') + $obsolete.Split(':')) $null
+}
 Step "Settings: $SettingsFile"
 $settings | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $SettingsFile -Encoding UTF8
 Set-PrivateFile $SettingsFile
@@ -529,7 +581,7 @@ for ($i = 0; $i -lt 90 -and $status -ne 200; $i++) {
 if ($status -ne 200) {
     # Why: a refusal in the Application log, and the end of the log file without the two logged secrets.
     $refusal = Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $starting } -ErrorAction SilentlyContinue |
-        Where-Object { $_.ProviderName -eq $ServiceName } | Select-Object -First 1
+        Where-Object { $_.ProviderName -eq $ServiceName -and $_.Id -in 2, 3 } | Select-Object -First 1
     if ($refusal) { Write-Host "Application log, source Goldmark (event $($refusal.Id)):"; Write-Host $refusal.Message }
     $log = Get-ChildItem (Join-Path $DataDirectory 'logs') -Filter 'goldmark-*.json' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime | Select-Object -Last 1
     if ($log) {

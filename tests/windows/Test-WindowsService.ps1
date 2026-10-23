@@ -12,8 +12,8 @@ SQL Server and checks the "Done when" items that only Windows can show. Run elev
    invalid setting; each is written to the Application log, and Windows doesn't restart it. A group's user in
    another database stops it too, until that finding is accepted.
 3. Uninstall keeps the data.
-4. A data folder that is a link is refused. A SQL login: the service encrypts its credential file to itself;
-   rotation; uninstall with the data.
+4. Data folders the installer can't trust are refused (a link, settings others may change, inside the program
+   folder). A SQL login: the service encrypts its credential file to itself; rotation; uninstall with the data.
 Everything it creates (three GoldmarkSmoke* databases, their logins, a local group and a SQL administrator login
 for step 4, the folders under -Root) is removed at the end. The SQL Server instance must already present a
 certificate Goldmark can pin (tests/windows/Set-SqlTestCertificate.ps1).
@@ -184,6 +184,13 @@ try {
         (Sql "SELECT COUNT(*) FROM sys.extended_properties WHERE name = N'goldmark:managed' AND CAST(value AS nvarchar(64)) = N'migration-login';" $databases[0]) -eq 0
     }
     Check 'Windows restarts the service after a crash' { (& sc.exe qfailure Goldmark | Out-String) -match 'RESTART' }
+    Check 'only SYSTEM and Administrators may change the program folder (owned by Administrators, inheritance off)' {
+        $acl = Get-Acl $program
+        $writers = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object {
+                $_.AccessControlType -eq 'Allow' -and ($_.FileSystemRights -band [Security.AccessControl.FileSystemRights]'WriteData, AppendData, Delete, ChangePermissions, TakeOwnership') })
+        $acl.AreAccessRulesProtected -and $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -eq 'S-1-5-32-544' -and
+        -not ($writers | Where-Object { $_.IdentityReference.Value -notin 'S-1-5-18', 'S-1-5-32-544' })
+    }
     Check 'the service can read its settings but not change them' {
         $sid = (New-Object Security.Principal.NTAccount $account).Translate([Security.Principal.SecurityIdentifier])
         $rules = @((Get-Acl (Join-Path $data1 'settings')).GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]) | Where-Object { $_.IdentityReference -eq $sid })
@@ -283,9 +290,12 @@ try {
     Write-Host '== 3. Uninstall keeps the data'
     $processId = (Get-CimInstance Win32_Service -Filter "Name='Goldmark'").ProcessId
     $stopping = Get-Date
-    $null = & (Join-Path $unpacked 'Uninstall-Goldmark.ps1') -InstallDirectory $program -DataDirectory $data1
+    # No folders given: the uninstaller reads the service's own (Codex on #39).
+    $null = & (Join-Path $unpacked 'Uninstall-Goldmark.ps1')
     Write-Host "      (the process exited $([int]((Get-Date) - $stopping).TotalSeconds) s after the stop began; it was $processId)"
-    Check 'the service is gone and the data stays' { -not (Get-Service Goldmark -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $data1 'keys')) }
+    Check 'the service and its program folder are gone, found without parameters, and the data stays' {
+        -not (Get-Service Goldmark -ErrorAction SilentlyContinue) -and -not (Test-Path $program) -and (Test-Path (Join-Path $data1 'keys'))
+    }
 
     Check 'no unhandled .NET exception in Goldmark.Api.exe since the install (Application log)' {
         -not (Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -ErrorAction SilentlyContinue |
@@ -304,6 +314,19 @@ try {
         -not (Get-Service Goldmark -ErrorAction SilentlyContinue)
     }
     [IO.Directory]::Delete($linked)
+    # An administrator's folder whose settings others may change (Codex on #39, round 2).
+    $wide = Join-Path $Root 'data-wide'
+    New-Item -ItemType Directory -Force -Path (Join-Path $wide 'settings') | Out-Null
+    '{"Goldmark": {"Database": {"Host": "attacker.invalid"}}}' | Set-Content -Path (Join-Path $wide 'settings\goldmark.json')
+    & icacls.exe (Join-Path $wide 'settings') /grant '*S-1-5-32-545:(OI)(CI)M' | Out-Null
+    Check 'a data folder whose settings ordinary users may change is refused, before anything changes' {
+        (Install $wide @{ Database = 'GoldmarkSmokeNever'; Authentication = 'Windows'; AdminAuthentication = 'Windows' }) -ne 0 -and
+        -not (Get-Service Goldmark -ErrorAction SilentlyContinue)
+    }
+    Check 'a data folder inside the program folder is refused, before anything changes' {
+        (Install (Join-Path $program 'data') @{ Database = 'GoldmarkSmokeNever'; Authentication = 'Windows'; AdminAuthentication = 'Windows' }) -ne 0 -and
+        -not (Get-Service Goldmark -ErrorAction SilentlyContinue) -and -not (Test-Path $program)
+    }
 
     Sql "CREATE LOGIN [$adminLogin] WITH PASSWORD = N'$adminPassword', CHECK_POLICY = OFF; ALTER SERVER ROLE sysadmin ADD MEMBER [$adminLogin];" | Out-Null
     $secure = ConvertTo-SecureString $adminPassword -AsPlainText -Force
@@ -319,7 +342,8 @@ try {
     Check 'the credentials folder is owner-only' { Private-Folder (Join-Path $data2 'credentials') }
     $before = (Get-Content -Raw $runtimeFile | ConvertFrom-Json).password.encrypted
     Check 'rotation finishes and restarts the service' {
-        $null = & (Join-Path $unpacked 'Rotate-GoldmarkCredentials.ps1') -NonInteractive -SqlAdminPassword $secure -DataDirectory $data2 -InstallDirectory $program
+        # No folders given: the service's own are used; the script waits for readiness itself.
+        $null = & (Join-Path $unpacked 'Rotate-GoldmarkCredentials.ps1') -NonInteractive -SqlAdminPassword $secure
         $LASTEXITCODE -eq 0 -and (Ready $data2)
     }
     Check 'the new password is in the file, encrypted again, and the rotation is audited' {

@@ -1646,6 +1646,10 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        into `settings\` (Codex on #39: the originals may sit where others can read them). Owner, 2026-10-22: "A. Copy,
        document renewal (Recommended)": a renewal replaces the copies (installer again with the paths, or copy and
        restart from a renewal script); `docs/ops/windows-service.md` "Renewing certificates".
+     - Codex round 2 on #39 (no owner decision needed, each a tightening): the installer trusts what is already in a
+       data folder only if nobody but Administrators, SYSTEM, the installing account and (outside `settings`) the
+       service's account may change it; the program folder lets only SYSTEM and Administrators change it and may not
+       overlap the data folder; `bootstrap-db` and `rotate-db-credentials` share one lock (`goldmark:credentials`).
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**

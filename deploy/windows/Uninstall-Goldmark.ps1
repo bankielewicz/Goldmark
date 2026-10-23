@@ -41,6 +41,20 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     exit 1
 }
 
+# The installed service's own folders, unless given (Codex on #39), read before the service is deleted: its program
+# path and its settings file's data folder.
+$service = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'"
+if ($service) {
+    if (-not $PSBoundParameters.ContainsKey('InstallDirectory') -and $service.PathName) {
+        $InstallDirectory = Split-Path -Parent $service.PathName.Trim('"')
+    }
+    $environment = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" -Name Environment -ErrorAction SilentlyContinue
+    $registered = if ($environment) { @($environment.Environment) | Where-Object { $_ -like 'Goldmark__SettingsFile=*' } | Select-Object -First 1 } else { $null }
+    if (-not $PSBoundParameters.ContainsKey('DataDirectory') -and $registered) {
+        $DataDirectory = Split-Path -Parent (Split-Path -Parent $registered.Substring('Goldmark__SettingsFile='.Length))
+    }
+}
+
 if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
     Write-Host "-- Stopping and deleting the service $ServiceName"
     Stop-GoldmarkService
@@ -57,6 +71,6 @@ if ($RemoveData -and (Test-Path $DataDirectory)) {
     Remove-Folder $DataDirectory
 }
 elseif (Test-Path $DataDirectory) {
-    Write-Host "-- Kept $DataDirectory and the database: installing again picks them up."
+    Write-Host "-- Kept $DataDirectory and the database: installing again picks them up (give -DataDirectory $DataDirectory if it isn't the default)."
 }
 exit 0
