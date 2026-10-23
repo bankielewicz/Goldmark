@@ -1988,3 +1988,47 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     unknown `?tab=` to the CI's own address (`docs/integration/deep-links.md`).
   - The filter panel's collapse button hides it at 1100 px and wider; the toolbar's Filters button brings it
     back.
+
+## DEC-045 Slice 5b: the Types & attributes screen (14)
+
+- **Status.** Approved by the owner on 2026-10-23 ("approved"); branch `slice/05b-types-admin` from
+  `3915b0b`. HANDOFF row 5b: "Admin can manage CI types, attributes and relationship types through the UI"
+  (screen 14; US-10, FR-CM-1, FR-CM-2, FR-IM-1, PRD §9.3 and §9.4).
+- **The owner's answers (2026-10-23, AskUserQuestion; items 1 to 4 before the design handoff).**
+  1. **Custom CI types: "A. Add; delete only if unused (Recommended)".** An Admin creates a type (name,
+     group, icon). A custom type with no CIs can be deleted; built-in types stay locked. Its name, used by
+     the API and links (`/search?type=`), never changes. Rejected: B, add only; C, no custom types.
+  2. **Attributes: "A. Change; delete with confirmation (Recommended)".** Completes DEC-044 item 8: change
+     the label, the required flag and the choices (a choice in use can't be removed); delete a custom
+     attribute after typing its name, with the number of CIs that have a value shown first; its values
+     leave the current CIs and each CI's history keeps them. Built-in attributes are locked; a kind never
+     changes. Rejected: B, delete only unused ones; C, change only.
+  3. **Promoted attributes: "A. Later, with attribute filters (Recommended)".** FR-CM-2's flag, computed
+     column and index wait for the first slice that filters on attribute values (issue #53, unplaced):
+     nothing filters on attributes yet, and the runtime login has no DDL rights, so promotion needs
+     `migrate`. Rejected: B, the flag now, applied by `migrate`; C, a read-only column.
+  4. **Relationship types: "A. View; add and edit custom (Recommended)".** All types listed with their
+     descriptions; an Admin adds custom ones (name, from and to type or any, impact, description), changes
+     a custom one's impact and description, and deletes an unused one. Built-in types are locked.
+     Rejected: B, also change a built-in type's impact; C, view only until slice 6.
+  5. **A custom type that has CIs: "A. Hide a custom type (Recommended)".** After a side agent noted that,
+     with CIs never deleted (retired ones still count), a type's name fixed and a CI's type fixed (DEC-044 item
+     9), a misspelled custom type ("Prnter") with one CI would stay in every list for good: an Admin can hide a
+     custom type. A hidden type leaves the New CI type picker and Search's type filter and moves to a "Hidden"
+     group on screen 14; its CIs keep working and stay in search results; no new CI of it can be created;
+     links naming it still work; "Show again" undoes it; audited, in `/api/v1`. Rejected: B, a display label
+     that can be renamed apart from the fixed name; C, no change (confirm the name at creation).
+  6. **Deleting an attribute in use: "A. Rewrite now, say so (Recommended)".** After a side agent noted that
+     removing the values updates each CI (with system versioning each gets a new `ValidFrom` and `ChangedBy`,
+     moves to the top of Search's "newest changes first", and an edit open on one gets the 412): item 2
+     stands. The values leave every CI in the one change, so each CI's history (and later the change feed)
+     records the removal against the Admin at that moment; the typed confirmation adds "Each of those CIs will
+     show as changed by you.". Rejected: B, the same with the boards' text unchanged; C, the values left
+     stored and ignored (no CI touched; each value would drop out at that CI's next save, credited to whoever
+     saved it, and would need a rule against reusing the name and versioned attribute definitions for US-42).
+  7. **Screens approved: "design canvas has my approval".** The slice-5b canvas
+     https://claude.ai/artifact/FcVKh7SEKGpTH9ev6WeSQK (version 37, `1792788486-fca8`); version 38
+     (`1792789350-e8a1`) adds item 6's sentence. Copied to `docs/design/screens/slice-5b/` with the details
+     settled on the boards (its README).
+- **Design handoff:** `tmp/screen-handoff-slice5b.md` (screen 14, the Administration nav item, screen 16's
+  new entries); the boards came back and were approved (item 7) before any UI code (rule 3).

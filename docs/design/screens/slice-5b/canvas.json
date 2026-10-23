@@ -1,0 +1,68 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-23T21:10:00Z"},
+  "title": "Goldmark slice 5b: Types & attributes",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "designSystems": [],
+  "boards": {
+    "Main.dc.html": {"x": 0, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · VirtualMachine, as an Admin"},
+    "TypesDark.dc.html": {"x": 1520, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · dark · VirtualMachine"},
+    "TypesServer.dc.html": {"x": 3040, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · Server, built-in only, with the locked-action Tooltip"},
+    "TypesPrinter.dc.html": {"x": 4560, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · custom type Printer, its More actions menu"},
+    "TypesPrinterUsed.dc.html": {"x": 6080, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · Printer with CIs: Delete type disabled, with the reason"},
+    "TypesEmpty.dc.html": {"x": 7600, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · a type with no attributes"},
+    "TypesNoMatch.dc.html": {"x": 9120, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · filter with no match"},
+    "TypesLoading.dc.html": {"x": 10640, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · loading"},
+    "TypesError.dc.html": {"x": 12160, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · error"},
+    "Types1024.dc.html": {"x": 13680, "y": 0, "w": 1024, "h": 768, "title": "14 · CI types · 1024 · the type Combobox"},
+    "TypesHidden.dc.html": {"x": 14784, "y": 0, "w": 1440, "h": 900, "title": "14 · CI types · light · a hidden custom type (Prnter), Show again"},
+
+    "NewType.dc.html": {"x": 0, "y": 1400, "w": 1440, "h": 900, "title": "14 · New CI type panel · light"},
+    "NewTypeError.dc.html": {"x": 1520, "y": 1400, "w": 1440, "h": 900, "title": "14 · New CI type panel · light · errors"},
+    "AddChoices.dc.html": {"x": 3040, "y": 1400, "w": 1440, "h": 900, "title": "14 · Add attribute · light · List of choices"},
+    "AddChoicesDark.dc.html": {"x": 4560, "y": 1400, "w": 1440, "h": 900, "title": "14 · Add attribute · dark · List of choices"},
+    "AddLink.dc.html": {"x": 6080, "y": 1400, "w": 1440, "h": 900, "title": "14 · Add attribute · light · Link to a CI"},
+    "AddErrors.dc.html": {"x": 7600, "y": 1400, "w": 1440, "h": 900, "title": "14 · Add attribute · light · errors"},
+    "EditChoice.dc.html": {"x": 9120, "y": 1400, "w": 1440, "h": 900, "title": "14 · Edit attribute · light · choices in use, the Required hint"},
+    "EditConflict.dc.html": {"x": 10640, "y": 1400, "w": 1440, "h": 900, "title": "14 · Edit attribute · light · changed meanwhile (412)"},
+
+    "DeleteUnused.dc.html": {"x": 0, "y": 2800, "w": 1440, "h": 900, "title": "14 · Delete attribute · light · unused"},
+    "DeleteTyped.dc.html": {"x": 1520, "y": 2800, "w": 1440, "h": 900, "title": "14 · Delete attribute · light · in use, typed confirmation"},
+    "DeleteTypedDark.dc.html": {"x": 3040, "y": 2800, "w": 1440, "h": 900, "title": "14 · Delete attribute · dark · typed confirmation"},
+    "DeleteType.dc.html": {"x": 4560, "y": 2800, "w": 1440, "h": 900, "title": "14 · Delete type · light · Printer"},
+    "HideType.dc.html": {"x": 6080, "y": 2800, "w": 1440, "h": 900, "title": "14 · Hide type · light · Printer, which has CIs"},
+
+    "Rels.dc.html": {"x": 0, "y": 4200, "w": 1440, "h": 1180, "title": "14 · Relationship types · light"},
+    "RelsDark.dc.html": {"x": 1520, "y": 4200, "w": 1440, "h": 1180, "title": "14 · Relationship types · dark"},
+    "NewRel.dc.html": {"x": 3040, "y": 4200, "w": 1440, "h": 1180, "title": "14 · New relationship type panel · light"},
+    "DeleteRel.dc.html": {"x": 4560, "y": 4200, "w": 1440, "h": 1180, "title": "14 · Delete relationship type · light"},
+
+    "Audit.dc.html": {"x": 0, "y": 5880, "w": 1440, "h": 1000, "title": "16 · Audit log · light · \"Custom attribute deleted\" expanded"},
+    "Notes.dc.html": {"x": 1520, "y": 5880, "w": 880, "h": 1240, "title": "Notes · details to approve"},
+
+    "TypesPage.dc.html": {"x": 0, "y": 7600, "w": 1440, "h": 900, "title": "Component · TypesPage (every board above)"},
+    "TypePanel.dc.html": {"x": 1520, "y": 7600, "w": 480, "h": 852, "title": "Component · TypePanel (side panels)"},
+    "Nav.dc.html": {"x": 2080, "y": 7600, "w": 260, "h": 852, "title": "Component · Nav with Types & attributes"},
+    "TopBar.dc.html": {"x": 2420, "y": 7600, "w": 1440, "h": 48, "title": "Component · TopBar"},
+    "AuditPage.dc.html": {"x": 2420, "y": 7768, "w": 1440, "h": 1000, "title": "Component · AuditPage"}
+  },
+  "order": [
+    "Main.dc.html", "TypesDark.dc.html", "TypesServer.dc.html", "TypesPrinter.dc.html", "TypesPrinterUsed.dc.html",
+    "TypesEmpty.dc.html", "TypesNoMatch.dc.html", "TypesLoading.dc.html", "TypesError.dc.html", "Types1024.dc.html", "TypesHidden.dc.html",
+    "NewType.dc.html", "NewTypeError.dc.html", "AddChoices.dc.html", "AddChoicesDark.dc.html", "AddLink.dc.html",
+    "AddErrors.dc.html", "EditChoice.dc.html", "EditConflict.dc.html",
+    "DeleteUnused.dc.html", "DeleteTyped.dc.html", "DeleteTypedDark.dc.html", "DeleteType.dc.html", "HideType.dc.html",
+    "Rels.dc.html", "RelsDark.dc.html", "NewRel.dc.html", "DeleteRel.dc.html",
+    "Audit.dc.html", "Notes.dc.html",
+    "TypesPage.dc.html", "TypePanel.dc.html", "Nav.dc.html", "TopBar.dc.html", "AuditPage.dc.html"
+  ],
+  "notes": {
+    "rowTypes": {"x": 0, "y": -280, "text": "Screen 14 · Types & attributes · CI types tab", "kind": "title1", "maxW": 16224},
+    "rowPanels": {"x": 0, "y": 1120, "text": "New CI type, Add attribute and Edit attribute panels", "kind": "title1", "maxW": 12080},
+    "rowDelete": {"x": 0, "y": 2520, "text": "Deleting an attribute, deleting or hiding a type", "kind": "title1", "maxW": 7520},
+    "rowRels": {"x": 0, "y": 3920, "text": "Relationship types tab", "kind": "title1", "maxW": 6000},
+    "rowAudit": {"x": 0, "y": 5600, "text": "Audit log entries and the details to approve", "kind": "title1", "maxW": 2400},
+    "rowParts": {"x": 0, "y": 7320, "text": "Components the boards are built from", "kind": "title1", "maxW": 3860}
+  }
+}
