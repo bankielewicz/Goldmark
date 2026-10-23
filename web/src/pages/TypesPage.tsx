@@ -332,7 +332,8 @@ export function TypesPage() {
   const selected =
     types.find((t) => t.name.toLowerCase() === wanted?.toLowerCase()) ?? listGroups(types, '')[0]?.types[0] ?? null;
 
-  const select = (name: string) => navigate(`/types?type=${encodeURIComponent(name)}`);
+  // A click adds to the history; moving with the arrow keys replaces the entry, so Back doesn't step through every type passed.
+  const select = (name: string, replace = false) => navigate(`/types?type=${encodeURIComponent(name)}`, { replace });
   const setTab = (value: string) =>
     navigate(
       value === 'relationships'
@@ -545,7 +546,7 @@ function TypeList({
   groups: { name: string; types: CiType[] }[];
   selected: string | null;
   counts: (name: string) => number | null;
-  onSelect: (name: string) => void;
+  onSelect: (name: string, replace?: boolean) => void;
 }) {
   const styles = useStyles();
   const listId = useId('type-list');
@@ -573,7 +574,7 @@ function TypeList({
     if (next === null) return;
     event.preventDefault();
     const name = flat[next];
-    if (name && name !== selected) onSelect(name);
+    if (name && name !== selected) onSelect(name, true);
   };
 
   return (
@@ -1237,7 +1238,7 @@ function ConfirmDialogs({
             <Button onClick={onClose}>Cancel</Button>
             <Button
               appearance="primary"
-              className={danger ? styles.danger : undefined}
+              className={danger && !blocked && !working ? styles.danger : undefined}
               disabled={blocked || working}
               onClick={() => void confirm()}
             >
