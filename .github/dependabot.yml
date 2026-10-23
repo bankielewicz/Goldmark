@@ -13,6 +13,11 @@ updates:
     groups:
       web-dev-tooling:
         dependency-type: development
+      # react and react-dom must be the same version, or React DOM throws error 527 at load (#43 alone).
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
     ignore:
       # typescript-eslint does not support TypeScript 7 yet (#27; it failed PR #9).
       - dependency-name: typescript

@@ -362,6 +362,7 @@ And for slice 24:
 | #41 Windows installer: changing the service account, or the database authentication, on an upgrade (both refused before anything changes until then; the owner plans post-MVP admin settings for database authentication) | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
+| Dependabot PRs #42 (axe 4.14, Playwright 1.64.1) and #43 (React 19.3.1 without React DOM): axe 4.14 enables Label in Name, which the account button failed; React DOM throws error 527 for any other React version. With them, `RightsAtStartTests` raced on fast runners (main red after #44) | replaced by one PR (owner, 2026-10-23, all "A"): both bumps, the `react` Dependabot group, the account button named "AP, Account: …", the test fixed |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
 
 Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
