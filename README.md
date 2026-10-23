@@ -1,13 +1,15 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slices 1–4b of the MVP: an HTTPS host with health endpoints, a Docker Compose
+> Slices 1–5 of the MVP: an HTTPS host with health endpoints, a Docker Compose
 > deployment with SQL Server 2025 Express or an existing SQL Server 2025, a Windows
 > service with Windows authentication to SQL Server, the
 > baseline database schema with separate migration and runtime logins, audited
-> on every start, and a web UI for first-run setup, sign-in with two-factor
+> on every start, a web UI for first-run setup, sign-in with two-factor
 > authentication, invitations, user roles and the audit log (filters, CSV
-> export, retention). There are no CMDB features yet.
+> export, retention), and the first CMDB features: the built-in CI types,
+> creating, editing, retiring and restoring CIs by hand, search by name and each
+> CI's page. Collectors, relationships, history and impact come later.
 
 Goldmark (a working codename) is a planned self-hosted configuration
 management database (CMDB) for Windows- and VMware-heavy IT estates:
@@ -129,6 +131,16 @@ again; setting it on the app does nothing. An entry's IP address is the one that
 connected to Goldmark: behind a reverse proxy, every entry shows the proxy's address
 until trusted proxies can be configured (#31).
 
+Configuration items (slice 5, DEC-044): Admins and Editors create a CI from
+**Search** (New CI) and edit, retire or restore it on its page; everyone signed in
+can search and read every CI. Retired CIs stay, hidden from search unless "Show
+retired" is on. Links to a CI (`/ci/{id}`) and to a search (`/search?q=…`) are a
+stable contract: [docs/integration/deep-links.md](docs/integration/deep-links.md).
+Goldmark ships the CI types of the PRD (§9.3) with the few attributes it names;
+until the Types & attributes screen (slice 5b), an Admin adds custom attributes
+only through the API (`POST /api/v1/types/{type}/attributes`, signed in from a
+browser, since API tokens come in slice 8).
+
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in
 [deploy/.env.example](deploy/.env.example). Backups are not covered yet (US-60, slice 24).
@@ -183,6 +195,11 @@ dotnet format Goldmark.slnx --verify-no-changes   # lint / format check
 The integration tests start one SQL Server 2025 container (the image pinned in
 `deploy/docker-compose.yml`, with the same TLS entrypoint) and remove it
 afterwards; the first run pulls about 1.5 GB.
+
+The CI list, search and detail have a performance check on 25,000 synthetic CIs
+(NFR-PERF-2; DEC-044): it runs only on request, from the **Performance** workflow's
+"Run workflow" in GitHub Actions (the p95 figures are in the job summary), or
+locally with `GOLDMARK_PERF=1 dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release --filter-class Goldmark.Api.IntegrationTests.PerformanceTests`.
 
 ### Database migrations
 
@@ -251,7 +268,7 @@ it, and ask first if the PRD did not anticipate it.
 ## Repository layout
 
 ```
-src/Goldmark.Api/        ASP.NET Core host: HTTPS, health, logging, SPA hosting, sign-in and users, audit trail, container commands
+src/Goldmark.Api/        ASP.NET Core host: HTTPS, health, logging, SPA hosting, sign-in and users, audit trail, CIs and their types, container commands
 db/migrations/            forward-only schema migrations (DbUp) and their hash manifest
 tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
 tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
@@ -263,7 +280,7 @@ web/                      React + TypeScript + Vite SPA, browser-only; dependenc
 deploy/                   docker-compose.yml (bundled SQL Server), docker-compose.external-sql.yml,
                           .env.example, SQL Server scripts; windows/: the service installer, uninstall,
                           rotation and zip scripts
-docs/                     PRD, decisions, design system and screens, operations and security notes
+docs/                     PRD, decisions, design system and screens, operations, security and integration notes
 ```
 
 Other projects from the PRD's proposed layout (`Goldmark.Core`, `.Data`,

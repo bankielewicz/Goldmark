@@ -277,11 +277,16 @@ export function SearchPage() {
   const apply = useCallback((next: Query) => navigate(pageAddress(next), { replace: true }), []);
 
   const load = useCallback(async () => {
+    // The types first: a link may name a type this Goldmark doesn't have, which the list ignores.
+    if (types === null && typesFailure === null) return;
     const request = ++listRequest.current;
     setFailure(null);
     setMoreFailure(null);
     setLoadingMore(false);
-    const text = apiQuery(query).toString();
+    const known = types
+      ? query.types.filter((t) => types.some((x) => x.name.toLowerCase() === t.toLowerCase()))
+      : query.types;
+    const text = apiQuery({ ...query, types: known }).toString();
     shownQuery.current = text;
     try {
       const { data } = await api<CiPageData>('GET', `/api/v1/cis?${text}`);
@@ -298,14 +303,14 @@ export function SearchPage() {
       // The last list stays under the error (the board), so only the failure is set.
       if (listRequest.current === request) setFailure(asApiError(error));
     }
-  }, [query]);
+  }, [query, types, typesFailure]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // The address changed (Back, a shared link): the box follows it.
-  useEffect(() => setTyped(query.q), [query.q]);
+  // The address changed (Back, a shared link): the box follows it, keeping a space still being typed.
+  useEffect(() => setTyped((current) => (current.trim() === query.q.trim() ? current : query.q)), [query.q]);
 
   // The list updates when typing pauses.
   useEffect(() => {

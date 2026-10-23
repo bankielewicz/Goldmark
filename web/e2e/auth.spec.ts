@@ -2,11 +2,11 @@ import AxeBuilder from '@axe-core/playwright';
 import { createHmac } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
-// Slices 3, 4 and 4a in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
+// Slices 3, 4, 4a and 5 in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
 // completes first-run setup through the API first and passes the administrator's credentials):
-// sign-in with a TOTP code, the app shell, Users & roles, the two-factor page, the audit log and a
-// password reset end to end, each checked with axe in both themes (NFR-A11Y-3) and with no CSP or
-// Trusted Types violation (DEC-037).
+// sign-in with a TOTP code, the app shell, Users & roles, the two-factor page, the audit log, a
+// password reset end to end and the CI search, detail and panel (slice 5), each checked with axe in
+// both themes (NFR-A11Y-3) and with no CSP or Trusted Types violation (DEC-037).
 
 const admin = {
   userName: process.env.GOLDMARK_E2E_ADMIN_USER ?? '',
@@ -76,6 +76,11 @@ async function expectAccessible(page: Page, what: string) {
 async function useScheme(page: Page, scheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme: scheme });
   await page.waitForFunction((wanted) => document.documentElement.style.colorScheme === wanted, scheme);
+}
+
+/** A toast by its title. Fluent repeats the text in an aria-live announcer, so text alone matches twice. */
+function toast(page: Page, title: string) {
+  return page.getByRole('listitem', { name: title, exact: true });
 }
 
 // The newest time step a sign-in in this run used. The server accepts a step once, and only newer
@@ -498,6 +503,89 @@ test.describe('slice 4a screens', () => {
     await expectAccessible(page, 'nav count on the 1024 rail (dark)');
     await page.unroute('**/api/v1/users');
     await page.unroute('**/api/v1/users/approvals');
+  });
+});
+
+test.describe('slice 5 screens', () => {
+  test.use({ reducedMotion: 'reduce' });
+  test.describe.configure({ timeout: 120_000 });
+  test.skip(!admin.userName || !admin.password || !admin.totpKey, 'needs GOLDMARK_E2E_ADMIN_* from compose-smoke.sh');
+
+  test('an administrator searches, creates, edits, retires and restores a CI, and an unknown ID is a friendly page', async ({
+    page,
+  }) => {
+    await recordViolations(page);
+    await signIn(page);
+    const name = `e2e-team-${Date.now()}`;
+
+    // Inventory > Search, from the nav; the top-bar search isn't shown on the page that has its own.
+    await page.getByRole('link', { name: 'Search' }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Search' })).toBeVisible();
+    await expect(page.getByRole('searchbox', { name: 'Search CIs' })).toHaveCount(0);
+    await expectAccessible(page, 'search');
+
+    // New CI: a type, a name, Create; the CI's page opens with its Toast.
+    await page.getByRole('button', { name: 'New CI' }).first().click();
+    const panel = page.getByRole('dialog', { name: 'New CI' });
+    await expect(panel).toBeVisible();
+    await expectAccessible(page, 'New CI panel');
+    await panel.getByRole('combobox', { name: /^Type/ }).click();
+    await page.getByRole('option', { name: 'Team' }).click();
+    await panel.getByRole('textbox', { name: /^Name/ }).fill(name);
+    await panel.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByRole('heading', { level: 1, name })).toBeVisible();
+    await expect(toast(page, `${name} created`)).toBeVisible();
+    await expect(page).toHaveURL(/\/ci\/[0-9a-f-]{36}$/);
+    const ciUrl = page.url();
+    await expectAccessible(page, 'CI detail');
+    await useScheme(page, 'dark');
+    await expectAccessible(page, 'CI detail (dark)');
+
+    // Edit: rename it.
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const edit = page.getByRole('dialog', { name: `Edit ${name}` });
+    await expect(edit).toBeVisible();
+    await expectAccessible(page, 'Edit CI panel (dark)');
+    await edit.getByRole('textbox', { name: /^Name/ }).fill(`${name}-renamed`);
+    await edit.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: `${name}-renamed` })).toBeVisible();
+    await expect(toast(page, 'Changes saved')).toBeVisible();
+
+    // Retire (confirmed), then Restore.
+    await page.getByRole('button', { name: 'Retire…' }).click();
+    const retire = page.getByRole('alertdialog', { name: `Retire ${name}-renamed?` });
+    await expect(retire).toBeVisible();
+    await expectAccessible(page, 'Retire dialog (dark)');
+    await retire.getByRole('button', { name: 'Retire', exact: true }).click();
+    await expect(page.getByText(/^Retired on \d{4}-\d{2}-\d{2} by /)).toBeVisible();
+    await expectAccessible(page, 'retired CI (dark)');
+    await page.getByRole('button', { name: 'Restore' }).first().click();
+    await expect(toast(page, `${name}-renamed restored`)).toBeVisible();
+    await expect(page.getByText(/^Retired on/)).toHaveCount(0);
+
+    // Search by part of its name, in another case; the list is a deep link.
+    await useScheme(page, 'light');
+    await page.goto(`/search?q=${encodeURIComponent(name.toUpperCase())}`);
+    const link = page.getByRole('link', { name: `${name}-renamed` });
+    await expect(link).toBeVisible();
+    await expect(page.getByText(/^1 CI match/)).toBeVisible();
+    await expectAccessible(page, 'search results');
+    await link.click();
+    await expect(page).toHaveURL(ciUrl);
+
+    // An unknown ID, and something that isn't one, get the friendly page with a search box.
+    await page.goto('/ci/0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f99');
+    await expect(page.getByRole('heading', { level: 1, name: 'We can’t find that CI' })).toBeVisible();
+    await expect(page.getByText(/There’s no CI with the ID 0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f99/)).toBeVisible();
+    await expectAccessible(page, 'CI not found');
+    await page.goto('/ci/not-an-id');
+    await expect(page.getByText(/That isn’t a CI ID/)).toBeVisible();
+
+    // The top-bar search opens Search with the text.
+    await page.getByRole('searchbox', { name: 'Search CIs', exact: true }).fill(name);
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp(`/search\\?q=${name}$`));
+    await expect(page.getByRole('link', { name: `${name}-renamed` })).toBeVisible();
   });
 });
 

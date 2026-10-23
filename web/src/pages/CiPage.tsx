@@ -190,10 +190,13 @@ function CiView({ id }: { id: string }) {
     void load();
   }, [load]);
 
+  // "… created" from the New CI panel: once the CI shows, since the Toaster is part of that view.
+  const loaded = ci !== null;
   useEffect(() => {
+    if (!loaded) return;
     const pending = takePendingToast();
     if (pending) toast(pending);
-  }, [toast]);
+  }, [loaded, toast]);
 
   // Only the Attributes tab exists in slice 5: any other ?tab= shows it and the address is corrected.
   const tab = search.get('tab');

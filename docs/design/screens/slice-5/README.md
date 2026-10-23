@@ -47,5 +47,11 @@ In the handoff (`tmp/screen-handoff-slice5.md`) but not drawn: the Changed colum
 the Toasts "… created", "… restored" and "Changes saved", and the panel's "retired while you were editing"
 message. The type icons are stand-ins; the build picks one Fluent UI icon per built-in type.
 
+As built (`web/src/pages/SearchPage.tsx`, `CiPage.tsx`, `web/src/ui/CiPanel.tsx`), the differences from the
+boards: Retire or Restore after someone else changed the CI shows "This CI changed meanwhile" and loads their
+version (the boards' 412 dialog is the panel's); the audit log's CSV column is "Affected" like the screen's; the
+type icons are Fluent UI icons (`web/src/ui/inventory.tsx`); the list is a Fluent `Table` with sortable headers,
+as on screen 16. DEC-044's build notes list the rest.
+
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas, pull the file
 back here first.

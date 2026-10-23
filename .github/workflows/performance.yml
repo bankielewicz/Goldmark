@@ -1,0 +1,36 @@
+# On-demand performance check (NFR-PERF-5; DEC-044 item 7): 25,000 synthetic CIs in SQL Server 2025
+# Express (Testcontainers, the image digest from deploy/docker-compose.yml), then the p95 of the CI
+# list, search and detail against NFR-PERF-2. Run it from the Actions tab ("Run workflow"); the
+# figures land in the job summary, and the job fails over budget. Like CI: a read-only token, no
+# persisted credentials, no secrets, and no event input in any command.
+name: Performance
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  ci-p95:
+    name: CI list, search and detail p95 on 25k CIs (NFR-PERF-2)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore (locked mode; NuGetAudit fails on any known vulnerability)
+        run: dotnet restore Goldmark.slnx --locked-mode
+      - run: dotnet build tests/Goldmark.Api.IntegrationTests -c Release --no-restore
+      - name: Measure (writes the p95 table to the job summary)
+        env:
+          GOLDMARK_PERF: "1"
+        run: dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release --no-build --filter-class Goldmark.Api.IntegrationTests.PerformanceTests

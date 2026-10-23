@@ -1936,3 +1936,26 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       until API tokens (slice 8): "A. Drop the Admin sentence (Recommended)": a type with no attributes shows
       only "This type has no attributes yet." (version 48, `1792760074-a7ec`, the copy kept). Rejected: B, point
       to the coming screen; C, keep the sentence. Slice 5b already follows slice 5 in the plan.
+  11. **Saving a CI through the API: "A. Keep PUT, PATCH later (Recommended)".** After a side agent noted
+      that a script which PUTs only the fields it knows erases the rest (for example a custom attribute
+      added after the script was written), and that the screens send every field: `PUT /api/v1/cis/{id}`
+      stays a full replace (HTTP's meaning; NetBox's PUT), and a partial save, `PATCH` with a JSON Merge
+      Patch body (RFC 7396: a field left out stays, `null` clears it), comes with API tokens in slice 8
+      (issue #48, label `enhancement`). Adding it then is additive under US-54; scripts can't call the API
+      before slice 8. Rejected: B, add PATCH in slice 5 (a second save path before any script can use it);
+      C, make PUT partial (not HTTP's meaning for PUT, and fixed in v1 for good).
+- **Build notes (slice 5, not owner decisions; listed for review).**
+  - A required attribute added to a type that already has CIs is enforced the next time each of them is
+    saved; nothing is migrated.
+  - `PUT /api/v1/cis/{id}` replaces the attribute values: an attribute not sent becomes unset (kept by the
+    owner, item 11). A save that changes nothing writes no version and no audit entry. A link to another CI
+    is checked (exists, not retired, the attribute's type) only when it changes, so retiring a CI never
+    blocks saving the CIs that point at it.
+  - Retire and Restore need If-Match like a change. When someone else changed the CI meanwhile, the page
+    shows "This CI changed meanwhile" and loads their version (the boards' 412 dialog belongs to the panel,
+    whose "Discard mine" and "Review their changes" don't fit a one-click action).
+  - Screen 16's CSV column "Person affected" is "Affected" too, as the screen's column (item 10).
+  - The search page ignores a `type` in a link that this Goldmark doesn't have, and the CI page corrects an
+    unknown `?tab=` to the CI's own address (`docs/integration/deep-links.md`).
+  - The filter panel's collapse button hides it at 1100 px and wider; the toolbar's Filters button brings it
+    back.

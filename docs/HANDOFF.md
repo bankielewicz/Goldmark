@@ -36,7 +36,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
 | 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
-| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff | 18 |
+| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH (#48, DEC-044 item 11) | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff; #48 closed | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression | US-20/21; re-ingest → 0 history rows | — |
 | 11 | pending | `slice/11-provenance` | Provenance, precedence, overrides | US-22, FR-RC-3/6 | 5 (badges, override) |
@@ -129,9 +129,54 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **in
-progress**: built and tested locally on Linux and on a Windows 11 host, PR #39. The decisions are DEC-043, with
-the owner's words; the operator guide is `docs/ops/windows-service.md`.
+Slice **5** (`slice/05-ci-crud`, approved 2026-10-23, DEC-044) is **in progress**: the screens are approved
+(`docs/design/screens/slice-5/`, DEC-044 item 10), built and tested locally. The decisions are DEC-044, with the
+owner's words; the deep-link contract is `docs/integration/deep-links.md`.
+
+**What it adds:**
+- **Migration 0006:** `cmdb.AttributeDef` (an attribute per CI type: name, label, kind, required, choices, linked
+  type), a §9.3 group on `cmdb.CiType`, the 20 built-in types, only the attributes the PRD names, and the 17
+  §9.4 relationship types.
+- **API:** `GET /cis` (name contains `q` in any case, `type`s, `retired`, six orders, an opaque keyset cursor,
+  the total and the count per type on the first page), `GET /cis/{id}` with its ETag, `POST /cis`,
+  `PUT /cis/{id}` (If-Match: 428 without, 412 changed, 409 `retired`), `POST /cis/{id}/retire` and `/restore`;
+  `GET /types`, `POST /types/{type}/attributes` (Admin, add only). New policy `CiEditor` (Admin or Editor).
+  Every change audited in its transaction (`ci.created`, `ci.changed` with the fields' labels, `ci.retired`,
+  `ci.restored`, `type.attribute.added`).
+- **Web:** Search (screen 4) with the type filter and Show retired, the CI page (screen 5, Attributes tab), the
+  New CI / Edit CI panel with all six attribute kinds, the 412 review ("Use mine"), the CI not-found page, the
+  Inventory › Search nav item and the top-bar search. Screen 16's "Person affected" column (and the CSV's)
+  is "Affected": a person, a CI with its type, or a CI type.
+- **Performance:** `SyntheticInventory` (25,000 CIs in the §1.4 proportions) and `PerformanceTests`, run on
+  request by the **Performance** workflow (`workflow_dispatch`), the p95 table in the job summary (DEC-044 item 7).
+
+**For the slices that follow:**
+- A CI's version is its `ValidFrom` (the table is system-versioned), sent as text and compared with
+  `CONVERT(datetime2(7), @stamp, 126)`: Dapper sends a .NET `DateTime` as `datetime`, which loses the precision.
+  SQL Server's 13535 (a transaction older than the row's version) answers 412 too.
+- `Ci.ChangedBy` holds the person's account ID as text; slice 7's `SESSION_CONTEXT` should write the same.
+- Names are matched and ordered with `COLLATE Latin1_General_100_CI_AS`, whatever the database's collation
+  (DEC-030: a DBA's server); `q` escapes `%`, `_`, `[` and `\` (`ESCAPE '\'`).
+- Collector slices add their attributes by migration as built-in rows of `cmdb.AttributeDef` (DEC-044 item 3).
+  A required attribute added to a type with CIs is enforced the next time each is saved.
+- `owned_by` and `depends_on` are seeded with null ends: slice 6 checks that `owned_by` points at a Team or a
+  Person when it creates relationships.
+- Audit targets beyond people: `TargetType` `Ci` (the CI's ID) and `CiType` (the type's ID); `AuditLog`
+  resolves both.
+- Search keeps its whole state in the page address and its columns are a data-driven array: #45 (saved
+  filters), #46 (column chooser) and #47 (CSV export, reusing the list's query) attach there in slice 20.
+- `PUT /cis/{id}` replaces every value: an attribute not sent is unset. Slice 8 adds the partial save,
+  `PATCH` with JSON Merge Patch (#48, DEC-044 item 11): merge the stored values with the patch, then run the
+  same checks (`AttributeValues.Check`, `CheckAsync`).
+- `/api/v1/cis` is a real route now: tests use `/api/v1/no-such-resource` for an unknown one.
+- The CI page has one tab; an unknown `?tab=` is corrected to the CI's address. Slices 6, 7, 10 and 19 add
+  their tabs (`docs/integration/deep-links.md` lists the values).
+- Retire or Restore after someone else changed the CI: a "This CI changed meanwhile" dialog loads their
+  version (the boards' 412 dialog is the panel's).
+
+Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **merged** (PR #39,
+`bc1e817`). The decisions are DEC-043, with the owner's words; the operator guide is
+`docs/ops/windows-service.md`.
 
 **What it adds:**
 - **The Windows service** (`Microsoft.Extensions.Hosting.WindowsServices`): `Install-Goldmark.ps1` in a
@@ -361,6 +406,7 @@ And for slice 24:
 | #40 Windows: a private folder where the service account can't write passes the start check, and the write fails later | 24 (`deferred`, 2026-10-22, PR #39 review round 1; placed by the owner, 2026-10-23, "A. Slice 24") |
 | #41 Windows installer: changing the service account, or the database authentication, on an upgrade (both refused before anything changes until then; the owner plans post-MVP admin settings for database authentication) | P1 settings slice (`deferred`, 2026-10-22, PR #39 review round 1; placed by the owner, 2026-10-23, "A. With post-MVP settings") |
 | #45 search: saved filters per user; #46 column chooser; #47 CSV export of the CI list (screen 4's toolbar) | 20 (owner, 2026-10-23, DEC-044) |
+| #48 CI API: a partial save, `PATCH /api/v1/cis/{id}` with JSON Merge Patch (slice 5's PUT replaces every value) | 8 (owner, 2026-10-23, DEC-044 item 11) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
