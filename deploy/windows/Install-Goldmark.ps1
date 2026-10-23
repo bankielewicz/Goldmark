@@ -52,6 +52,9 @@ $ErrorActionPreference = 'Stop'
 # The parameters given, even empty: on an upgrade an empty optional value clears the setting (Codex on #39).
 $BoundNames = @($PSBoundParameters.Keys)
 $ServiceName = 'Goldmark'
+# Full paths, so the paths registered for the service don't depend on where this ran (Codex on #39).
+$InstallDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($InstallDirectory)
+$DataDirectory = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($DataDirectory)
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProgramSource = Join-Path $Here 'Goldmark'
 $Exe = Join-Path $InstallDirectory 'Goldmark.Api.exe'
@@ -172,10 +175,9 @@ function Set-PrivateFile([string]$Path) {
 function Copy-Private([string]$Name, [string]$Source, [string]$Destination) {
     if (-not (Test-Path -LiteralPath $Source -PathType Leaf)) { Fail "-$Name '$Source' isn't a file." }
     $from = (Resolve-Path -LiteralPath $Source).ProviderPath
-    if ($from -ne $Destination) {
-        Copy-Item -LiteralPath $from -Destination $Destination -Force
-        Set-PrivateFile $Destination
-    }
+    if ($from -ne $Destination) { Copy-Item -LiteralPath $from -Destination $Destination -Force }
+    # Also when the copy is already there: its own permissions may have been changed since (Codex on #39).
+    Set-PrivateFile $Destination
     return $Destination
 }
 
@@ -386,6 +388,12 @@ $Database = Value 'Database' $Database (Get-Setting $existing 'Goldmark', 'Datab
 $Authentication = Value 'Authentication' $Authentication (Get-Setting $existing 'Goldmark', 'Database', 'Authentication') `
     'How the service signs in to SQL Server: Windows (recommended) or Sql' 'Windows'
 if ($Authentication -notin 'Windows', 'Sql') { Fail '-Authentication must be Windows or Sql.' }
+# Switching would leave the old runtime login in goldmark_runtime, which bootstrap-db refuses after the service had
+# been changed (Codex on #39): refused before anything changes, like an account change (#41; owner, 2026-10-22).
+$previousAuthentication = Get-Setting $existing 'Goldmark', 'Database', 'Authentication'
+if ($previousAuthentication -and $previousAuthentication -ne $Authentication) {
+    Fail "Goldmark signs in to SQL Server with $previousAuthentication authentication, and changing that isn't supported yet (#41). Run this again with -Authentication $previousAuthentication."
+}
 $local = Test-LocalHost $SqlHost
 $defaultAccount = if ($local) { 'NT SERVICE\Goldmark' } else { $null }
 $ServiceAccount = Value 'ServiceAccount' $ServiceAccount (Get-Setting $existing 'Goldmark', 'Service', 'Account') `

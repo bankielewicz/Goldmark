@@ -1650,6 +1650,12 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        data folder only if nobody but Administrators, SYSTEM, the installing account and (outside `settings`) the
        service's account may change it; the program folder lets only SYSTEM and Administrators change it and may not
        overlap the data folder; `bootstrap-db` and `rotate-db-credentials` share one lock (`goldmark:credentials`).
+     - After the two review rounds, the owner's fix-now answers (2026-10-22): "A. Fix now (Recommended)" for
+       `Rotate-GoldmarkCredentials.ps1` checking the settings as the installer does before asking for the SQL
+       administrator's password; "Option a. Post mvp will expand upon admin/settings which can include configuration
+       for database authentication." for refusing a change of `-Authentication` on an upgrade before anything changes
+       (#41 covers both principal changes until then); "A. Fix both now (Recommended)" for full install and data paths
+       and resetting an existing operator key copy's permissions.
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**

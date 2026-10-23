@@ -219,6 +219,11 @@ try {
         $upgraded.Goldmark.Logging.RetainedFiles -eq 40 -and $upgraded.Goldmark.Https.Hsts.MaxAgeDays -eq 100
     }
     Check 'a given -AcceptedFindings replaced the old value, also when empty' { $upgraded.Goldmark.Bootstrap.AcceptedFindings -eq $AcceptedFindings }
+    Check 'changing -Authentication on an upgrade is refused before anything changes (#41)' {
+        $null = & (Join-Path $unpacked 'Install-Goldmark.ps1') -NonInteractive -SqlCertificatePath $SqlCertificateFile -InstallDirectory $program -Authentication Sql
+        $LASTEXITCODE -ne 0 -and (Get-Service Goldmark).Status -eq 'Running' -and
+        (Get-Content -Raw $settingsFile | ConvertFrom-Json).Goldmark.Database.Authentication -eq 'Windows'
+    }
     Check 'the program folder was replaced, not added to' { -not (Test-Path (Join-Path $program 'wwwroot\stale-asset.js')) }
     Check 'the settings file is owned by Administrators and grants only what its folder does' {
         $acl = Get-Acl $settingsFile

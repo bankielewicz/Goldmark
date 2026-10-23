@@ -39,6 +39,34 @@ if ($service) {
 }
 $SettingsFile = Join-Path $DataDirectory 'settings\goldmark.json'
 
+function Get-AccountSid([string]$Name) {
+    try { return (New-Object Security.Principal.NTAccount ($Name -replace '^\.\\', "$env:COMPUTERNAME\")).Translate([Security.Principal.SecurityIdentifier]) }
+    catch { return $null }
+}
+
+function Get-AccountName([Security.Principal.SecurityIdentifier]$Sid) {
+    try { return $Sid.Translate([Security.Principal.NTAccount]).Value } catch { return $Sid.Value }
+}
+
+# As the installer: rights that let someone change a file or folder, generic bits included.
+$WriteRights = 0x500D0156
+
+# Why the settings can't be trusted, or $null: they decide where the administrator's password goes (Codex on #39).
+function Get-UntrustedReason([string]$Path, [string[]]$Owners, [string[]]$Writers) {
+    if ((Get-Item -LiteralPath $Path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { return "$Path is a link" }
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier])
+    if ($Owners -notcontains $owner.Value) { return "$Path is owned by $(Get-AccountName $owner)" }
+    foreach ($rule in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) {
+        $bits = [int64]$rule.FileSystemRights.value__
+        if ($bits -lt 0) { $bits += 0x100000000 }
+        if ($rule.AccessControlType -eq 'Allow' -and ($bits -band $WriteRights) -and $Writers -notcontains $rule.IdentityReference.Value) {
+            return "$Path lets $(Get-AccountName $rule.IdentityReference) change it"
+        }
+    }
+    return $null
+}
+
 # /health/ready over HTTPS, trusting only the certificate Goldmark serves, 5 s per poll (as the installer does).
 function Test-Ready([string]$Url, [string]$CertificateFile) {
     if (-not ('Goldmark.RotateReady' -as [type])) {
@@ -69,6 +97,15 @@ public static class RotateReady {
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { Fail 'run this from an elevated PowerShell window.' }
 if (-not (Test-Path $SettingsFile)) { Fail "no settings file at ${SettingsFile}: is Goldmark installed?" }
+# Read only if nobody but Administrators, SYSTEM and you may change them, before any password is asked for. The
+# service's account (from Windows, never from the file) may own them but not change them.
+$administrators = @('S-1-5-18', 'S-1-5-32-544', [Security.Principal.WindowsIdentity]::GetCurrent().User.Value)
+$owners = $administrators
+if ($service -and (Get-AccountSid $service.StartName)) { $owners += (Get-AccountSid $service.StartName).Value }
+foreach ($path in (Split-Path -Parent $SettingsFile), $SettingsFile) {
+    $reason = Get-UntrustedReason $path $owners $administrators
+    if ($reason) { Fail "the settings can't be trusted, so nothing was asked for or changed: $reason. Restrict it to SYSTEM and Administrators (the installer does), then run this again." }
+}
 $settings = Get-Content -Raw $SettingsFile | ConvertFrom-Json
 
 $env:Goldmark__SettingsFile = $SettingsFile

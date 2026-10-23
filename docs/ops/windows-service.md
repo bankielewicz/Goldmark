@@ -133,7 +133,8 @@ The setup token is in the log file (event 3001); the installer prints which file
 Unpack the new zip and run `.\Install-Goldmark.ps1` again: it finds the service's data folder, keeps the settings,
 stops the service, replaces the program, migrates the database as you, and starts it. A domain user's password
 isn't asked for again (Windows keeps it); give `-ServiceAccountPassword` only when it changed. Changing the
-service account isn't supported yet (#41): the installer refuses before it changes anything.
+service account, or between `-Authentication Sql` and `Windows`, isn't supported yet (#41): the installer refuses
+before it changes anything.
 
 ## Renewing certificates
 
@@ -164,7 +165,8 @@ gMSA's password rotates itself.
 & 'C:\Install\Goldmark\Rotate-GoldmarkCredentials.ps1'   # asks for the SQL administrator's password if needed
 ```
 
-It finds the service's folders (or takes `-DataDirectory` and `-InstallDirectory`), runs `rotate-db-credentials`
+It finds the service's folders (or takes `-DataDirectory` and `-InstallDirectory`), checks the settings as the
+installer does (nobody but SYSTEM, Administrators and you may change them) before it asks for any password, runs `rotate-db-credentials`
 (a new password, the file before the login, audited as System), restarts the service, which encrypts the new file
 to itself, and waits until it is ready; if it isn't, it prints why and exits 1. Only one rotation or
 `bootstrap-db` changes the logins at a time; another is refused with nothing changed.
