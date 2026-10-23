@@ -46,7 +46,10 @@ public sealed class MigrationTests(SqlServerFixture sql)
     [Theory]
     [InlineData("Ci", "CiHistory")]
     [InlineData("Relationship", "RelationshipHistory")]
-    public async Task CIs_and_relationships_are_system_versioned(string table, string history)
+    [InlineData("CiType", "CiTypeHistory")] // the definitions too (0007, DEC-045 item 8)
+    [InlineData("AttributeDef", "AttributeDefHistory")]
+    [InlineData("RelationshipType", "RelationshipTypeHistory")]
+    public async Task CIs_relationships_and_their_definitions_are_system_versioned(string table, string history)
     {
         var (installation, _) = await sql.SharedAsync("schema");
 

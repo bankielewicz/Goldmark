@@ -2030,5 +2030,13 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      https://claude.ai/artifact/FcVKh7SEKGpTH9ev6WeSQK (version 37, `1792788486-fca8`); version 38
      (`1792789350-e8a1`) adds item 6's sentence. Copied to `docs/design/screens/slice-5b/` with the details
      settled on the boards (its README).
+  8. **History of the definitions: "A. Version the definitions (Recommended)".** After a side agent noted that
+     `cmdb.AttributeDef` keeps no history, so once an attribute is deleted or relabelled (or a choice removed,
+     or a relationship type's impact changed) the CI history and "as of" views (US-42, US-43; slice 7) could no
+     longer say what an old value meant: migration 0007 makes `cmdb.CiType`, `cmdb.AttributeDef` and
+     `cmdb.RelationshipType` system-versioned, as `cmdb.Ci` and `cmdb.Relationship` are, so every earlier
+     version and every deleted row stays in their history tables. A delete still does what items 2 and 6 say.
+     An attribute's or a relationship type's version (its ETag) is its `ValidFrom`, as a CI's is. Rejected: B,
+     deleted rows kept and marked (deletes only, not changes); C, no history for definitions.
 - **Design handoff:** `tmp/screen-handoff-slice5b.md` (screen 14, the Administration nav item, screen 16's
   new entries); the boards came back and were approved (item 7) before any UI code (rule 3).

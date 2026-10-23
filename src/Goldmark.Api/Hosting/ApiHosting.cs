@@ -38,6 +38,7 @@ internal static class ApiHosting
         api.MapUserEndpoints();
         api.MapAuditEndpoints();
         api.MapCiEndpoints();
+        api.MapTypeEndpoints();
         return endpoints;
     }
 }

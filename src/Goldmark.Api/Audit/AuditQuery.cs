@@ -8,14 +8,15 @@ namespace Goldmark.Api.Audit;
 /// The audit log's filters, from the query string (screen 16; US-07). Every value is validated before it
 /// reaches SQL or the export's audit entry: times are ISO 8601, people are ids, actions come from
 /// <see cref="AuditCatalog"/>, and an IP address prefix holds only hexadecimal digits, dots and colons,
-/// so it can never carry a LIKE wildcard or free text.
+/// so it can never carry a LIKE wildcard or free text. <c>target</c> is a person's id, or what else an
+/// entry can be about: <c>ci:{id}</c>, <c>type:{number}</c>, <c>relationship-type:{number}</c> (slice 5b).
 /// </summary>
 internal sealed partial record AuditQuery(
     DateTimeOffset? From,
     DateTimeOffset? To,
     string? ActorType,
     Guid? ActorId,
-    Guid? TargetId,
+    AuditTargetFilter? Target,
     IReadOnlyList<string> Actions,
     string? Outcome,
     string? IpPrefix,
@@ -71,17 +72,10 @@ internal sealed partial record AuditQuery(
             }
         }
 
-        Guid? targetId = null;
-        if (Single(query, "target") is { } target)
+        AuditTargetFilter? targetFilter = null;
+        if (Single(query, "target") is { } target && (targetFilter = AuditTargetFilter.Parse(target)) is null)
         {
-            if (Guid.TryParseExact(target, "D", out var id))
-            {
-                targetId = id;
-            }
-            else
-            {
-                errors["target"] = ["InvalidTarget"];
-            }
+            errors["target"] = ["InvalidTarget"];
         }
 
         var actions = query["action"].Where(a => !string.IsNullOrEmpty(a)).Select(a => a!).Distinct(StringComparer.Ordinal).ToList();
@@ -108,7 +102,7 @@ internal sealed partial record AuditQuery(
             errors["order"] = ["InvalidOrder"];
         }
 
-        return new AuditQuery(from, to, actorType, actorId, targetId, actions, outcome, ip, order == "oldest");
+        return new AuditQuery(from, to, actorType, actorId, targetFilter, actions, outcome, ip, order == "oldest");
     }
 
     private static (int Limit, long? Cursor) Page(IQueryCollection query, Dictionary<string, string[]> errors)
@@ -174,9 +168,9 @@ internal sealed partial record AuditQuery(
             filters["actor"] = actorType;
         }
 
-        if (TargetId is { } targetId)
+        if (Target is { } target)
         {
-            filters["target"] = targetId;
+            filters["target"] = target.ToString();
         }
 
         if (Actions.Count > 0)
@@ -232,4 +226,33 @@ internal static class AuditActorTypes
     public const string User = "User";
     public const string System = "System";
     public const string Anonymous = "Anonymous";
+}
+
+/// <summary>What an entry is about, for the <c>target</c> filter: a person or a CI by id, a CI type or a relationship type by number.</summary>
+internal sealed record AuditTargetFilter(string Type, Guid? Id, int? Number)
+{
+    public static AuditTargetFilter? Parse(string text)
+    {
+        var colon = text.IndexOf(':', StringComparison.Ordinal);
+        var (prefix, value) = colon < 0 ? ("", text) : (text[..colon], text[(colon + 1)..]);
+        return prefix switch
+        {
+            "" when Guid.TryParseExact(value, "D", out var person) => new(AuditActorTypes.User, person, null),
+            "ci" when Guid.TryParseExact(value, "D", out var ci) => new(AuditTargetTypes.Ci, ci, null),
+            "type" when PositiveNumber(value) is { } type => new(AuditTargetTypes.CiType, null, type),
+            "relationship-type" when PositiveNumber(value) is { } relationshipType => new(AuditTargetTypes.RelationshipType, null, relationshipType),
+            _ => null,
+        };
+    }
+
+    public override string ToString() => Type switch
+    {
+        AuditActorTypes.User => Id!.Value.ToString("D"),
+        AuditTargetTypes.Ci => "ci:" + Id!.Value.ToString("D"),
+        AuditTargetTypes.CiType => "type:" + Number!.Value.ToString(CultureInfo.InvariantCulture),
+        _ => "relationship-type:" + Number!.Value.ToString(CultureInfo.InvariantCulture),
+    };
+
+    private static int? PositiveNumber(string value) =>
+        int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number > 0 ? number : null;
 }

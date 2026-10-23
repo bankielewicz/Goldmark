@@ -120,4 +120,15 @@ internal static class AuditActions
     public const string CiRetired = "ci.retired";
     public const string CiRestored = "ci.restored";
     public const string AttributeAdded = "type.attribute.added";
+
+    // Slice 5b (DEC-045): screen 14.
+    public const string TypeAdded = "type.added";
+    public const string TypeDeleted = "type.deleted";
+    public const string TypeHidden = "type.hidden";
+    public const string TypeShown = "type.shown";
+    public const string AttributeChanged = "type.attribute.changed";
+    public const string AttributeDeleted = "type.attribute.deleted";
+    public const string RelationshipTypeAdded = "relationship-type.added";
+    public const string RelationshipTypeChanged = "relationship-type.changed";
+    public const string RelationshipTypeDeleted = "relationship-type.deleted";
 }

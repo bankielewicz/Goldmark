@@ -26,6 +26,13 @@ public sealed class RuntimePermissionTests(SqlServerFixture sql)
         "ALTER TABLE cmdb.Relationship SET (SYSTEM_VERSIONING = OFF);",
         "DELETE FROM cmdb.CiHistory;",
         "UPDATE cmdb.RelationshipHistory SET ChangedBy = N'x';",
+        // nor for the definitions (DEC-045 item 8): what a deleted attribute meant stays
+        "ALTER TABLE cmdb.AttributeDef SET (SYSTEM_VERSIONING = OFF);",
+        "ALTER TABLE cmdb.CiType SET (SYSTEM_VERSIONING = OFF);",
+        "ALTER TABLE cmdb.RelationshipType SET (SYSTEM_VERSIONING = OFF);",
+        "DELETE FROM cmdb.AttributeDefHistory;",
+        "UPDATE cmdb.CiTypeHistory SET Name = N'x';",
+        "DELETE FROM cmdb.RelationshipTypeHistory;",
         // The audit log is append-only
         "UPDATE cmdb.AuditLog SET Action = 'tampered';",
         "DELETE FROM cmdb.AuditLog;",
@@ -144,7 +151,7 @@ internal static class SchemaChecks
                 ':', (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'cmdb.AuditLog') AND name = N'Probe'),
                 ':', (SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'tampered'));
             """);
-        const string expected = "18:2:0:0:0:0:0:0"; // 18 tables since 0006 (cmdb.AttributeDef)
+        const string expected = "21:5:0:0:0:0:0:0"; // 21 tables and 5 with history since 0007 (the definitions' history)
         return state == expected ? Baseline : state;
     }
 }

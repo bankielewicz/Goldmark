@@ -156,7 +156,7 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
             var name = endpoint.DisplayName!;
             var policy = endpoint.Metadata.GetMetadata<EndpointAccess>()!.Policy;
             var path = endpoint.RoutePattern.RawText!.Replace("{id:guid}", viewerPerson.Id.ToString("D"), StringComparison.Ordinal)
-                .Replace("{type}", "VirtualMachine", StringComparison.Ordinal);
+                .Replace("{type}", "VirtualMachine", StringComparison.Ordinal).Replace("{name}", "costCentre", StringComparison.Ordinal);
             var method = new HttpMethod(endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]);
             var body = method == HttpMethod.Get || method == HttpMethod.Delete ? null : new { };
 
