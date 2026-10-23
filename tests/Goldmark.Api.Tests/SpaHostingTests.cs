@@ -191,7 +191,7 @@ public sealed partial class SpaHostingTests(GoldmarkFactory factory) : IClassFix
     }
 
     [Theory]
-    [InlineData("GET", "/api/v1/cis")]
+    [InlineData("GET", "/api/v1/no-such-resource")]
     [InlineData("POST", "/api/v1/ingest/batches")]
     [InlineData("DELETE", "/api")]
     public async Task Unknown_API_routes_return_problem_details_404(string method, string path)

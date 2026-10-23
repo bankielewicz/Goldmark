@@ -56,6 +56,7 @@ import { isAdmin, useSession } from '../session';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
 import { downloadBlob, ErrorBar } from '../ui/common';
+import { TypeIcon } from '../ui/inventory';
 
 const useStyles = makeStyles({
   filters: { display: 'flex', gap: tokens.spacingHorizontalM, flexWrap: 'wrap', alignItems: 'flex-end' },
@@ -167,12 +168,15 @@ interface Person {
 }
 
 /** Who acted, or whom an entry is about. A person whose account was removed since is `removed`. */
+/** Who acted, or what an entry is about: a person, or (slice 5) a CI with its type, or a CI type. */
 interface Party {
   type: string;
   id: string | null;
   userName: string | null;
   displayName: string | null;
   removed: boolean;
+  name?: string | null;
+  ciType?: string | null;
 }
 
 interface Entry {
@@ -322,7 +326,19 @@ function count(n: number, one: string, many: string): string {
 
 const actorTypes: Record<string, string> = { User: 'Person', System: 'System', Anonymous: 'Not signed in' };
 
+/** An attribute's kind in the words of the CI form (slice 5). */
+const kinds: Record<string, string> = {
+  string: 'Text',
+  number: 'Number',
+  bool: 'Yes / no',
+  date: 'Date',
+  enum: 'List of choices',
+  ciRef: 'Link to another CI',
+};
+
 function personText(party: Party): string {
+  if (party.type === 'Ci') return `${party.name ?? 'A CI'} · ${party.ciType ?? 'CI'}`;
+  if (party.type === 'CiType') return `${party.name ?? 'A type'} · CI type`;
   if (party.displayName && party.userName) return `${party.displayName} · ${party.userName}`;
   if (party.removed) return party.userName ? `${party.userName} (account removed)` : 'Removed account';
   return '';
@@ -493,6 +509,22 @@ function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]
     case 'audit.exported':
       add('filters', 'Filters', describeRecordedFilters(details.filters, catalog, people));
       add('entries', 'Entries exported', text(details.entries));
+      break;
+    case 'ci.created':
+    case 'ci.changed':
+    case 'ci.retired':
+    case 'ci.restored':
+      add('type', 'Type', text(details.type));
+      add('name', 'Name', text(details.name));
+      // The fields changed, not their values: the CI's history (slice 7) shows those (DEC-044 item 9).
+      if (entry.action === 'ci.changed') add('fields', 'Fields changed', strings(details.fields).join(', '));
+      break;
+    case 'type.attribute.added':
+      add('type', 'Type', text(details.type));
+      add('attribute', 'Attribute', text(details.attribute));
+      shown.add('name');
+      add('dataType', 'Kind', kinds[text(details.dataType)] ?? text(details.dataType));
+      add('required', 'Required', yesNo(details.required));
       break;
     default:
       break;
@@ -834,7 +866,7 @@ export function AuditPage() {
             </TableHeaderCell>
             <TableHeaderCell>Actor</TableHeaderCell>
             <TableHeaderCell>Action</TableHeaderCell>
-            <TableHeaderCell>Person affected</TableHeaderCell>
+            <TableHeaderCell>Affected</TableHeaderCell>
             {wide ? (
               <TableHeaderCell>
                 <span className={styles.ipHead}>
@@ -1113,6 +1145,28 @@ function None() {
 
 function PartyName({ party }: { party: Party }) {
   const styles = useStyles();
+  if (party.type === 'Ci') {
+    return (
+      <span className={styles.party}>
+        <TypeIcon type={party.ciType ?? ''} types={null} />
+        {party.id ? (
+          <Link href={`/ci/${party.id}`} onClick={(event) => followLink(event, `/ci/${party.id ?? ''}`)}>
+            {party.name ?? party.id}
+          </Link>
+        ) : (
+          party.name
+        )}
+        <span className={styles.none}>· {party.ciType}</span>
+      </span>
+    );
+  }
+  if (party.type === 'CiType') {
+    return (
+      <span>
+        {party.name} <span className={styles.none}>· CI type</span>
+      </span>
+    );
+  }
   if (party.displayName && party.userName) {
     return (
       <span>
@@ -1182,7 +1236,7 @@ function EntryDetails({
         {entry.label} <span className={styles.code}>{entry.action}</span>
       </>,
     ],
-    ['Person affected', target ? personText(target) : '—'],
+    ['Affected', target ? personText(target) : '—'],
     ['IP address', entry.ip ?? '—'],
     ...describeDetails(entry, catalog, people),
   ];
@@ -1196,7 +1250,14 @@ function EntryDetails({
           </Fragment>
         ))}
       </dl>
-      {target?.id ? (
+      {target?.type === 'Ci' && target.id ? (
+        <div className={styles.detailActions}>
+          <Link href={`/ci/${target.id}`} onClick={(event) => followLink(event, `/ci/${target.id ?? ''}`)}>
+            Open {target.name ?? 'this CI'}
+          </Link>
+        </div>
+      ) : null}
+      {target?.type === 'User' && target.id ? (
         <div className={styles.detailActions}>
           {admin && !target.removed ? (
             <Link
@@ -1304,7 +1365,7 @@ function ExportDialog({
               <dd className={styles.dd}>{filters}</dd>
               <dt className={styles.dt}>Columns</dt>
               <dd className={styles.dd}>
-                Time (UTC), Actor type, Actor, Action, Action code, Person affected, IP address, Outcome, Details
+                Time (UTC), Actor type, Actor, Action, Action code, Affected, IP address, Outcome, Details
               </dd>
             </dl>
             <MessageBar intent="info">

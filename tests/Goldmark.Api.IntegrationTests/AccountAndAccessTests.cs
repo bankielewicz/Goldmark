@@ -155,22 +155,23 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
         {
             var name = endpoint.DisplayName!;
             var policy = endpoint.Metadata.GetMetadata<EndpointAccess>()!.Policy;
-            var path = endpoint.RoutePattern.RawText!.Replace("{id:guid}", viewerPerson.Id.ToString("D"), StringComparison.Ordinal);
+            var path = endpoint.RoutePattern.RawText!.Replace("{id:guid}", viewerPerson.Id.ToString("D"), StringComparison.Ordinal)
+                .Replace("{type}", "VirtualMachine", StringComparison.Ordinal);
             var method = new HttpMethod(endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]);
             var body = method == HttpMethod.Get || method == HttpMethod.Delete ? null : new { };
 
-            if (policy is AccessPolicy.Admin or AccessPolicy.AuditReader)
+            if (policy is AccessPolicy.Admin or AccessPolicy.AuditReader or AccessPolicy.CiEditor)
             {
                 Assert.True((await viewer.SendAsync(method, path, body)).Status == HttpStatusCode.Forbidden, $"{name}: a Viewer must get 403");
             }
 
-            if (policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader)
+            if (policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader or AccessPolicy.CiEditor)
             {
                 // A password without the second factor is not a session.
                 Assert.True((await pending.SendAsync(method, path, body)).Status == HttpStatusCode.Unauthorized, $"{name}: password-only must get 401");
             }
 
-            if (method != HttpMethod.Get && policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader)
+            if (method != HttpMethod.Get && policy is AccessPolicy.Admin or AccessPolicy.SignedIn or AccessPolicy.AuditReader or AccessPolicy.CiEditor)
             {
                 var forged = await admin.SendAsync(method, path, body, antiforgery: false);
                 Assert.True(forged.Status == HttpStatusCode.BadRequest && forged.Text.Contains("anti-forgery", StringComparison.Ordinal),

@@ -15,6 +15,7 @@ policy (`RequireAccess(policy)`, which sets the authorization policy and this me
 | `SignedIn` | A signed-in session (password and second factor), any role |
 | `Admin` | A signed-in session with the Admin role |
 | `AuditReader` | A signed-in session with the Admin or the Auditor role (the audit log, US-04, US-07) |
+| `CiEditor` | A signed-in session with the Admin or the Editor role (creating, changing, retiring and restoring CIs, US-11) |
 | `TwoFactorPending` | A password verified within the last 5 minutes, second factor not yet given (sign-in step 2 only) |
 | `Enrolment` | An enrolment in progress, for 30 minutes: first-run setup after the setup token, an invitation or two-factor reset after its code, or a new authenticator after the password and a code |
 
@@ -27,7 +28,7 @@ are `Cache-Control: no-store`. Requests that take a credential are rate limited 
 (`Goldmark:Auth:RequestsPerMinute`, 30 by default; HTTP 429).
 
 The M6 tests check that every non-anonymous endpoint answers 401 without credentials and 401 to a
-password-only sign-in, every Admin and AuditReader endpoint 403 to a signed-in Viewer, and every
+password-only sign-in, every Admin, AuditReader and CiEditor endpoint 403 to a signed-in Viewer, and every
 state-changing endpoint 400 without the anti-forgery token.
 
 ## Anonymous by design
@@ -79,6 +80,14 @@ state-changing endpoint 400 without the anti-forgery token.
 | `GET /api/v1/audit` | AuditReader | Screen 16: audit entries, newest first, filtered by time, actor, person affected, action, outcome and IP prefix, paged by entry number; every filter is validated and passed as a parameter. Reading writes nothing |
 | `GET /api/v1/audit/catalog` | AuditReader | The actions with their group, label and outcome, and the retention period `migrate` set (DEC-041) |
 | `GET /api/v1/audit/people` | AuditReader | Only the people who appear in the log as actor or person affected (for the filters), not the user directory, which only an Admin sees |
+| `GET /api/v1/cis` | SignedIn | Screen 4: CIs whose name contains `q` (any case), of the `type`s given, retired ones only with `retired=true`, in one of six `sort` orders, paged by an opaque `cursor`; the first page also has the total and the count per type. Every parameter is validated and passed as a parameter (DEC-044) |
+| `GET /api/v1/cis/{id}` | SignedIn | Screen 5: one CI with its attributes (a number as a decimal string with every digit, DEC-044 item 12), the CIs its attributes link to, who changed it last and its ETag; 404 `not-found` for an unknown ID |
+| `POST /api/v1/cis` | CiEditor | Creates a CI (Active) of a type, with its name and attribute values checked against the type (a number as a JSON number or a decimal string, kept exactly or refused: `TooPrecise`, `NumberOutOfRange`); audited `ci.created` in the same transaction |
+| `PUT /api/v1/cis/{id}` | CiEditor | Changes the name and attribute values (all of them: `attributes` is required, `{}` clears every value, an attribute not sent becomes unset; a partial save, PATCH, comes in slice 8, #48); needs the ETag in If-Match (428 without it, 412 if changed meanwhile), 409 `retired` for a retired CI; audited `ci.changed` with the fields changed, not their values; a save that changes nothing writes nothing |
+| `POST /api/v1/cis/{id}/retire` | CiEditor | Retires the CI (US-11, US-12); If-Match as above; audited `ci.retired` |
+| `POST /api/v1/cis/{id}/restore` | CiEditor | Makes a retired CI Active again (DEC-044 item 2); If-Match as above; audited `ci.restored` |
+| `GET /api/v1/types` | SignedIn | The CI types with their attributes, and the relationship types (US-10) |
+| `POST /api/v1/types/{type}/attributes` | Admin | Adds a custom attribute to a type (DEC-044 items 4 and 8: add only; its screen is slice 5b's); audited `type.attribute.added` |
 | `POST /api/v1/audit/export` | AuditReader | CSV of the filtered entries, at most 100,000 (422 `export-too-large` beyond, with nothing recorded); writes an `audit.exported` entry with the filters and the count in the same transaction; the count is also in the `X-Goldmark-Entries` header; formula cells neutralized |
 
 If a richer health report is ever needed (component status, versions), it goes on a separate

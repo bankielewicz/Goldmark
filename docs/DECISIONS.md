@@ -1880,3 +1880,111 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 | 10 | `docs/ops/windows-service.md`; the installer's prompts as a text spec; rule 7; rule 8 both ways | **Met** | The ops guide (parameters and prompts table); `database.credentials.rotated` in the audit catalog; `DefaultPaths`, Windows APIs behind `OperatingSystem.IsWindows()` |
 | 11 | Rule 7 / M6: new endpoints | **Not applicable** | The slice adds no endpoint |
 | 12 | CI green | **Not executed** | Runs on the PR |
+
+## DEC-044 Slice 5: CIs, their types and attributes, search and detail
+
+- **Decision (owner, 2026-10-23, asked in the HANDOFF rule-6 format; each answer quoted).** Slice 5
+  was approved to start ("approved"). Its choices, left open by the slice plan (DEC-021) and the PRD:
+  1. **Search toolbar later: "option 1 but document somehow whether github incident for enhancement or
+     specification document that captures the roadmap, etc... consult with /advisor to ensure we don't
+     incur any technical debt with any approach".** Option 1 was "All three later": screen 4's saved
+     filters, column chooser and CSV export are not in slice 5. They go to slice 20, which next changes
+     the search filters, as issues #45, #46 and #47 (label `enhancement`), placed in HANDOFF's slice 20
+     row and §4 as #36 and #37 were. There is no separate roadmap document: HANDOFF §1 is the approved
+     plan (DEC-021), and a second one would drift from it. Slice 5 leaves room for them without stubs:
+     the search state lives in the page address, one query record serves the list (as `AuditQuery`
+     serves the audit list and its export), and the list's columns are data-driven. Rejected: B, CSV
+     export now; C, all three now.
+  2. **Lifecycle: "A. Retire, Restore, hide (Recommended)".** New CIs are Active. Retire… (confirmed)
+     and Restore; search hides retired CIs unless "Show retired" is on. Planned and Retiring, and the
+     lifecycle filter, stay in slice 20 (US-12). Rejected: B, retire only, as the plan's row reads; C,
+     the full lifecycle now.
+  3. **Built-in attributes: "A. Only the PRD's ones (Recommended)".** The seed holds PRD §9.3's CI types
+     and §9.4's relationship types, with only the attributes the PRD names (Server `platform`,
+     Appliance `kind`, HypervisorHost `virtual`, NetworkDevice `role`, StorageArray `kind` and
+     `family`). Each collector slice adds its own attributes by migration. Rejected: B, a starter set
+     proposed now.
+  4. **Custom attributes: "A. API in slice 5 (Recommended)".** An Admin adds a custom attribute (text,
+     number, yes/no, date, a list of choices, a link to another CI) to a type through `/api/v1/types`,
+     audited, and the CI form handles every data type. The screen is slice 5b's (screen 14). Rejected:
+     B, all of it in slice 5b.
+  5. **Open issues placed (the same day, before the approval).** "A. Keep as placed (Recommended)":
+     #35 in slice 8; #5, #12's link check, #31 and #33 in slice 24; #36 in 25b; #37 in 25c; #27 when
+     typescript-eslint supports TypeScript 7 (8.72.0 still requires TypeScript below 6.1); #20 waits for
+     availability-group support, still unplaced (DEC-030). #40: "A. Slice 24 (Recommended)". #41's
+     service-account change: "A. With post-MVP settings (Recommended)", the P1 settings slice, with the
+     database-authentication change the owner placed there on 2026-10-22.
+  6. **Search: "A. Names only (Recommended)".** The search box matches part of a CI's Name, any case,
+     after the owner asked "when searching by name - what is the name of?" (each CI's Name field: a VM's
+     name in vCenter, a server's computer name, an instance name, a team's name). Identifiers join
+     search with slice 10. Rejected: B, names and text attribute values (reads every CI's JSON; the
+     NFR-PERF-2 budget at risk).
+  7. **The p95 proof: "A. On-demand CI job (Recommended)".** A generator seeds 25k synthetic CIs into
+     SQL Server 2025 Express and a test measures the p95 of list, search and detail against NFR-PERF-2,
+     failing over budget, in a job run on request (workflow_dispatch), not on every PR: the start of
+     NFR-PERF-5's suite. Rejected: B, on every PR; C, measured once and recorded.
+  8. **Custom attributes: "A. Add only (Recommended)".** Slice 5's API adds attributes; changing a
+     label, the required flag or the choices, and removing one, come with screen 14 in slice 5b.
+     Rejected: B, add and change; C, add, change and remove.
+  9. **Defaults on the boards: "A. Keep all five (Recommended)".** Names need not be unique; a CI's
+     type can't change; Edit isn't offered while a CI is retired; Restore needs no confirmation (Retire
+     does); the "CI changed" audit entry lists the fields changed, not their values (slice 7's history
+     shows them).
+  10. **Screens approved: "approved".** The slice-5 canvas https://claude.ai/artifact/6juyvAr2JX1FtmkQZpyiz1
+      (version 47, `1792759579-3d94`), copied to `docs/design/screens/slice-5/` with the details settled on the
+      boards (its README). Then, after a side agent noted that the custom-attribute API needs a browser session
+      until API tokens (slice 8): "A. Drop the Admin sentence (Recommended)": a type with no attributes shows
+      only "This type has no attributes yet." (version 48, `1792760074-a7ec`, the copy kept). Rejected: B, point
+      to the coming screen; C, keep the sentence. Slice 5b already follows slice 5 in the plan.
+  11. **Saving a CI through the API: "A. Keep PUT, PATCH later (Recommended)".** After a side agent noted
+      that a script which PUTs only the fields it knows erases the rest (for example a custom attribute
+      added after the script was written), and that the screens send every field: `PUT /api/v1/cis/{id}`
+      stays a full replace (HTTP's meaning; NetBox's PUT), and a partial save, `PATCH` with a JSON Merge
+      Patch body (RFC 7396: a field left out stays, `null` clears it), comes with API tokens in slice 8
+      (issue #48, label `enhancement`). Adding it then is additive under US-54; scripts can't call the API
+      before slice 8. Rejected: B, add PATCH in slice 5 (a second save path before any script can use it);
+      C, make PUT partial (not HTTP's meaning for PUT, and fixed in v1 for good).
+  12. **Numbers keep every digit (Codex review round 1 on PR #49).** Codex found that the panel converted a
+      typed number to a JavaScript number, which rounds beyond a double's precision (9007199254740993 was saved
+      as ...992), and that editing another field rewrote a long stored number the same way. A first fix capped
+      numbers at 15 significant digits; after a side agent noted it would refuse exact byte counts such as 1 PiB,
+      the owner chose neither that nor "refuse only what a JavaScript number can't hold": "Please fix the precision
+      loss without restricting the API's numeric range to JavaScript's limitations. [...] Keep numeric attributes
+      numeric in the data model, and preserve supported .NET decimal values exactly through API responses,
+      browser display/editing, and saves. Decimal strings for transport and form state are acceptable; users
+      should not have to redefine byte counts as text attributes. Document any wire-format change and its
+      compatibility implications. [...] Values outside the supported decimal range or precision should produce an
+      explicit validation error rather than silent rounding." So: a number attribute is a .NET `decimal`, stored
+      as a JSON number (SQL Server 2025's `json` keeps every digit, checked); `GET /api/v1/cis/{id}` and every
+      CI response return it as a decimal string with its digits and scale as stored (`"9007199254740993"`,
+      `"1.50"`); `POST` and `PUT` accept a JSON number or a decimal string; a value the decimal would round is
+      `TooPrecise`, one beyond its range `NumberOutOfRange`, never rounded; the screens keep the text from
+      response to form to request and never make it a JavaScript number. Compatibility: the change lands before
+      any release and before API tokens (slice 8), so no client depends on numbers being JSON numbers; slice 8's
+      OpenAPI document describes them as strings (`format: decimal`), and the request side stays lenient.
+  13. **After review round 2 (a high-effort review of PR #49, 2026-10-23).** Eight findings, table in the PR.
+      Round 2's shared lock on newly linked CIs (`fb2c84d`) let two saves that each newly link to the other's CI
+      deadlock (one got a 500): "A. Retry once, then 412 (Recommended)", so a save SQL Server picks as a deadlock
+      victim (1205) runs once more and a second loss answers 412 (reproduced: without the retry, a 500). A PUT
+      without `attributes` read as "unset them all": "A. Require "attributes" (Recommended)" (400 `Required`; `{}`
+      still clears every value, item 11 stands). "A. Fix all three now (Recommended)": a cursor without its sort's
+      keys is `InvalidCursor`, adding an attribute answers `Location: /api/v1/types`, a CI can't link to itself
+      (`LinkedCiSelf`); one more push, not a third review round. "A. No change, noted in DEC-044 (Recommended)":
+      Retire and Restore resolving their services in one shared handler (a style choice), and an audit row's
+      " ()" for a CI or type without a recorded name (unreachable while neither is deleted; the CSV's "Affected"
+      header was approved with the boards, item 10).
+- **Build notes (slice 5, not owner decisions; listed for review).**
+  - A required attribute added to a type that already has CIs is enforced the next time each of them is
+    saved; nothing is migrated.
+  - `PUT /api/v1/cis/{id}` replaces the attribute values: an attribute not sent becomes unset (kept by the
+    owner, item 11). A save that changes nothing writes no version and no audit entry. A link to another CI
+    is checked (exists, not retired, the attribute's type) only when it changes, so retiring a CI never
+    blocks saving the CIs that point at it.
+  - Retire and Restore need If-Match like a change. When someone else changed the CI meanwhile, the page
+    shows "This CI changed meanwhile" and loads their version (the boards' 412 dialog belongs to the panel,
+    whose "Discard mine" and "Review their changes" don't fit a one-click action).
+  - Screen 16's CSV column "Person affected" is "Affected" too, as the screen's column (item 10).
+  - The search page ignores a `type` in a link that this Goldmark doesn't have, and the CI page corrects an
+    unknown `?tab=` to the CI's own address (`docs/integration/deep-links.md`).
+  - The filter panel's collapse button hides it at 1100 px and wider; the toolbar's Filters button brings it
+    back.

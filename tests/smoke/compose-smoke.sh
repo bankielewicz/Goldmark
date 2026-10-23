@@ -327,7 +327,8 @@ asset="$(grep -o 'src="/assets/[^"]*\.js"' "${work}/root.html" | head -1 | cut -
 curl_tls -D "${work}/asset.headers" -o /dev/null "${base}${asset}" >/dev/null
 check "hashed JS asset ${asset:-?} is served immutable" bash -c "grep -q ' 200' '${work}/asset.headers' && grep -qi 'cache-control: public, max-age=31536000, immutable' '${work}/asset.headers'"
 check "client route /ci/{id} falls back to the SPA shell" is_status /ci/0190a7b2-0000-7000-8000-000000000000 200
-check "unknown API route returns 404" is_status /api/v1/cis 404
+check "unknown API route returns 404" is_status /api/v1/no-such-resource 404
+check "the CI search needs a session (401)" is_status /api/v1/cis 401
 
 # --- Slice 3: first-run setup, sessions, key ring (US-02, US-03, DEC-038) ------------
 # The setup token is the one secret Goldmark logs: once per start, until setup is complete.

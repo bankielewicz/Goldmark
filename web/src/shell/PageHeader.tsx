@@ -4,6 +4,7 @@ import {
   BreadcrumbDivider,
   BreadcrumbItem,
   makeStyles,
+  mergeClasses,
   tokens,
 } from '@fluentui/react-components';
 import { Fragment, useEffect, useRef, type ReactNode } from 'react';
@@ -26,6 +27,7 @@ const useStyles = makeStyles({
     ':focus-visible': { outlineOffset: '2px' },
   },
   actions: { display: 'flex', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
+  titleGroup: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalM, flexWrap: 'wrap', minWidth: 0 },
 });
 
 export interface Crumb {
@@ -33,8 +35,20 @@ export interface Crumb {
   path?: string;
 }
 
-/** Breadcrumb, h1 (focused when the page opens, so the change is announced) and the page's actions. */
-export function PageHeader({ crumbs, title, actions }: { crumbs: Crumb[]; title: string; actions?: ReactNode }) {
+/** Breadcrumb, h1 (focused when the page opens, so the change is announced), badges beside it and the page's actions. */
+export function PageHeader({
+  crumbs,
+  title,
+  actions,
+  badges,
+  titleClassName,
+}: {
+  crumbs: Crumb[];
+  title: string;
+  actions?: ReactNode;
+  badges?: ReactNode;
+  titleClassName?: string;
+}) {
   const styles = useStyles();
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
@@ -59,9 +73,12 @@ export function PageHeader({ crumbs, title, actions }: { crumbs: Crumb[]; title:
         ))}
       </Breadcrumb>
       <div className={styles.top}>
-        <h1 ref={heading} tabIndex={-1} className={styles.title}>
-          {title}
-        </h1>
+        <div className={styles.titleGroup}>
+          <h1 ref={heading} tabIndex={-1} className={mergeClasses(styles.title, titleClassName)}>
+            {title}
+          </h1>
+          {badges}
+        </div>
         {actions ? (
           <div role="toolbar" aria-label="Page actions" className={styles.actions}>
             {actions}

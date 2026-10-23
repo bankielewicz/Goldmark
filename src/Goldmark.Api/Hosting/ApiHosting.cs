@@ -1,5 +1,6 @@
 using Goldmark.Api.Audit;
 using Goldmark.Api.Auth;
+using Goldmark.Api.Inventory;
 using Goldmark.Api.Users;
 using Microsoft.AspNetCore.Identity;
 
@@ -36,6 +37,7 @@ internal static class ApiHosting
         api.MapAccountEndpoints();
         api.MapUserEndpoints();
         api.MapAuditEndpoints();
+        api.MapCiEndpoints();
         return endpoints;
     }
 }

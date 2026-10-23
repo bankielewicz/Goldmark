@@ -77,6 +77,15 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Audit: catalog"] = ("GET", "/api/v1/audit/catalog", AccessPolicy.AuditReader),
             ["Audit: people"] = ("GET", "/api/v1/audit/people", AccessPolicy.AuditReader),
             ["Audit: export CSV"] = ("POST", "/api/v1/audit/export", AccessPolicy.AuditReader),
+
+            ["CIs: search"] = ("GET", "/api/v1/cis", AccessPolicy.SignedIn),
+            ["CIs: get"] = ("GET", "/api/v1/cis/{id:guid}", AccessPolicy.SignedIn),
+            ["CIs: create"] = ("POST", "/api/v1/cis", AccessPolicy.CiEditor),
+            ["CIs: change"] = ("PUT", "/api/v1/cis/{id:guid}", AccessPolicy.CiEditor),
+            ["CIs: retire"] = ("POST", "/api/v1/cis/{id:guid}/retire", AccessPolicy.CiEditor),
+            ["CIs: restore"] = ("POST", "/api/v1/cis/{id:guid}/restore", AccessPolicy.CiEditor),
+            ["Types: list"] = ("GET", "/api/v1/types", AccessPolicy.SignedIn),
+            ["Types: add an attribute"] = ("POST", "/api/v1/types/{type}/attributes", AccessPolicy.Admin),
         };
 
     [Fact]
@@ -181,7 +190,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
     private static string Policy(RouteEndpoint endpoint) => endpoint.Metadata.GetMetadata<EndpointAccess>()?.Policy ?? "(none)";
 
     private static string Url(string pattern) =>
-        pattern.Replace("{id:guid}", Guid.NewGuid().ToString("D"), StringComparison.Ordinal);
+        pattern.Replace("{id:guid}", Guid.NewGuid().ToString("D"), StringComparison.Ordinal).Replace("{type}", "VirtualMachine", StringComparison.Ordinal);
 
     private static StringContent? Json(string method) =>
         method is "GET" or "HEAD" or "DELETE" ? null : new StringContent("{}", Encoding.UTF8, "application/json");

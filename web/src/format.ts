@@ -44,3 +44,14 @@ export function initialsOf(name: string): string {
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
 }
+
+/** "just now", "9 min ago", "3 h ago", "5 d ago"; older than 30 days, the UTC date. */
+export function formatAgo(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  const minutes = Math.floor((now.getTime() - date.getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 24 * 60) return `${Math.floor(minutes / 60)} h ago`;
+  if (minutes < 30 * 24 * 60) return `${Math.floor(minutes / (24 * 60))} d ago`;
+  return date.toISOString().slice(0, 10);
+}

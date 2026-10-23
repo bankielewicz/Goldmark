@@ -5,15 +5,16 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-22:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
-(PR #32) and **4a (PR #38)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+**As of 2026-10-23:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+(PR #32), 4a (PR #38) and **4b (PR #39)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
 the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
-**Slice 4b**, the Windows service distribution (approved 2026-10-22, DEC-036, DEC-043), is in progress on
-`slice/04b-windows-service`. Docker Compose is the first distribution, not the target deployment
-(DEC-030, rule 8).
+Slice 4b brought the Windows service distribution (PR #39, DEC-036, DEC-043; merged 2026-10-23, with
+the dependency PRs #44 and #50). **Slice 5**, CIs with their types and attributes, search and detail (approved
+2026-10-23, DEC-044), is in progress on `slice/05-ci-crud` (PR #49). Docker Compose is the first
+distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -31,12 +32,12 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 3 | **done** (PR #24) | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); merged by PR #24 after two review rounds | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | **done** (PR #32, merged as `ecd7796`, DEC-041) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
 | 4a | **done** (PR #38, merged as `18b46ed`, DEC-042) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
-| 4b | **in progress** (approved 2026-10-22, DEC-043; built, PR #39) | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20); #6 moved here from slice 24 (DEC-043) | Owner, 2026-10-22 (DEC-043): (1) `Install-Goldmark.ps1` in a zip installs the service on Windows Server 2022/2025 against SQL Server 2025, Windows authentication or a SQL login; the operator's own Windows login runs `bootstrap-db migrate`; gMSA, or a domain user as fallback, `NT SERVICE\Goldmark` only with SQL Server on the same server, never LocalSystem or NetworkService; `/health/ready` 200 and the sign-in page; upgrade = run again; uninstall keeps the data. (2) Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the principal audit covers Windows logins and group rights; the password path only for SQL logins. (3) Folders for sign-in keys, TLS key, credential files, logs and settings: service account, SYSTEM and Administrators only, inheritance off, a start refuses wider; key ring and runtime credential file DPAPI-NG to the service account; administrator and migration passwords never stored on Windows; #6 closed. (4) JSON log files per day in `%ProgramData%\Goldmark\logs`; a configuration failure also to the Application log (setting names only); tested that 3001 and 3004 never reach the Event Log. (5) Service recovery restarts after a crash; a configuration error (exit 2) stops without a loop. (6) `rotate-db-credentials` (Docker and Windows): every generated SQL login, file before login, audited as System, then a restart (the wizard restarts the service); nothing to rotate under Windows authentication. (7) The recovery setting in the settings file from (3); the link's path in the log file. (8) #34's two criteria. (9) Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express on the runner, install smoke with Windows authentication as `NT SERVICE\Goldmark` (`/health/ready`, ACLs, log file), a SQL-login install with rotate, uninstall; the gMSA checked by hand per the ops guide. (10) `docs/ops/windows-service.md`; the installer's prompts as a text spec in the PR; rule 7; rule 8 both ways | — |
-| 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
+| 4b | **done** (PR #39, merged as `bc1e817`, DEC-043) | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20); #6 moved here from slice 24 (DEC-043) | Owner, 2026-10-22 (DEC-043): (1) `Install-Goldmark.ps1` in a zip installs the service on Windows Server 2022/2025 against SQL Server 2025, Windows authentication or a SQL login; the operator's own Windows login runs `bootstrap-db migrate`; gMSA, or a domain user as fallback, `NT SERVICE\Goldmark` only with SQL Server on the same server, never LocalSystem or NetworkService; `/health/ready` 200 and the sign-in page; upgrade = run again; uninstall keeps the data. (2) Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the principal audit covers Windows logins and group rights; the password path only for SQL logins. (3) Folders for sign-in keys, TLS key, credential files, logs and settings: service account, SYSTEM and Administrators only, inheritance off, a start refuses wider; key ring and runtime credential file DPAPI-NG to the service account; administrator and migration passwords never stored on Windows; #6 closed. (4) JSON log files per day in `%ProgramData%\Goldmark\logs`; a configuration failure also to the Application log (setting names only); tested that 3001 and 3004 never reach the Event Log. (5) Service recovery restarts after a crash; a configuration error (exit 2) stops without a loop. (6) `rotate-db-credentials` (Docker and Windows): every generated SQL login, file before login, audited as System, then a restart (the wizard restarts the service); nothing to rotate under Windows authentication. (7) The recovery setting in the settings file from (3); the link's path in the log file. (8) #34's two criteria. (9) Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express on the runner, install smoke with Windows authentication as `NT SERVICE\Goldmark` (`/health/ready`, ACLs, log file), a SQL-login install with rotate, uninstall; the gMSA checked by hand per the ops guide. (10) `docs/ops/windows-service.md`; the installer's prompts as a text spec in the PR; rule 7; rule 8 both ways | — |
+| 5 | **in progress** (approved 2026-10-23, DEC-044) | `slice/05-ci-crud` | CI types/attributes metadata (the built-in CI and relationship types, only the attributes the PRD names; the API to add custom attributes, its screen in 5b), CI CRUD API, list/detail UI with retire and restore (retired CIs hidden unless shown; other lifecycle changes in slice 20), deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
 | 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
-| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff | 18 |
+| 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH (#48, DEC-044 item 11) | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff; #48 closed | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression | US-20/21; re-ingest → 0 history rows | — |
 | 11 | pending | `slice/11-provenance` | Provenance, precedence, overrides | US-22, FR-RC-3/6 | 5 (badges, override) |
@@ -48,11 +49,11 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 17 | pending | `slice/17-sql-collector` | SQL collector: instances, DBs, AGs, replicas, listeners | US-34 | — |
 | 18 | pending | `slice/18-fc-storage` | FC LUN paths, storage groups, mapping screen | US-35; M4 | 10 |
 | 19 | pending | `slice/19-impact-engine` | Impact engine, redundancy semantics, explanation paths, `/impact?ci={id}[&ci=…]` deep link, CI detail "Impact" tab | US-41; M8; US-53 for `/impact` | 5 (Impact tab), 7 |
-| 20 | pending | `slice/20-business-services` | Business services, ownership, lifecycle | US-12/13/14 | 4 (lifecycle/owner filters), 5 (lifecycle/owner edit), 8 |
+| 20 | pending | `slice/20-business-services` | Business services, ownership, lifecycle; the search toolbar: saved filters (#45), column chooser (#46), CSV export (#47) (DEC-044) | US-12/13/14; #45, #46, #47 closed | 4 (lifecycle/owner filters, toolbar), 5 (lifecycle/owner edit), 8 |
 | 21 | pending | `slice/21-csv-import` | CSV import wizard + quickstart sample dataset | US-25; M5 | 13 |
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
 | 23 | pending | `slice/23-data-quality-history` | Data quality + global change history, dashboard data-quality counts and recent-changes feed | Screens 11, 15 and the dashboard additions | 3 (counts, recent changes), 11, 15 |
-| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5; relative-link check (#12); trusted reverse proxies (#31, DEC-042 item 1); #33 | US-60, NFR-SEC-7; #5, #31 and the #12 link check closed | — |
+| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5; relative-link check (#12); trusted reverse proxies (#31, DEC-042 item 1); #33; #40 (owner, 2026-10-23) | US-60, NFR-SEC-7; #5, #31, #40 and the #12 link check closed | — |
 | 25 | pending (P1) | `slice/25-oidc` | OIDC sign-in (Entra) + group→role mapping | US-05 | 1 (Microsoft sign-in), 17 (group mappings) |
 | 25b | pending (P1) | `slice/25b-windows-sign-in` | Windows sign-in for domain users on the Windows service: Kerberos only, Goldmark's code still asked, accounts from mapped AD groups, self-service linking (#36, the owner's decisions there) | #36's acceptance criteria | 1, 1b, 17, account page |
 | 25c | pending (P1) | `slice/25c-ldap-sign-in` | LDAP sign-in: a directory password over LDAPS, Active Directory and LDAPv3, every distribution, the #36 account model (#37) | #37's acceptance criteria | 1, 17, account page |
@@ -61,7 +62,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 28 | pending (P1) | `slice/28-backup-scenarios-replay` | Built-in backup job, saved impact scenarios, event replay, pseudonymized export | US-61/44/52; NFR-SEC-6 pseudonymized export (keyed HMAC, as in the readiness probe) | 7 (saved scenarios), 19 (replay) |
 | 29 | pending (P1) | `slice/29-app-registrations` | App registrations, app tokens, annotations API, badges and "Open in {app}" links, Apps & integrations screen | US-55/57, FR-EX-3; a sample external app (test fixture) can annotate and link without any CMDB UI code change | 5 and 6 (badges, links), 21 |
 | 30 | pending (P1) | `slice/30-change-feed` | Change feed + published `Goldmark.Contracts` NuGet and TypeScript types | US-56, FR-EV-5, FR-EX-2; the sample app resyncs correctly after a simulated outage | — |
-| P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28; audit retention only shown, not edited, while DEC-041 holds | Screen 20 | 20 |
+| P1 | pending (P1) | slice to be set by the owner | Settings screen (DEC-021); its OIDC and backup sections depend on slices 25 and 28; audit retention only shown, not edited, while DEC-041 holds; changing the Windows service account or the database authentication on an upgrade (#41; owner, 2026-10-22 and 2026-10-23) | Screen 20; #41 closed | 20 |
 
 P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
@@ -129,9 +130,57 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **in
-progress**: built and tested locally on Linux and on a Windows 11 host, PR #39. The decisions are DEC-043, with
-the owner's words; the operator guide is `docs/ops/windows-service.md`.
+Slice **5** (`slice/05-ci-crud`, approved 2026-10-23, DEC-044) is **in progress**: the screens are approved
+(`docs/design/screens/slice-5/`, DEC-044 item 10), built and tested locally. The decisions are DEC-044, with the
+owner's words; the deep-link contract is `docs/integration/deep-links.md`.
+
+**What it adds:**
+- **Migration 0006:** `cmdb.AttributeDef` (an attribute per CI type: name, label, kind, required, choices, linked
+  type), a §9.3 group on `cmdb.CiType`, the 20 built-in types, only the attributes the PRD names, and the 17
+  §9.4 relationship types.
+- **API:** `GET /cis` (name contains `q` in any case, `type`s, `retired`, six orders, an opaque keyset cursor,
+  the total and the count per type on the first page), `GET /cis/{id}` with its ETag, `POST /cis`,
+  `PUT /cis/{id}` (If-Match: 428 without, 412 changed, 409 `retired`), `POST /cis/{id}/retire` and `/restore`;
+  `GET /types`, `POST /types/{type}/attributes` (Admin, add only). New policy `CiEditor` (Admin or Editor).
+  Every change audited in its transaction (`ci.created`, `ci.changed` with the fields' labels, `ci.retired`,
+  `ci.restored`, `type.attribute.added`).
+- **Web:** Search (screen 4) with the type filter and Show retired, the CI page (screen 5, Attributes tab), the
+  New CI / Edit CI panel with all six attribute kinds, the 412 review ("Use mine"), the CI not-found page, the
+  Inventory › Search nav item and the top-bar search. Screen 16's "Person affected" column (and the CSV's)
+  is "Affected": a person, a CI with its type, or a CI type.
+- **Performance:** `SyntheticInventory` (25,000 CIs in the §1.4 proportions) and `PerformanceTests`, run on
+  request by the **Performance** workflow (`workflow_dispatch`), the p95 table in the job summary (DEC-044 item 7).
+
+**For the slices that follow:**
+- A CI's version is its `ValidFrom` (the table is system-versioned), sent as text and compared with
+  `CONVERT(datetime2(7), @stamp, 126)`: Dapper sends a .NET `DateTime` as `datetime`, which loses the precision.
+  SQL Server's 13535 (a transaction older than the row's version) answers 412 too.
+- `Ci.ChangedBy` holds the person's account ID as text; slice 7's `SESSION_CONTEXT` should write the same.
+- Names are matched and ordered with `COLLATE Latin1_General_100_CI_AS`, whatever the database's collation
+  (DEC-030: a DBA's server); `q` escapes `%`, `_`, `[` and `\` (`ESCAPE '\'`).
+- Collector slices add their attributes by migration as built-in rows of `cmdb.AttributeDef` (DEC-044 item 3).
+  A required attribute added to a type with CIs is enforced the next time each is saved.
+- `owned_by` and `depends_on` are seeded with null ends: slice 6 checks that `owned_by` points at a Team or a
+  Person when it creates relationships.
+- Audit targets beyond people: `TargetType` `Ci` (the CI's ID) and `CiType` (the type's ID); `AuditLog`
+  resolves both.
+- Search keeps its whole state in the page address and its columns are a data-driven array: #45 (saved
+  filters), #46 (column chooser) and #47 (CSV export, reusing the list's query) attach there in slice 20.
+- `PUT /cis/{id}` replaces every value: an attribute not sent is unset. Slice 8 adds the partial save,
+  `PATCH` with JSON Merge Patch (#48, DEC-044 item 11): merge the stored values with the patch, then run the
+  same checks (`AttributeValues.Check`, `CheckAsync`).
+- A number attribute is a .NET `decimal`, stored as a JSON number, sent as a decimal string with every digit,
+  accepted as either (DEC-044 item 12): slice 8's OpenAPI declares it `type: string, format: decimal`, slice
+  10's ingest keeps the same check (`AttributeValues.ExactDecimal`), and no screen makes it a JavaScript number.
+- `/api/v1/cis` is a real route now: tests use `/api/v1/no-such-resource` for an unknown one.
+- The CI page has one tab; an unknown `?tab=` is corrected to the CI's address. Slices 6, 7, 10 and 19 add
+  their tabs (`docs/integration/deep-links.md` lists the values).
+- Retire or Restore after someone else changed the CI: a "This CI changed meanwhile" dialog loads their
+  version (the boards' 412 dialog is the panel's).
+
+Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **merged** (PR #39,
+`bc1e817`). The decisions are DEC-043, with the owner's words; the operator guide is
+`docs/ops/windows-service.md`.
 
 **What it adds:**
 - **The Windows service** (`Microsoft.Extensions.Hosting.WindowsServices`): `Install-Goldmark.ps1` in a
@@ -358,11 +407,13 @@ And for slice 24:
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | 4a (DEC-042), PR #38; the command became the recovery setting (item 6) |
 | #36 Windows sign-in (Kerberos) for domain users on the Windows service | 25b (owner, 2026-10-21; DEC-042 item 12) |
 | #37 LDAP sign-in: a directory password over LDAPS, every distribution | 25c (owner, 2026-10-21; DEC-042 item 12) |
-| #40 Windows: a private folder where the service account can't write passes the start check, and the write fails later | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
-| #41 Windows installer: changing the service account, or the database authentication, on an upgrade (both refused before anything changes until then; the owner plans post-MVP admin settings for database authentication) | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
+| #40 Windows: a private folder where the service account can't write passes the start check, and the write fails later | 24 (`deferred`, 2026-10-22, PR #39 review round 1; placed by the owner, 2026-10-23, "A. Slice 24") |
+| #41 Windows installer: changing the service account, or the database authentication, on an upgrade (both refused before anything changes until then; the owner plans post-MVP admin settings for database authentication) | P1 settings slice (`deferred`, 2026-10-22, PR #39 review round 1; placed by the owner, 2026-10-23, "A. With post-MVP settings") |
+| #45 search: saved filters per user; #46 column chooser; #47 CSV export of the CI list (screen 4's toolbar) | 20 (owner, 2026-10-23, DEC-044) |
+| #48 CI API: a partial save, `PATCH /api/v1/cis/{id}` with JSON Merge Patch (slice 5's PUT replaces every value) | 8 (owner, 2026-10-23, DEC-044 item 11) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
-| Dependabot PRs #42 (axe 4.14, Playwright 1.64.1) and #43 (React 19.3.1 without React DOM): axe 4.14 enables Label in Name, which the account button failed; React DOM throws error 527 for any other React version. With them, `RightsAtStartTests` raced on fast runners (main red after #44) | replaced by one PR (owner, 2026-10-23, all "A"): both bumps, the `react` Dependabot group, the account button named "AP, Account: …", the test fixed |
+| Dependabot PRs #42 (axe 4.14, Playwright 1.64.1) and #43 (React 19.3.1 without React DOM): axe 4.14 enables Label in Name, which the account button failed; React DOM throws error 527 for any other React version. With them, `RightsAtStartTests` raced on fast runners (main red after #44) | replaced by PR #50, merged as `53d65b4` (owner, 2026-10-23, all "A"): both bumps, the `react` Dependabot group, the account button named "AP, Account: …", the test fixed |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
 
 Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
