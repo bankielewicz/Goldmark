@@ -5,15 +5,16 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-22:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
-(PR #32) and **4a (PR #38)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+**As of 2026-10-23:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+(PR #32), 4a (PR #38) and **4b (PR #39)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
 the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
-**Slice 4b**, the Windows service distribution (approved 2026-10-22, DEC-036, DEC-043), is in progress on
-`slice/04b-windows-service`. Docker Compose is the first distribution, not the target deployment
-(DEC-030, rule 8).
+Slice 4b brought the Windows service distribution (PR #39, DEC-036, DEC-043; merged 2026-10-23, with
+the dependency PR #44). **Slice 5**, CIs with their types and attributes, search and detail (approved
+2026-10-23, DEC-044), is in progress on `slice/05-ci-crud` (PR #49). Docker Compose is the first
+distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
