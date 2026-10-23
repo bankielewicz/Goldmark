@@ -131,6 +131,40 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
+Slice **5b** (`slice/05b-types-admin`, approved 2026-10-23, DEC-045) is **built**, with its approved screens in
+`docs/design/screens/slice-5b/` (DEC-045 item 7). The decisions are DEC-045, with the owner's words.
+
+**What it adds:**
+- **Migration 0007:** `IsHidden` on `cmdb.CiType` (with a check on the six §9.3 groups), `Description` on
+  `cmdb.RelationshipType` (the 17 built-in descriptions), `ChangedBy` on both definition tables, and system
+  versioning for `cmdb.CiType`, `cmdb.AttributeDef` and `cmdb.RelationshipType` (DEC-045 item 8): earlier
+  versions and deleted definitions stay in `*History`. Rows that existed start their period at 1900-01-01.
+- **API** (`Inventory/TypeEndpoints.cs`, Admin): `GET /types/usage` (counts, retired CIs included);
+  `POST /types`, `DELETE /types/{type}` (409 `built-in`, `has-cis`, `referenced`), `POST /types/{type}/hide`
+  and `/show`; `PUT` and `DELETE /types/{type}/attributes/{name}` (If-Match = the attribute's `eTag`; a choice
+  a CI holds can't be removed, `ChoiceInUse`; a delete takes the values out of every CI in one statement and
+  answers `valuesRemoved`); `POST /relationship-types`, `PUT` and `DELETE /relationship-types/{name}`.
+  `POST /cis` refuses a hidden type (`HiddenType`). Nine new audit actions (group "Types & attributes"), a
+  `RelationshipType` audit target, and the audit filter `target=ci:{id}`, `type:{number}`,
+  `relationship-type:{number}` besides a person's ID.
+- **Web:** screen 14 at `/types` (`web/src/pages/TypesPage.tsx`, the panels in `web/src/ui/TypePanels.tsx`),
+  Administration › Types & attributes in the nav (Admin only; others get the 403 page); hidden types left out of
+  the New CI picker and Search's type filter; screen 16 shows the new entries, opens a type in Types &
+  attributes and shows all entries about a CI, a type or a relationship type.
+
+**For the slices that follow:**
+- A type's row in `cmdb.CiType` is the lock for its definitions: a CI save reads the type with `HOLDLOCK`
+  inside its transaction (`CiTypeCatalog.LockForSaveAsync`), before the CI's own row; an Admin's change takes
+  it with `XLOCK, HOLDLOCK, ROWLOCK` first (`LockForChangeAsync`). New writers of CIs (slice 10's ingest,
+  slice 21's import) take the shared lock the same way, by the type's ID (a lookup by name locks only the name
+  index's entry). Reads that join the row wait while an Admin's change runs.
+- Slice 6: deleting a relationship type counts its relationships first and the foreign key refuses it if one
+  is created meanwhile (547, answered 409 `in-use`); slice 6 checks `owned_by`'s Team or Person end itself.
+- Slice 7's history and "as of" views read a definition as of the CI version's time from the `*History`
+  tables (`FOR SYSTEM_TIME AS OF`); a version's `ValidFrom` is also its ETag.
+- An Admin's change that waits for saves can meet a CI version newer than its own transaction (13535): it runs
+  once more, then answers 412 (`TypeEndpoints.RetryOnConflictAsync`).
+
 Slice **5** (`slice/05-ci-crud`, approved 2026-10-23, DEC-044) is **merged** (PR #49, `783f526`), with its
 approved screens in `docs/design/screens/slice-5/` (DEC-044 item 10). The decisions are DEC-044, with the
 owner's words; the deep-link contract is `docs/integration/deep-links.md`.

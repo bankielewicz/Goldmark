@@ -8,6 +8,7 @@ import { SearchPage } from './pages/SearchPage';
 import { DashboardPage, ForbiddenPage, NotFoundPage } from './pages/SimplePages';
 import { SignInPage } from './pages/SignInPage';
 import { TwoFactorPage } from './pages/TwoFactorPage';
+import { TypesPage } from './pages/TypesPage';
 import { UsersPage } from './pages/UsersPage';
 import { navigate, safeReturnPath, useLocation } from './router';
 import { canReadAudit, isAdmin, useSession } from './session';
@@ -41,8 +42,8 @@ function Redirect({ to }: { to: string }) {
 /**
  * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite, /reset and
  * /password-reset (their token in the URL fragment). Signed in, inside the app shell: /, /search and /ci/{id} (slice 5,
- * US-53's stable deep links: docs/integration/deep-links.md), /users (Admin only), /audit (Admin and Auditor) and
- * /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and back afterwards.
+ * US-53's stable deep links: docs/integration/deep-links.md), /types and /users (Admin only), /audit (Admin and
+ * Auditor) and /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and back afterwards.
  */
 export function App() {
   const styles = useStyles();
@@ -85,6 +86,15 @@ export function App() {
   let page;
   if (pathname === '/') {
     page = <DashboardPage />;
+  } else if (pathname === '/types') {
+    page = isAdmin(session.user) ? (
+      <TypesPage />
+    ) : (
+      <ForbiddenPage
+        title="Types & attributes"
+        crumbs={[{ label: 'Administration' }, { label: 'Types & attributes' }]}
+      />
+    );
   } else if (pathname === '/users') {
     page = isAdmin(session.user) ? (
       <UsersPage />

@@ -172,9 +172,10 @@ internal sealed class AuditLog(DbSession db)
             AuditTargetTypes.Ci => new AuditParty(AuditTargetTypes.Ci, Guid.TryParse(row.TargetId, out var ci) ? ci : null, null, null,
                 Removed: row.TargetCiName is null, Name: row.TargetCiName ?? Recorded(details, "name"), CiType: row.TargetCiTypeName ?? Recorded(details, "type")),
             AuditTargetTypes.CiType => new AuditParty(AuditTargetTypes.CiType, null, null, null, Removed: row.TargetTypeName is null,
-                Name: row.TargetTypeName ?? Recorded(details, "type")),
+                Name: row.TargetTypeName ?? Recorded(details, "type"), Number: Number(row.TargetId)),
             AuditTargetTypes.RelationshipType => new AuditParty(AuditTargetTypes.RelationshipType, null, null, null,
-                Removed: row.TargetRelationshipTypeName is null, Name: row.TargetRelationshipTypeName ?? Recorded(details, "name")),
+                Removed: row.TargetRelationshipTypeName is null, Name: row.TargetRelationshipTypeName ?? Recorded(details, "name"),
+                Number: Number(row.TargetId)),
             _ => null,
         };
         return new AuditEntry(row.Id, row.At, actor, row.Action, action.Label, action.Outcome, target, row.Ip, details);
@@ -187,6 +188,8 @@ internal sealed class AuditLog(DbSession db)
 
     /// <summary>The user name an administrator's action recorded for the person affected (slice 3 writes it).</summary>
     private static string? RecordedUserName(JsonElement? details) => Recorded(details, "userName");
+
+    private static int? Number(string? id) => int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
 
     private static string? Recorded(JsonElement? details, string property) =>
         details is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
@@ -203,9 +206,11 @@ internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string
 
 /// <summary>
 /// Who acted, or what it was about: a person (a removed account is <c>Removed</c>), a CI (<c>Name</c>,
-/// <c>CiType</c>), a CI type (<c>Name</c>; slice 5) or a relationship type (<c>Name</c>; slice 5b).
+/// <c>CiType</c>), a CI type (<c>Name</c>; slice 5) or a relationship type (<c>Name</c>; slice 5b), these two with
+/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>).
 /// </summary>
-internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null);
+internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null,
+    int? Number = null);
 
 /// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5.</summary>
 internal static class AuditTargetTypes

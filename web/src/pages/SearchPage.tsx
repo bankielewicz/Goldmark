@@ -644,7 +644,8 @@ function NoResults({
 
 /**
  * The CI type filter (a labelled region): a checkbox per type with its count for the current search,
- * grouped as PRD §9.3. Types with no CIs wait behind "Show N more types"; a ticked type always shows.
+ * grouped as PRD §9.3. Types with no CIs wait behind "Show N more types"; a ticked type always shows. A
+ * hidden type (DEC-045 item 5) isn't offered unless a link ticked it.
  */
 function TypeFilter({
   types,
@@ -671,7 +672,7 @@ function TypeFilter({
 }) {
   const styles = useStyles();
   const countOf = (name: string) => counts?.find((c) => c.type === name)?.count ?? 0;
-  const all = types ?? [];
+  const all = (types ?? []).filter((t) => !t.hidden || ticked.includes(t.name));
   const visible = all.filter((t) => showAll || countOf(t.name) > 0 || ticked.includes(t.name));
   const hidden = all.length - visible.length;
   const groups = [...categories, null]

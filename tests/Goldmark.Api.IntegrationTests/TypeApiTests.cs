@@ -93,8 +93,9 @@ public sealed class TypeApiTests(SqlServerFixture sql)
         var (auditor, _) = await scenario.InviteAndAcceptAsync(admin, "ida.auditor", "Auditor");
         var entries = AuthScenario.Ok(await auditor.GetAsync($"/api/v1/audit?target=type:{faxId}")).Body.GetProperty("entries").EnumerateArray().ToList();
         Assert.Equal(["type.deleted", "type.attribute.added", "type.added"], entries.Select(e => e.Value("action")));
-        Assert.All(entries, e => Assert.Equal(("CiType", "Fax", true),
-            (e.GetProperty("target").Value("type"), e.GetProperty("target").Value("name"), e.GetProperty("target").GetProperty("removed").GetBoolean())));
+        Assert.All(entries, e => Assert.Equal(("CiType", "Fax", true, faxId),
+            (e.GetProperty("target").Value("type"), e.GetProperty("target").Value("name"), e.GetProperty("target").GetProperty("removed").GetBoolean(),
+                e.GetProperty("target").GetProperty("number").GetInt32())));
         Assert.Equal("InvalidTarget", AuditField(await auditor.GetAsync("/api/v1/audit?target=type:x")));
     }
 

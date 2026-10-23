@@ -2,11 +2,12 @@ import AxeBuilder from '@axe-core/playwright';
 import { createHmac } from 'node:crypto';
 import { expect, test, type Page } from '@playwright/test';
 
-// Slices 3, 4, 4a and 5 in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
+// Slices 3, 4, 4a, 5 and 5b in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
 // completes first-run setup through the API first and passes the administrator's credentials):
 // sign-in with a TOTP code, the app shell, Users & roles, the two-factor page, the audit log, a
-// password reset end to end and the CI search, detail and panel (slice 5), each checked with axe in
-// both themes (NFR-A11Y-3) and with no CSP or Trusted Types violation (DEC-037).
+// password reset end to end, the CI search, detail and panel (slice 5) and Types & attributes (slice
+// 5b), each checked with axe in both themes (NFR-A11Y-3) and with no CSP or Trusted Types violation
+// (DEC-037).
 
 const admin = {
   userName: process.env.GOLDMARK_E2E_ADMIN_USER ?? '',
@@ -649,6 +650,165 @@ test.describe('slice 5 screens', () => {
       await expect(page.getByText(value, { exact: true })).toBeVisible();
       expect(await stored(String(created.json.id))).toBe(value);
     }
+  });
+});
+
+test.describe('slice 5b screen', () => {
+  test.use({ reducedMotion: 'reduce' });
+  test.describe.configure({ timeout: 180_000 });
+  test.skip(!admin.userName || !admin.password || !admin.totpKey, 'needs GOLDMARK_E2E_ADMIN_* from compose-smoke.sh');
+
+  test('an administrator manages a custom type, its attribute and a relationship type on Types & attributes', async ({
+    page,
+  }) => {
+    await recordViolations(page);
+    await signIn(page);
+    const stamp = Date.now();
+    const typeName = `Printer${stamp}`;
+    const relationshipName = `prints_for_${stamp}`;
+    const call = (method: string, path: string, body: unknown = null) =>
+      page.evaluate(
+        async ({ method, path, body }) => {
+          const token = ((await (await fetch('/api/v1/auth/antiforgery')).json()) as { token: string }).token;
+          const response = await fetch(path, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'X-Goldmark-Antiforgery': token },
+            ...(body === null ? {} : { body: JSON.stringify(body) }),
+          });
+          return { status: response.status };
+        },
+        { method, path, body },
+      );
+
+    // Administration > Types & attributes, from the nav: the first type is selected.
+    await page.getByRole('link', { name: 'Types & attributes' }).first().click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Types & attributes' })).toBeVisible();
+    await expect(page.getByRole('listbox', { name: 'CI types' })).toBeVisible();
+    await expectAccessible(page, 'types');
+
+    // New CI type: a name, a group, Create; the new type is selected.
+    await page.getByRole('button', { name: 'New CI type' }).click();
+    const newType = page.getByRole('dialog', { name: 'New CI type' });
+    await expect(newType).toBeVisible();
+    await expectAccessible(page, 'New CI type panel');
+    await newType.getByRole('textbox', { name: /^Name/ }).fill(typeName);
+    await newType.getByRole('combobox', { name: /^Group/ }).click();
+    // Exact: the type list behind the panel has options too (NetworkDevice).
+    await page.getByRole('option', { name: 'Network', exact: true }).click();
+    await newType.getByRole('radio', { name: 'Network device' }).click();
+    await newType.getByRole('button', { name: 'Create' }).click();
+    await expect(toast(page, `${typeName} added`)).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: typeName })).toBeVisible();
+    await expect(page.getByText('This type has no attributes yet.')).toBeVisible();
+
+    // Add attribute: a list of choices, its name suggested from the label.
+    await page.getByRole('button', { name: 'Add attribute' }).first().click();
+    const add = page.getByRole('dialog', { name: `Add attribute to ${typeName}` });
+    await add.getByRole('textbox', { name: /^Label/ }).fill('Backup tier');
+    await expect(add.getByRole('textbox', { name: /^Name/ })).toHaveValue('backupTier');
+    await add.getByRole('radio', { name: 'List of choices' }).click();
+    for (const choice of ['Gold', 'Silver']) {
+      await add.getByRole('textbox', { name: 'New choice' }).fill(choice);
+      await add.getByRole('button', { name: 'Add choice' }).click();
+    }
+    await expectAccessible(page, 'Add attribute panel');
+    await add.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(toast(page, 'Backup tier added')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Gold, Silver' })).toBeVisible();
+
+    // A CI holds Gold: on Edit, Gold can't be removed; the label changes.
+    expect(
+      (await call('POST', '/api/v1/cis', { type: typeName, name: `prn-${stamp}`, attributes: { backupTier: 'Gold' } }))
+        .status,
+    ).toBe(201);
+    await page.reload();
+    await page.getByRole('button', { name: 'Edit Backup tier' }).click();
+    const edit = page.getByRole('dialog', { name: 'Edit Backup tier' });
+    await expect(edit.getByRole('button', { name: 'Remove Gold' })).toBeDisabled();
+    await expect(edit.getByText('1 CI uses Gold. Change them first.')).toBeVisible();
+    await useScheme(page, 'dark');
+    await expectAccessible(page, 'Edit attribute panel (dark)');
+    await edit.getByRole('textbox', { name: /^Label/ }).fill('Backup level');
+    await edit.getByRole('button', { name: 'Save' }).click();
+    await expect(toast(page, 'Changes saved')).toBeVisible();
+
+    // Delete it: a CI has a value, so its name must be typed; the value leaves the CI.
+    await page.getByRole('button', { name: 'Delete Backup level' }).click();
+    const typed = page.getByRole('alertdialog', { name: 'Delete Backup level?' });
+    await expect(typed.getByText(/Each of those CIs will show as changed by you\./)).toBeVisible();
+    await expect(typed.getByRole('button', { name: 'Delete attribute' })).toBeDisabled();
+    await expectAccessible(page, 'typed confirmation (dark)');
+    await typed.getByRole('textbox').fill('backupTier');
+    await typed.getByRole('button', { name: 'Delete attribute' }).click();
+    await expect(toast(page, 'Backup level deleted (1 value removed)')).toBeVisible();
+
+    // A type with a CI can't be deleted; it can be hidden, and shown again.
+    await useScheme(page, 'light');
+    await page.getByRole('button', { name: `More actions for ${typeName}` }).click();
+    await expect(page.getByRole('menuitem', { name: 'Delete type…' })).toBeDisabled();
+    await page.getByRole('menuitem', { name: 'Hide type…' }).click();
+    await page
+      .getByRole('alertdialog', { name: `Hide ${typeName}?` })
+      .getByRole('button', { name: 'Hide type' })
+      .click();
+    await expect(toast(page, `${typeName} hidden`)).toBeVisible();
+    await expect(page.getByText(`${typeName} isn’t offered for new CIs or in Search’s type filter.`)).toBeVisible();
+    await expectAccessible(page, 'hidden type');
+    await page.getByRole('button', { name: 'Show again' }).click();
+    await expect(toast(page, `${typeName} shown again`)).toBeVisible();
+
+    // An unused custom type is deleted after a plain confirmation.
+    expect((await call('POST', '/api/v1/types', { name: `Fax${stamp}`, category: 'Network' })).status).toBe(201);
+    await page.goto(`/types?type=Fax${stamp}`);
+    await page.getByRole('button', { name: `More actions for Fax${stamp}` }).click();
+    await page.getByRole('menuitem', { name: 'Delete type…' }).click();
+    await page
+      .getByRole('alertdialog', { name: `Delete Fax${stamp}?` })
+      .getByRole('button', { name: 'Delete' })
+      .click();
+    await expect(toast(page, `Fax${stamp} deleted`)).toBeVisible();
+
+    // Relationship types: built-in ones are locked; a custom one is added, changed and deleted.
+    await page.getByRole('tab', { name: 'Relationship types' }).click();
+    await expect(page).toHaveURL(/\/types\?tab=relationships$/);
+    await expect(page.getByRole('cell', { name: 'A VM runs on a hypervisor host.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit runs_on' })).toBeDisabled();
+    await expectAccessible(page, 'relationship types');
+    await page.getByRole('button', { name: 'New relationship type' }).click();
+    const rel = page.getByRole('dialog', { name: 'New relationship type' });
+    await rel.getByRole('textbox', { name: /^Name/ }).fill(relationshipName);
+    await rel.getByRole('textbox', { name: /^Description/ }).fill('Prints for a team.');
+    await expectAccessible(page, 'New relationship type panel');
+    await rel.getByRole('button', { name: 'Create' }).click();
+    await expect(toast(page, `${relationshipName} added`)).toBeVisible();
+    await page.getByRole('button', { name: `Edit ${relationshipName}` }).click();
+    const relEdit = page.getByRole('dialog', { name: `Edit ${relationshipName}` });
+    await relEdit.getByRole('radio', { name: /^None/ }).click();
+    await relEdit.getByRole('button', { name: 'Save' }).click();
+    await expect(toast(page, 'Changes saved')).toBeVisible();
+    await page.getByRole('button', { name: `Delete ${relationshipName}` }).click();
+    await page
+      .getByRole('alertdialog', { name: `Delete ${relationshipName}?` })
+      .getByRole('button', { name: 'Delete' })
+      .click();
+    await expect(toast(page, `${relationshipName} deleted`)).toBeVisible();
+
+    // At 1024 px the type list is a Combobox above the details.
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await page.goto(`/types?type=${typeName}`);
+    await expect(page.getByRole('combobox', { name: 'CI type' })).toHaveValue(typeName);
+    await expectAccessible(page, 'types at 1024');
+
+    // The audit log names the type and offers its other entries.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/audit?action=type.attribute.deleted');
+    await page
+      .getByRole('button', { name: /^Show details for entry \d+: Custom attribute deleted/ })
+      .first()
+      .click();
+    await page.getByRole('button', { name: `Show all entries about ${typeName}` }).click();
+    await expect(page).toHaveURL(/target=type%3A\d+/);
+    await expect(page.getByRole('cell', { name: 'Custom attribute deleted' }).first()).toBeVisible();
   });
 });
 

@@ -57,5 +57,13 @@ and its failure MessageBar, the discard dialog (slice 5's), the Edit relationshi
 Name, From and To read only), and the 1024 navigation rail. The audit action codes on the Audit board are
 samples; the backend names them.
 
+As built (`web/src/pages/TypesPage.tsx`, `web/src/ui/TypePanels.tsx`, `web/src/pages/AuditPage.tsx`), the
+differences from the boards: the choice list's Add button is named "Add choice" (the panel's own Add saves the
+attribute); the Impact column's explanation is a Tooltip on an info button beside the header; "Show again" in the
+More actions menu shows the type at once, as the MessageBar's button does; "Any type" has the generic type icon; a
+type's count of CIs links to Search with retired CIs shown, as the count includes them; the audit details of the
+slice-5b entries leave out the type, which Affected names; the audit filter's label reads "Affected" when it names a
+CI, a type or a relationship type, and a CI's entry offers "Show all entries about" too (slice 5's board had it).
+
 When a board changes, edit the file here and publish it to the canvas; if someone edits the canvas, pull the file
 back here first.

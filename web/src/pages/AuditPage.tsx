@@ -167,8 +167,10 @@ interface Person {
   displayName: string;
 }
 
-/** Who acted, or whom an entry is about. A person whose account was removed since is `removed`. */
-/** Who acted, or what an entry is about: a person, or (slice 5) a CI with its type, or a CI type. */
+/**
+ * Who acted, or what an entry is about: a person (one whose account was removed since is `removed`), or (slice 5) a
+ * CI with its type, or a CI type, or (slice 5b) a relationship type; the last two with their `number` for the filter.
+ */
 interface Party {
   type: string;
   id: string | null;
@@ -177,6 +179,7 @@ interface Party {
   removed: boolean;
   name?: string | null;
   ciType?: string | null;
+  number?: number | null;
 }
 
 interface Entry {
@@ -339,6 +342,7 @@ const kinds: Record<string, string> = {
 function personText(party: Party): string {
   if (party.type === 'Ci') return `${party.name ?? 'A CI'} · ${party.ciType ?? 'CI'}`;
   if (party.type === 'CiType') return `${party.name ?? 'A type'} · CI type`;
+  if (party.type === 'RelationshipType') return `${party.name ?? 'A relationship type'} · Relationship type`;
   if (party.displayName && party.userName) return `${party.displayName} · ${party.userName}`;
   if (party.removed) return party.userName ? `${party.userName} (account removed)` : 'Removed account';
   return '';
@@ -355,10 +359,29 @@ function peopleName(id: string, people: Person[], entries: readonly Entry[] = []
   return (party && personText(party)) || id;
 }
 
-/** The picker option for the person a filter names when the people list doesn't have them (a removed account). */
+/** The `target` filter names a person by id, or since slice 5b `ci:{id}`, `type:{number}` or `relationship-type:{number}`. */
+function isPersonTarget(target: string): boolean {
+  return !target.includes(':');
+}
+
+/** What a `target` filter names, in words: a person's name, or a CI or type as a loaded entry about it names it. */
+function targetName(target: string, people: Person[], entries: readonly Entry[] = []): string {
+  if (isPersonTarget(target)) return peopleName(target, people, entries);
+  const [kind, key] = [target.slice(0, target.indexOf(':')), target.slice(target.indexOf(':') + 1)];
+  const party = entries
+    .map((e) => e.target)
+    .find((p) =>
+      kind === 'ci'
+        ? p?.type === 'Ci' && p.id === key
+        : p?.type === (kind === 'type' ? 'CiType' : 'RelationshipType') && String(p.number) === key,
+    );
+  return party ? personText(party) : kind === 'ci' ? 'A CI' : kind === 'type' ? 'A CI type' : 'A relationship type';
+}
+
+/** The picker option for what a filter names when the people list doesn't have it (a removed account, a CI, a type). */
 function unlistedPerson(id: string, people: Person[], entries: readonly Entry[]): { key: string; text: string }[] {
   if (!id || Object.hasOwn(actorTypes, id) || people.some((p) => p.id === id)) return [];
-  return [{ key: id, text: peopleName(id, people, entries) }];
+  return [{ key: id, text: targetName(id, people, entries) }];
 }
 
 /** The filters in words, for the export dialog: "Last 7 days · Outcome: Failed". */
@@ -382,7 +405,11 @@ function describeFilters(
     const labels = filters.actions.map((code) => catalog?.actions.find((a) => a.code === code)?.label ?? code);
     parts.push(`Action: ${labels.join(', ')}`);
   }
-  if (filters.target) parts.push(`Person affected: ${peopleName(filters.target, people, entries)}`);
+  if (filters.target) {
+    parts.push(
+      `${isPersonTarget(filters.target) ? 'Person affected' : 'Affected'}: ${targetName(filters.target, people, entries)}`,
+    );
+  }
   if (filters.ip) parts.push(`Source IP: ${filters.ip}`);
   if (filters.outcome) parts.push(`Outcome: ${filters.outcome}`);
   return parts.length === 1 ? `${parts[0]} · no other filters` : parts.join(' · ');
@@ -466,7 +493,9 @@ function describeRecordedFilters(value: unknown, catalog: Catalog | null, people
         .join(', ')}`,
     );
   }
-  if (typeof f.target === 'string') parts.push(`Person affected: ${peopleName(f.target, people)}`);
+  if (typeof f.target === 'string') {
+    parts.push(`${isPersonTarget(f.target) ? 'Person affected' : 'Affected'}: ${targetName(f.target, people)}`);
+  }
   if (typeof f.ip === 'string') parts.push(`Source IP: ${f.ip}`);
   if (typeof f.outcome === 'string') parts.push(`Outcome: ${f.outcome}`);
   return parts.length > 0 ? parts.join(' · ') : 'No filters';
@@ -525,6 +554,42 @@ function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]
       shown.add('name');
       add('dataType', 'Kind', kinds[text(details.dataType)] ?? text(details.dataType));
       add('required', 'Required', yesNo(details.required));
+      break;
+    // Slice 5b (DEC-045): "Affected" names the type or relationship type, so the details don't repeat it.
+    case 'type.added':
+      shown.add('type').add('icon');
+      add('group', 'Group', text(details.group));
+      break;
+    case 'type.deleted':
+      shown.add('type');
+      add('group', 'Group', text(details.group));
+      add('attributesDeleted', 'Attributes deleted', text(details.attributesDeleted));
+      break;
+    case 'type.hidden':
+    case 'type.shown':
+      shown.add('type');
+      add('cis', 'CIs of this type', text(details.cis));
+      break;
+    case 'type.attribute.changed':
+      shown.add('type').add('name');
+      add('attribute', 'Attribute', text(details.attribute));
+      add('changed', 'Changed', strings(details.changed).join(', '));
+      break;
+    case 'type.attribute.deleted':
+      shown.add('type').add('name');
+      add('attribute', 'Attribute', text(details.attribute));
+      add('valuesRemoved', 'Values removed', text(details.valuesRemoved));
+      break;
+    case 'relationship-type.added':
+    case 'relationship-type.deleted':
+      shown.add('name');
+      add('from', 'From', typeof details.from === 'string' ? details.from : 'Any type');
+      add('to', 'To', typeof details.to === 'string' ? details.to : 'Any type');
+      add('impact', 'Impact', text(details.impact));
+      break;
+    case 'relationship-type.changed':
+      shown.add('name');
+      add('changed', 'Changed', strings(details.changed).join(', '));
       break;
     default:
       break;
@@ -1051,7 +1116,7 @@ export function AuditPage() {
             ))}
           </Dropdown>
         </Field>
-        <Field label="Person affected">
+        <Field label={isPersonTarget(filters.target) ? 'Person affected' : 'Affected'}>
           <PersonPicker
             className={styles.person}
             placeholder="Anyone"
@@ -1160,10 +1225,10 @@ function PartyName({ party }: { party: Party }) {
       </span>
     );
   }
-  if (party.type === 'CiType') {
+  if (party.type === 'CiType' || party.type === 'RelationshipType') {
     return (
       <span>
-        {party.name} <span className={styles.none}>· CI type</span>
+        {party.name} <span className={styles.none}>· {party.type === 'CiType' ? 'CI type' : 'Relationship type'}</span>
       </span>
     );
   }
@@ -1255,6 +1320,27 @@ function EntryDetails({
           <Link href={`/ci/${target.id}`} onClick={(event) => followLink(event, `/ci/${target.id ?? ''}`)}>
             Open {target.name ?? 'this CI'}
           </Link>
+          <Button appearance="subtle" icon={<FilterRegular />} onClick={() => onShowAll(`ci:${target.id ?? ''}`)}>
+            Show all entries about {target.name ?? 'this CI'}
+          </Button>
+        </div>
+      ) : null}
+      {(target?.type === 'CiType' || target?.type === 'RelationshipType') && target.number ? (
+        <div className={styles.detailActions}>
+          {admin && !target.removed ? (
+            <Link href={typesPath(target)} onClick={(event) => followLink(event, typesPath(target))}>
+              Open {target.name} in Types &amp; attributes
+            </Link>
+          ) : null}
+          <Button
+            appearance="subtle"
+            icon={<FilterRegular />}
+            onClick={() =>
+              onShowAll(`${target.type === 'CiType' ? 'type' : 'relationship-type'}:${String(target.number)}`)
+            }
+          >
+            Show all entries about {target.name}
+          </Button>
         </div>
       ) : null}
       {target?.type === 'User' && target.id ? (
@@ -1274,6 +1360,11 @@ function EntryDetails({
       ) : null}
     </div>
   );
+}
+
+/** Where Types & attributes shows a CI type or the relationship types (screen 14, Admin only). */
+function typesPath(target: Party): string {
+  return target.type === 'CiType' ? `/types?type=${encodeURIComponent(target.name ?? '')}` : '/types?tab=relationships';
 }
 
 /** A Combobox over people (and, for the actor, System and Not signed in); typing narrows the list. */
