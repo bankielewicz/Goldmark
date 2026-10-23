@@ -334,7 +334,7 @@ internal static partial class CiEndpoints
         }
 
         var changedLinks = check.Links.Where(l => stored?[l.Key]?.GetValue<string>() != l.Value.ToString("D")).ToList();
-        var linked = await store.LinkedAsync(changedLinks.Select(l => l.Value));
+        var linked = await store.LinkedForSaveAsync(changedLinks.Select(l => l.Value));
         foreach (var (attribute, id) in changedLinks)
         {
             var refType = type.Attributes.First(a => a.Name == attribute).RefType;

@@ -250,6 +250,8 @@ export function CiPanel({
       return;
     }
     if (editing && !dirty) {
+      // Nothing to save, but after "Review their changes" the page still shows the older version.
+      if (reviewed) onSaved?.(reviewed, false);
       onClose();
       return;
     }

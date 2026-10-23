@@ -249,6 +249,16 @@ internal sealed class CiStore(DbSession db)
         WHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
         """;
 
+    // A save checks the CIs it newly links to with a shared lock held to its commit, so a retire of one of them
+    // (UPDLOCK on its own row, then an exclusive update) waits for the save, or the save sees it retired. Not
+    // UPDLOCK: two update locks on one row are incompatible, and a save and a retire would deadlock.
+    private const string LinkedForSaveSql = """
+        SELECT c.Id, c.Name, t.Name AS Type, c.LifecycleState, c.CiTypeId
+        FROM cmdb.Ci AS c WITH (HOLDLOCK)
+        JOIN cmdb.CiType AS t ON t.Id = c.CiTypeId
+        WHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
+        """;
+
     private const string InsertSql = """
         INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
         VALUES (@id, @tenant, @typeId, @name, 'Active', @attributes, @changedBy);
@@ -318,6 +328,15 @@ internal sealed class CiStore(DbSession db)
         return list.Count == 0
             ? new Dictionary<Guid, LinkedCi>()
             : (await db.QueryAsync<LinkedCi>(ReferencesSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(list) })).ToDictionary(r => r.Id);
+    }
+
+    /// <summary>The CIs a save newly links to, locked (shared) until the save's transaction ends.</summary>
+    public async Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedForSaveAsync(IEnumerable<Guid> ids)
+    {
+        var list = ids.Distinct().Select(i => i.ToString("D")).ToList();
+        return list.Count == 0
+            ? new Dictionary<Guid, LinkedCi>()
+            : (await db.QueryAsync<LinkedCi>(LinkedForSaveSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(list) })).ToDictionary(r => r.Id);
     }
 
     public async Task<CiDetail> DetailAsync(CiRow row, CiTypeInfo type)
