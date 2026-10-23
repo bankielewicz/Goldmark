@@ -22,6 +22,9 @@ public static class AccessPolicy
     /// <summary>Signed in, with the Admin or the Auditor role (the audit log, US-04, US-07).</summary>
     public const string AuditReader = "AuditReader";
 
+    /// <summary>Signed in, with the Admin or the Editor role: creates, changes, retires and restores CIs (US-11).</summary>
+    public const string CiEditor = "CiEditor";
+
     /// <summary>Password verified, waiting for the second factor (sign-in step 2 only).</summary>
     public const string TwoFactorPending = "TwoFactorPending";
 
@@ -34,6 +37,7 @@ public static class AccessPolicy
         [SignedIn] = "Signed in with password and second factor; any role.",
         [Admin] = "Signed in, with the Admin role.",
         [AuditReader] = "Signed in, with the Admin or the Auditor role.",
+        [CiEditor] = "Signed in, with the Admin or the Editor role.",
         [TwoFactorPending] = "Password verified within the last 5 minutes; second factor not yet given.",
         [Enrolment] = "An enrolment in progress (setup, invitation, two-factor reset or new authenticator), for 30 minutes.",
     };

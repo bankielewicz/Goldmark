@@ -144,7 +144,7 @@ internal static class SchemaChecks
                 ':', (SELECT COUNT(*) FROM sys.columns WHERE object_id = OBJECT_ID(N'cmdb.AuditLog') AND name = N'Probe'),
                 ':', (SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = 'tampered'));
             """);
-        const string expected = "17:2:0:0:0:0:0:0";
+        const string expected = "18:2:0:0:0:0:0:0"; // 18 tables since 0006 (cmdb.AttributeDef)
         return state == expected ? Baseline : state;
     }
 }

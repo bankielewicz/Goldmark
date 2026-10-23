@@ -4,6 +4,7 @@ using Goldmark.Api.Auth;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Data;
 using Goldmark.Api.Health;
+using Goldmark.Api.Inventory;
 using Goldmark.Api.Security;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -67,6 +68,8 @@ internal static class GoldmarkApplication
         builder.Services.AddScoped<AuditTrail>();
         builder.Services.AddScoped<AuditRetention>();
         builder.Services.AddScoped<AuditLog>();
+        builder.Services.AddScoped<CiTypeCatalog>();
+        builder.Services.AddScoped<CiStore>();
         builder.Services.AddHostedService<AuditRetentionJob>();
         builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();

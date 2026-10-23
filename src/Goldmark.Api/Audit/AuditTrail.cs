@@ -24,7 +24,18 @@ internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http)
             : WriteAsync(action, AuditActor.Anonymous, targetType, targetId, details);
     }
 
-    public async Task WriteAsync(string action, AuditActor actor, string? targetType = null, Guid? targetId = null, object? details = null)
+    public Task WriteAsync(string action, AuditActor actor, string? targetType = null, Guid? targetId = null, object? details = null) =>
+        WriteCoreAsync(action, actor, targetType, targetId?.ToString("D"), details);
+
+    /// <summary>Records <paramref name="action"/> by the signed-in person about something with a numeric ID (a CI type).</summary>
+    public Task WriteAsync(string action, string targetType, int targetId, object? details)
+    {
+        var actorId = http.HttpContext?.User.Identity?.AuthenticationType == AuthSchemes.Session ? http.HttpContext.User.UserId() : null;
+        return WriteCoreAsync(action, actorId is { } id ? AuditActor.User(id) : AuditActor.Anonymous, targetType,
+            targetId.ToString(System.Globalization.CultureInfo.InvariantCulture), details);
+    }
+
+    private async Task WriteCoreAsync(string action, AuditActor actor, string? targetType, string? targetId, object? details)
     {
         await db.ExecuteAsync("""
             INSERT INTO cmdb.AuditLog (ActorType, ActorId, Action, TargetType, TargetId, Ip, Details)
@@ -36,7 +47,7 @@ internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http)
                 actorId = actor.Id?.ToString("D"),
                 action,
                 targetType,
-                targetId = targetId?.ToString("D"),
+                targetId,
                 ip = http.HttpContext?.ClientAddress(),
                 details = details is null ? null : JsonSerializer.Serialize(details, Json),
             });
@@ -52,7 +63,7 @@ internal sealed record AuditActor(string Type, Guid? Id)
     public static AuditActor User(Guid id) => new(AuditActorTypes.User, id);
 }
 
-/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041) and slice 4a (DEC-042); <see cref="AuditCatalog"/> labels each one.</summary>
+/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041), slice 4a (DEC-042), 4b (DEC-043) and 5 (DEC-044); <see cref="AuditCatalog"/> labels each one.</summary>
 internal static class AuditActions
 {
     public const string SetupCompleted = "setup.completed";
@@ -102,4 +113,11 @@ internal static class AuditActions
 
     // Slice 4b (DEC-043): written by SQL, by the rotate-db-credentials command.
     public const string CredentialsRotated = "database.credentials.rotated";
+
+    // Slice 5 (DEC-044): CIs and their types.
+    public const string CiCreated = "ci.created";
+    public const string CiChanged = "ci.changed";
+    public const string CiRetired = "ci.retired";
+    public const string CiRestored = "ci.restored";
+    public const string AttributeAdded = "type.attribute.added";
 }

@@ -2,7 +2,9 @@ import { Spinner, makeStyles, tokens } from '@fluentui/react-components';
 import { useEffect } from 'react';
 
 import { AuditPage } from './pages/AuditPage';
+import { CiPage } from './pages/CiPage';
 import { EnrolmentPage } from './pages/EnrolmentPage';
+import { SearchPage } from './pages/SearchPage';
 import { DashboardPage, ForbiddenPage, NotFoundPage } from './pages/SimplePages';
 import { SignInPage } from './pages/SignInPage';
 import { TwoFactorPage } from './pages/TwoFactorPage';
@@ -22,6 +24,15 @@ const useStyles = makeStyles({
   },
 });
 
+/** A path segment as typed; a malformed escape ("%E0%A4") stays as it is, and the CI page says it isn't a CI ID. */
+function decodedSegment(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
 function Redirect({ to }: { to: string }) {
   useEffect(() => navigate(to, { replace: true }), [to]);
   return null;
@@ -29,9 +40,9 @@ function Redirect({ to }: { to: string }) {
 
 /**
  * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite, /reset and
- * /password-reset (their token in the URL fragment). Signed in, inside the app shell: /, /users (Admin only), /audit
- * (Admin and Auditor) and /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and
- * back afterwards.
+ * /password-reset (their token in the URL fragment). Signed in, inside the app shell: /, /search and /ci/{id} (slice 5,
+ * US-53's stable deep links: docs/integration/deep-links.md), /users (Admin only), /audit (Admin and Auditor) and
+ * /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and back afterwards.
  */
 export function App() {
   const styles = useStyles();
@@ -86,6 +97,10 @@ export function App() {
     ) : (
       <ForbiddenPage title="the audit log" crumbs={[{ label: 'Administration' }, { label: 'Audit log' }]} />
     );
+  } else if (pathname === '/search') {
+    page = <SearchPage />;
+  } else if (pathname.startsWith('/ci/') && pathname.split('/').length === 3) {
+    page = <CiPage key={pathname} id={decodedSegment(pathname.slice('/ci/'.length))} />;
   } else if (pathname === '/account/two-factor') {
     page = <TwoFactorPage />;
   } else {

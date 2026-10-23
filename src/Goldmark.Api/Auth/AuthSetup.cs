@@ -122,6 +122,7 @@ internal static class AuthSetup
             .AddPolicy(AccessPolicy.SignedIn, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser())
             .AddPolicy(AccessPolicy.Admin, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin))
             .AddPolicy(AccessPolicy.AuditReader, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin, Roles.Auditor))
+            .AddPolicy(AccessPolicy.CiEditor, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin, Roles.Editor))
             .AddPolicy(AccessPolicy.TwoFactorPending, p => p.AddAuthenticationSchemes(AuthSchemes.TwoFactor).RequireAuthenticatedUser())
             .AddPolicy(AccessPolicy.Enrolment, p => p.AddAuthenticationSchemes(AuthSchemes.Enrolment).RequireAuthenticatedUser());
 

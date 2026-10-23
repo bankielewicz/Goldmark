@@ -21,13 +21,17 @@ internal sealed class AuditLog(DbSession db)
         a.Id, a.At, a.ActorType, a.ActorId, a.Action, a.TargetType, a.TargetId, a.Ip,
         CAST(a.Details AS nvarchar(max)) AS Details,
         actor.UserName AS ActorUserName, actor.DisplayName AS ActorDisplayName,
-        target.UserName AS TargetUserName, target.DisplayName AS TargetDisplayName
+        target.UserName AS TargetUserName, target.DisplayName AS TargetDisplayName,
+        targetCi.Name AS TargetCiName, targetCiType.Name AS TargetCiTypeName, targetType.Name AS TargetTypeName
         """;
 
     private const string Joins = """
         FROM cmdb.AuditLog AS a
         LEFT JOIN cmdb.UserAccount AS actor ON a.ActorType = 'User' AND actor.Id = TRY_CAST(a.ActorId AS uniqueidentifier)
         LEFT JOIN cmdb.UserAccount AS target ON a.TargetType = 'User' AND target.Id = TRY_CAST(a.TargetId AS uniqueidentifier)
+        LEFT JOIN cmdb.Ci AS targetCi ON a.TargetType = 'Ci' AND targetCi.Id = TRY_CAST(a.TargetId AS uniqueidentifier)
+        LEFT JOIN cmdb.CiType AS targetCiType ON targetCiType.Id = targetCi.CiTypeId
+        LEFT JOIN cmdb.CiType AS targetType ON a.TargetType = 'CiType' AND targetType.Id = TRY_CAST(a.TargetId AS int)
         """;
 
     // Every filter is a parameter (NFR-SEC-3); an unset one is NULL. Times arrive as UTC
@@ -90,7 +94,7 @@ internal sealed class AuditLog(DbSession db)
     /// <summary>Screen 16's export: the columns the export dialog names, formula cells neutralized.</summary>
     public static string ToCsv(IEnumerable<AuditEntry> entries)
     {
-        var csv = new StringBuilder("Time (UTC),Actor type,Actor,Action,Action code,Person affected,IP address,Outcome,Details\r\n");
+        var csv = new StringBuilder("Time (UTC),Actor type,Actor,Action,Action code,Affected,IP address,Outcome,Details\r\n");
         foreach (var entry in entries)
         {
             csv.AppendRow(
@@ -115,9 +119,11 @@ internal sealed class AuditLog(DbSession db)
         return csv.ToString();
     }
 
-    /// <summary>A person's name; empty for System and an anonymous client, whose type column says it all.</summary>
+    /// <summary>A person's name, or a CI's or a CI type's; empty for System and an anonymous client, whose type column says it all.</summary>
     private static string Name(AuditParty party) => party switch
     {
+        { Type: AuditTargetTypes.Ci, Name: var name, CiType: var type } => $"{name} ({type})",
+        { Type: AuditTargetTypes.CiType, Name: var name } => $"{name} (CI type)",
         { DisplayName: { } name, UserName: { } user } => $"{name} ({user})",
         { Removed: true, UserName: { } user } => $"{user} (account removed)",
         { Removed: true } => "Removed account",
@@ -151,9 +157,16 @@ internal sealed class AuditLog(DbSession db)
         var actor = row.ActorType == AuditActorTypes.User
             ? Person(row.ActorId, row.ActorUserName, row.ActorDisplayName, recordedUserName: null)
             : new AuditParty(row.ActorType, null, null, null, Removed: false);
-        var target = row.TargetType == AuditActorTypes.User && row.TargetId is not null
-            ? Person(row.TargetId, row.TargetUserName, row.TargetDisplayName, RecordedUserName(details))
-            : null;
+        var target = row.TargetType switch
+        {
+            AuditActorTypes.User when row.TargetId is not null => Person(row.TargetId, row.TargetUserName, row.TargetDisplayName, RecordedUserName(details)),
+            // CIs and types are never deleted; the names the entry recorded are the fallback all the same.
+            AuditTargetTypes.Ci => new AuditParty(AuditTargetTypes.Ci, Guid.TryParse(row.TargetId, out var ci) ? ci : null, null, null,
+                Removed: row.TargetCiName is null, Name: row.TargetCiName ?? Recorded(details, "name"), CiType: row.TargetCiTypeName ?? Recorded(details, "type")),
+            AuditTargetTypes.CiType => new AuditParty(AuditTargetTypes.CiType, null, null, null, Removed: row.TargetTypeName is null,
+                Name: row.TargetTypeName ?? Recorded(details, "type")),
+            _ => null,
+        };
         return new AuditEntry(row.Id, row.At, actor, row.Action, action.Label, action.Outcome, target, row.Ip, details);
     }
 
@@ -163,19 +176,32 @@ internal sealed class AuditLog(DbSession db)
             : new AuditParty(AuditActorTypes.User, Guid.TryParse(id, out var removed) ? removed : null, recordedUserName, null, Removed: true);
 
     /// <summary>The user name an administrator's action recorded for the person affected (slice 3 writes it).</summary>
-    private static string? RecordedUserName(JsonElement? details) =>
-        details is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty("userName", out var name) && name.ValueKind == JsonValueKind.String
-            ? name.GetString()
+    private static string? RecordedUserName(JsonElement? details) => Recorded(details, "userName");
+
+    private static string? Recorded(JsonElement? details, string property) =>
+        details is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
             : null;
 
     private sealed record Row(long Id, DateTime At, string ActorType, string? ActorId, string Action, string? TargetType, string? TargetId,
-        string? Ip, string? Details, string? ActorUserName, string? ActorDisplayName, string? TargetUserName, string? TargetDisplayName);
+        string? Ip, string? Details, string? ActorUserName, string? ActorDisplayName, string? TargetUserName, string? TargetDisplayName,
+        string? TargetCiName, string? TargetCiTypeName, string? TargetTypeName);
 }
 
 internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string Action, string Label, string Outcome, AuditParty? Target,
     string? Ip, JsonElement? Details);
 
-/// <summary>Who acted, or whom it was about. A person whose account no longer exists is <c>Removed</c>.</summary>
-internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed);
+/// <summary>
+/// Who acted, or what it was about: a person (a removed account is <c>Removed</c>), a CI (<c>Name</c>,
+/// <c>CiType</c>) or a CI type (<c>Name</c>; slice 5).
+/// </summary>
+internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null);
+
+/// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5.</summary>
+internal static class AuditTargetTypes
+{
+    public const string Ci = "Ci";
+    public const string CiType = "CiType";
+}
 
 internal sealed record AuditPerson(Guid Id, string UserName, string DisplayName);

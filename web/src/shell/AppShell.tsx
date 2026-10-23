@@ -15,6 +15,10 @@ import {
   NavDrawerBody,
   NavItem,
   NavSectionHeader,
+  Popover,
+  PopoverSurface,
+  PopoverTrigger,
+  SearchBox,
   Text,
   Toast,
   ToastTitle,
@@ -33,6 +37,7 @@ import {
   KeyRegular,
   NavigationRegular,
   PeopleRegular,
+  SearchRegular,
   ShieldCheckmarkRegular,
   SignOutRegular,
   WeatherMoonRegular,
@@ -120,6 +125,8 @@ const useStyles = makeStyles({
     ':focus': { outlineStyle: 'none' },
     '@media (max-width: 767px)': { padding: `${tokens.spacingVerticalL} ${tokens.spacingHorizontalL}` },
   },
+  topSearch: { width: '300px' },
+  popover: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalS, width: '300px' },
   menuHeader: {
     display: 'flex',
     flexDirection: 'column',
@@ -188,8 +195,9 @@ export function useWide(): boolean {
 /**
  * The app shell for signed-in screens (DEC-039; slice 3's sparse nav: only the screens that exist).
  * NavDrawer inline at 1100 px and wider, an icon rail with an overlay drawer below; top bar with the
- * theme toggle and the account menu; a skip link to the main region. Search (slice 5) and the
- * As-of control (slice 7) arrive with their slices.
+ * CI search (slice 5: a box, or below 1100 px a button opening it in a Popover; not on /search, which has
+ * its own), the theme toggle and the account menu; a skip link to the main region. The As-of control
+ * (slice 7) arrives with its slice.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const styles = useStyles();
@@ -223,6 +231,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
+    { value: 'search', label: 'Search', group: 'Inventory', path: '/search', icon: <SearchRegular /> },
     ...(isAdmin(user)
       ? [
           {
@@ -247,8 +256,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         ]
       : []),
   ];
-  const selected =
-    entries.find((entry) => (entry.path === '/' ? pathname === '/' : pathname.startsWith(entry.path)))?.value ?? '';
+  // A CI's page sits under Search (its breadcrumb starts there).
+  const selected = pathname.startsWith('/ci/')
+    ? 'search'
+    : (entries.find((entry) => (entry.path === '/' ? pathname === '/' : pathname.startsWith(entry.path)))?.value ?? '');
   const otherTheme = preferences.theme === 'dark' ? 'light' : 'dark';
   const initials = (user?.displayName ?? '')
     .split(/\s+/)
@@ -272,7 +283,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       size="small"
     >
       <NavDrawerBody>
-        {['Overview', 'Administration'].map((group) => {
+        {['Overview', 'Inventory', 'Administration'].map((group) => {
           const items = entries.filter((entry) => entry.group === group);
           return items.length === 0 ? null : (
             <div key={group}>
@@ -321,6 +332,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Goldmark
           </Text>
         </div>
+        {pathname === '/search' ? null : <TopSearch wide={wide} />}
         <Tooltip content={`Switch to ${otherTheme} theme`} relationship="label">
           <Button
             appearance="subtle"
@@ -444,5 +456,48 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
       <Toaster toasterId={toasterId} position="bottom-end" />
     </div>
+  );
+}
+
+/** The top bar's CI search: Enter opens /search?q=… (US-53). */
+function TopSearch({ wide }: { wide: boolean }) {
+  const styles = useStyles();
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const go = () => {
+    const text = q.trim();
+    setOpen(false);
+    setQ('');
+    navigate(`/search${text ? `?q=${encodeURIComponent(text)}` : ''}`);
+  };
+  const box = (
+    <SearchBox
+      className={styles.topSearch}
+      input={{ 'aria-label': 'Search CIs' }}
+      placeholder="Search CIs by name"
+      value={q}
+      onChange={(_, data) => setQ(data.value)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') go();
+      }}
+    />
+  );
+  if (wide) {
+    return <div role="search">{box}</div>;
+  }
+  return (
+    <Popover open={open} onOpenChange={(_, data) => setOpen(data.open)} trapFocus positioning="below-end">
+      <PopoverTrigger disableButtonEnhancement>
+        <Tooltip content="Search CIs" relationship="label">
+          <Button appearance="subtle" icon={<SearchRegular />} />
+        </Tooltip>
+      </PopoverTrigger>
+      <PopoverSurface aria-label="Search CIs">
+        <div role="search" className={styles.popover}>
+          {box}
+          <Text size={200}>Press Enter to see the results on Search.</Text>
+        </div>
+      </PopoverSurface>
+    </Popover>
   );
 }
