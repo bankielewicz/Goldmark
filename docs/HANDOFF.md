@@ -12,7 +12,7 @@ setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, a
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
 the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
 Slice 4b brought the Windows service distribution (PR #39, DEC-036, DEC-043; merged 2026-10-23, with
-the dependency PR #44). **Slice 5**, CIs with their types and attributes, search and detail (approved
+the dependency PRs #44 and #50). **Slice 5**, CIs with their types and attributes, search and detail (approved
 2026-10-23, DEC-044), is in progress on `slice/05-ci-crud` (PR #49). Docker Compose is the first
 distribution, not the target deployment (DEC-030, rule 8).
 
@@ -410,6 +410,7 @@ And for slice 24:
 | #48 CI API: a partial save, `PATCH /api/v1/cis/{id}` with JSON Merge Patch (slice 5's PUT replaces every value) | 8 (owner, 2026-10-23, DEC-044 item 11) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
+| Dependabot PRs #42 (axe 4.14, Playwright 1.64.1) and #43 (React 19.3.1 without React DOM): axe 4.14 enables Label in Name, which the account button failed; React DOM throws error 527 for any other React version. With them, `RightsAtStartTests` raced on fast runners (main red after #44) | replaced by PR #50, merged as `53d65b4` (owner, 2026-10-23, all "A"): both bumps, the `react` Dependabot group, the account button named "AP, Account: …", the test fixed |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |
 
 Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.

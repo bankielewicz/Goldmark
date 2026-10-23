@@ -166,7 +166,7 @@ test.describe('slice 3 screens', () => {
     await page.getByRole('button', { name: 'Cancel' }).click();
 
     await page.emulateMedia({ colorScheme: 'dark' });
-    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('button', { name: /Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Two-factor authentication' }).click();
     await expect(page.getByRole('heading', { level: 1, name: 'Two-factor authentication' })).toBeVisible();
     await expect(page.getByText('Two-factor authentication is on')).toBeVisible();
@@ -196,13 +196,13 @@ test.describe('slice 3 screens', () => {
     // A sign-out that never reaches the server leaves the session alive, so it must not say "signed
     // out" (Codex, PR #24): the person stays signed in, sees why, and can retry.
     await page.route('**/api/v1/auth/sign-out', (route) => route.abort());
-    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('button', { name: /Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page.getByText(/You’re still signed in/)).toBeVisible();
     await expectAccessible(page, 'sign-out failed');
     await page.reload();
     await expect(page.getByRole('heading', { level: 1, name: 'Two-factor authentication' })).toBeVisible();
-    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('button', { name: /Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Sign out' }).click();
     await expect(page.getByText(/You’re still signed in/)).toBeVisible();
     await page.unroute('**/api/v1/auth/sign-out');
@@ -358,7 +358,7 @@ test.describe('slice 4a screens', () => {
     await signIn(page);
 
     // Change password from the account menu: the dialog and its checks (nothing is sent).
-    await page.getByRole('button', { name: /^Account:/ }).click();
+    await page.getByRole('button', { name: /Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Change password…' }).click();
     const change = page.getByRole('dialog', { name: 'Change your password' });
     await expect(change).toBeVisible();

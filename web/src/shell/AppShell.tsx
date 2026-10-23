@@ -267,6 +267,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join('');
+  // The visible initials start the name, so voice control can say them (WCAG 2.5.3, Label in Name).
+  const accountLabel = `${initials ? `${initials}, ` : ''}Account: ${user?.displayName ?? ''}`;
 
   const go = (event: MouseEvent<HTMLElement>, path: string) => {
     setOverlayOpen(false);
@@ -299,7 +301,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <span className={styles.navContent}>
                     {entry.label}
-                    {entry.count ? <CounterBadge aria-hidden count={entry.count} color="brand" size="medium" /> : null}
+                    {/* The space makes the visible text "Users & roles 2", not "roles2", so it's in the name (Label in Name). */}
+                    {entry.count ? (
+                      <>
+                        {' '}
+                        <CounterBadge aria-hidden count={entry.count} color="brand" size="medium" />
+                      </>
+                    ) : null}
                   </span>
                 </NavItem>
               ))}
@@ -348,7 +356,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               id={accountButtonId}
               appearance="subtle"
-              aria-label={`Account: ${user?.displayName ?? ''}`}
+              aria-label={accountLabel}
               icon={<ChevronDownRegular />}
               iconPosition="after"
             >
