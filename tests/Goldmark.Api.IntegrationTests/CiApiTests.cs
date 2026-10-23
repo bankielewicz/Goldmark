@@ -1,6 +1,8 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using Goldmark.Api.IntegrationTests.Infrastructure;
+using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.IntegrationTests;
 
@@ -282,6 +284,9 @@ public sealed class CiApiTests(SqlServerFixture sql)
         var firstPage = AuthScenario.Ok(await viewer.GetAsync("/api/v1/cis?limit=2")).Body.GetProperty("next").GetString();
         Assert.Equal("InvalidCursor", Field(await viewer.GetAsync($"/api/v1/cis?sort=-name&cursor={firstPage}"), "cursor"));
         Assert.Equal("InvalidCursor", Field(await viewer.GetAsync("/api/v1/cis?cursor=not-a-cursor"), "cursor"));
+        // A cursor without the key its sort orders by would match no row and end the list: refused instead.
+        var noName = Convert.ToBase64String(Encoding.UTF8.GetBytes($"[\"name\",null,null,null,\"{Guid.NewGuid():D}\"]")).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        Assert.Equal("InvalidCursor", Field(await viewer.GetAsync($"/api/v1/cis?sort=name&cursor={noName}"), "cursor"));
         Assert.Equal("UnknownType", Field(await viewer.GetAsync("/api/v1/cis?type=Toaster"), "type"));
         Assert.Equal("InvalidSort", Field(await viewer.GetAsync("/api/v1/cis?sort=owner"), "sort"));
         Assert.Equal("InvalidLimit", Field(await viewer.GetAsync("/api/v1/cis?limit=201"), "limit"));
@@ -300,8 +305,8 @@ public sealed class CiApiTests(SqlServerFixture sql)
         var etag = $"\"{ci.Value("eTag")}\"";
 
         var results = await Task.WhenAll(
-            editor.PutAsync($"/api/v1/cis/{ci.Value("id")}", new { name = "ERP Platform team" }, etag),
-            admin.PutAsync($"/api/v1/cis/{ci.Value("id")}", new { name = "ERP Platform group" }, etag));
+            editor.PutAsync($"/api/v1/cis/{ci.Value("id")}", new { name = "ERP Platform team", attributes = new { } }, etag),
+            admin.PutAsync($"/api/v1/cis/{ci.Value("id")}", new { name = "ERP Platform group", attributes = new { } }, etag));
 
         Assert.Equal([HttpStatusCode.OK, HttpStatusCode.PreconditionFailed], results.Select(r => r.Status).Order());
         Assert.Single(await scenario.AuditAsync("ci.changed"));
@@ -352,6 +357,57 @@ public sealed class CiApiTests(SqlServerFixture sql)
 
         static object Refused(string capacity) => new { type = "StorageArray", name = "refused", attributes = new { capacityBytes = capacity } };
         static string? NumberError(Response response) => Field(response, "attributes.capacityBytes");
+    }
+
+    [Fact]
+    public async Task A_save_SQL_Server_picks_as_a_deadlock_victim_runs_once_more_and_PUT_needs_its_values()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var added = await admin.PostAsync("/api/v1/types/BusinessService/attributes",
+            new { name = "dependsOn", label = "Depends on", dataType = "ciRef", refType = "BusinessService" });
+        Assert.True(added.Status == HttpStatusCode.Created, added.ToString());
+        Assert.Equal("/api/v1/types", added.Headers["Location"]);
+        var a = await CreateAsync(editor, new { type = "BusinessService", name = "ERP" });
+        var b = await CreateAsync(editor, new { type = "BusinessService", name = "CRM" });
+        var path = $"/api/v1/cis/{a.Value("id")}";
+        var version = $"\"{a.Value("eTag")}\"";
+
+        // PUT replaces every value, so it needs them (an empty object clears them); a CI can't link to itself.
+        Assert.Equal("Required", Field(await editor.PutAsync(path, new { name = "ERP" }, version), "attributes"));
+        Assert.Equal("LinkedCiSelf", Field(await editor.PutAsync(path, new { name = "ERP", attributes = new { dependsOn = a.Value("id") } }, version), "attributes.dependsOn"));
+
+        // Another session holds a shared lock on ERP, as a save of CRM newly linking to ERP does, then needs CRM,
+        // which the save of ERP linking to CRM holds: SQL Server makes that save its deadlock victim (the other
+        // session has the higher priority), and the save runs again once the other session commits.
+        await using var other = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
+        await using var transaction = (SqlTransaction)await other.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        var session = await ExecuteAsync<short>(other, transaction, "SET DEADLOCK_PRIORITY HIGH; SELECT @@SPID;");
+        await ExecuteAsync<object>(other, transaction, $"SELECT Id FROM cmdb.Ci WITH (HOLDLOCK) WHERE Id = '{a.Value("id")}';");
+        var save = editor.PutAsync(path, new { name = "ERP", attributes = new { dependsOn = b.Value("id") } }, version);
+        for (var wait = 0; await scenario.Sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            $"SELECT COUNT(*) FROM sys.dm_exec_requests WHERE blocking_session_id = {session};") == 0; wait++)
+        {
+            Assert.True(wait < 300, "The save never waited for the other session's lock.");
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        // The save holds CRM and waits for ERP, so this update closes the cycle: it returns once SQL Server has
+        // rolled the save back, and the save's second run then waits for this commit.
+        await ExecuteAsync<object>(other, transaction, $"UPDATE cmdb.Ci SET Name = Name WHERE Id = '{b.Value("id")}';");
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        var saved = await save;
+
+        Assert.True(saved.Status == HttpStatusCode.OK, saved.ToString());
+        Assert.Equal(b.Value("id"), saved.Body.GetProperty("attributes").Value("dependsOn"));
+        Assert.Single(await scenario.AuditAsync("ci.changed"));
+
+        static async Task<T?> ExecuteAsync<T>(SqlConnection connection, SqlTransaction transaction, string text)
+        {
+            await using var command = new SqlCommand(text, connection, transaction);
+            return (T?)await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        }
     }
 
     private static async Task AddVmAttributesAsync(ApiClient admin)

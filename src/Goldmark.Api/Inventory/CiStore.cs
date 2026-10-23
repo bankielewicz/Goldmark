@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -130,7 +131,14 @@ internal sealed record CiCursor(string Sort, string? Name, string? Type, string?
             var base64 = value.Replace('-', '+').Replace('_', '/');
             base64 += new string('=', (4 - (base64.Length % 4)) % 4);
             var parts = JsonSerializer.Deserialize<string?[]>(Convert.FromBase64String(base64));
+            // The keys its sort orders by must be there: a missing one would match no row and end the list.
             return parts is [{ } s, var name, var type, var changed, { } id] && s == sort && Guid.TryParseExact(id, "D", out var guid)
+                && sort.TrimStart('-') switch
+                {
+                    "name" => name is not null,
+                    "type" => type is not null && name is not null,
+                    _ => changed is not null,
+                }
                 && (changed is null || CiStore.TryParseStamp(changed, out _))
                 ? new CiCursor(s, name, type, changed, guid)
                 : null;
@@ -322,21 +330,17 @@ internal sealed class CiStore(DbSession db)
     public Task<CiRow?> FindForUpdateAsync(Guid id) => db.QuerySingleOrDefaultAsync<CiRow>(LockedDetailSql, new { id, tenant = Tenants.Default });
 
     /// <summary>The CIs with these IDs that exist, by ID.</summary>
-    public async Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedAsync(IEnumerable<Guid> ids)
-    {
-        var list = ids.Distinct().Select(i => i.ToString("D")).ToList();
-        return list.Count == 0
-            ? new Dictionary<Guid, LinkedCi>()
-            : (await db.QueryAsync<LinkedCi>(ReferencesSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(list) })).ToDictionary(r => r.Id);
-    }
+    public Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedAsync(IEnumerable<Guid> ids) => LinkedAsync(ReferencesSql, ids);
 
     /// <summary>The CIs a save newly links to, locked (shared) until the save's transaction ends.</summary>
-    public async Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedForSaveAsync(IEnumerable<Guid> ids)
+    public Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedForSaveAsync(IEnumerable<Guid> ids) => LinkedAsync(LinkedForSaveSql, ids);
+
+    private async Task<IReadOnlyDictionary<Guid, LinkedCi>> LinkedAsync([ConstantExpected] string sql, IEnumerable<Guid> ids)
     {
         var list = ids.Distinct().Select(i => i.ToString("D")).ToList();
         return list.Count == 0
             ? new Dictionary<Guid, LinkedCi>()
-            : (await db.QueryAsync<LinkedCi>(LinkedForSaveSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(list) })).ToDictionary(r => r.Id);
+            : (await db.QueryAsync<LinkedCi>(sql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(list) })).ToDictionary(r => r.Id);
     }
 
     public async Task<CiDetail> DetailAsync(CiRow row, CiTypeInfo type)

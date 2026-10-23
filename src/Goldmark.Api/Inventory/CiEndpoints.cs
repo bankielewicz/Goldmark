@@ -94,9 +94,9 @@ internal static partial class CiEndpoints
         }
 
         var editor = context.User.UserId()!.Value;
-        return await db.InTransactionAsync(async () =>
+        return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
         {
-            var (name, check, errors) = await CheckAsync(store, type, request.Name, request.Attributes, stored: null);
+            var (name, check, errors) = await CheckAsync(store, type, request.Name, request.Attributes, stored: null, self: null);
             if (errors.Count > 0)
             {
                 return Fields(errors);
@@ -108,7 +108,7 @@ internal static partial class CiEndpoints
             var detail = await store.DetailAsync((await store.FindAsync(id))!, type);
             context.Response.Headers.ETag = Quote(detail.ETag);
             return Results.Created($"/api/v1/cis/{id:D}", detail);
-        });
+        }));
     }
 
     private static async Task<IResult> UpdateAsync(Guid id, ChangeRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,
@@ -123,7 +123,7 @@ internal static partial class CiEndpoints
         var editor = context.User.UserId()!.Value;
         try
         {
-            return await db.InTransactionAsync(async () =>
+            return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
             {
                 if (await store.FindForUpdateAsync(id) is not { } row)
                 {
@@ -141,9 +141,16 @@ internal static partial class CiEndpoints
                     return Changed();
                 }
 
+                // PUT replaces every value (DEC-044 item 11), so a request without them is refused rather than
+                // read as "unset them all"; an empty object still clears every value (item 13).
+                if (request.Attributes is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
+                {
+                    return ApiProblems.Field("attributes", "Required");
+                }
+
                 var type = TypeOf(types, row);
                 var before = AttributeValues.Parse(row.Attributes);
-                var (name, check, errors) = await CheckAsync(store, type, request.Name, request.Attributes, before);
+                var (name, check, errors) = await CheckAsync(store, type, request.Name, request.Attributes, before, self: id);
                 if (errors.Count > 0)
                 {
                     return Fields(errors);
@@ -157,7 +164,7 @@ internal static partial class CiEndpoints
                 }
 
                 return Detail(context, await store.DetailAsync((await store.FindAsync(id))!, type));
-            });
+            }));
         }
         catch (SqlException e) when (e.Number == SystemVersioningTimeConflict)
         {
@@ -301,7 +308,7 @@ internal static partial class CiEndpoints
                     new { type = target.Name, attribute = label, name, dataType = AttributeDataTypes.ToApi(dataType!), required });
                 var added = new AttributeDefinition(id, name, label, dataType!, required, dataType == AttributeDataTypes.Enum ? choices : null,
                     refType?.Name, BuiltIn: false);
-                return Results.Created($"/api/v1/types/{target.Name}", Attribute(added));
+                return Results.Created("/api/v1/types", Attribute(added));
             });
         }
         catch (SqlException e) when (e.Number is 2601 or 2627)
@@ -319,7 +326,7 @@ internal static partial class CiEndpoints
     /// isn't rechecked, so retiring a CI doesn't block saving the CIs that point at it.
     /// </summary>
     private static async Task<(string Name, AttributeCheck Check, Dictionary<string, string[]> Errors)> CheckAsync(CiStore store,
-        CiTypeInfo type, string? name, JsonElement? attributes, System.Text.Json.Nodes.JsonObject? stored)
+        CiTypeInfo type, string? name, JsonElement? attributes, System.Text.Json.Nodes.JsonObject? stored, Guid? self)
     {
         var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
         if (AttributeValues.NameError(name) is { } nameError)
@@ -340,6 +347,7 @@ internal static partial class CiEndpoints
             var refType = type.Attributes.First(a => a.Name == attribute).RefType;
             var error = linked.TryGetValue(id, out var ci) switch
             {
+                _ when id == self => "LinkedCiSelf",
                 false => "LinkedCiNotFound",
                 true when ci!.LifecycleState == LifecycleStates.Retired => "LinkedCiRetired",
                 true when refType is not null && ci!.Type != refType => "LinkedCiWrongType",
@@ -355,6 +363,33 @@ internal static partial class CiEndpoints
     }
 
     private static readonly string[] NameField = ["Name"];
+
+    // SQL Server's 1205: this transaction was chosen as a deadlock victim and rolled back.
+    private const int Deadlock = 1205;
+
+    /// <summary>
+    /// A save SQL Server chose as a deadlock victim runs once more (two saves that each newly link to the
+    /// other's CI hold the link check's shared lock, DEC-044 item 13); the other has committed by then. A
+    /// second loss answers 412, as a change meanwhile does, and the screen reloads.
+    /// </summary>
+    private static async Task<IResult> RetryOnDeadlockAsync(Func<Task<IResult>> save)
+    {
+        try
+        {
+            return await save();
+        }
+        catch (SqlException e) when (e.Number == Deadlock)
+        {
+            try
+            {
+                return await save();
+            }
+            catch (SqlException again) when (again.Number == Deadlock)
+            {
+                return Changed();
+            }
+        }
+    }
 
     // SQL Server's 13535: this transaction began before the row's current version, so another one changed it.
     private const int SystemVersioningTimeConflict = 13535;

@@ -1962,6 +1962,17 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       response to form to request and never make it a JavaScript number. Compatibility: the change lands before
       any release and before API tokens (slice 8), so no client depends on numbers being JSON numbers; slice 8's
       OpenAPI document describes them as strings (`format: decimal`), and the request side stays lenient.
+  13. **After review round 2 (a high-effort review of PR #49, 2026-10-23).** Eight findings, table in the PR.
+      Round 2's shared lock on newly linked CIs (`fb2c84d`) let two saves that each newly link to the other's CI
+      deadlock (one got a 500): "A. Retry once, then 412 (Recommended)", so a save SQL Server picks as a deadlock
+      victim (1205) runs once more and a second loss answers 412 (reproduced: without the retry, a 500). A PUT
+      without `attributes` read as "unset them all": "A. Require "attributes" (Recommended)" (400 `Required`; `{}`
+      still clears every value, item 11 stands). "A. Fix all three now (Recommended)": a cursor without its sort's
+      keys is `InvalidCursor`, adding an attribute answers `Location: /api/v1/types`, a CI can't link to itself
+      (`LinkedCiSelf`); one more push, not a third review round. "A. No change, noted in DEC-044 (Recommended)":
+      Retire and Restore resolving their services in one shared handler (a style choice), and an audit row's
+      " ()" for a CI or type without a recorded name (unreachable while neither is deleted; the CSV's "Affected"
+      header was approved with the boards, item 10).
 - **Build notes (slice 5, not owner decisions; listed for review).**
   - A required attribute added to a type that already has CIs is enforced the next time each of them is
     saved; nothing is migrated.

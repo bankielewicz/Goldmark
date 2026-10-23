@@ -207,6 +207,8 @@ export function fieldMessage(code: string, attribute: AttributeDef | null): stri
       return 'Choose Yes, No or Not set.';
     case 'LinkedCiRetired':
       return 'Choose a CI that isn’t retired.';
+    case 'LinkedCiSelf':
+      return 'A CI can’t link to itself. Choose another CI.';
     case 'LinkedCiNotFound':
       return 'That CI no longer exists. Choose another.';
     case 'LinkedCiWrongType':
