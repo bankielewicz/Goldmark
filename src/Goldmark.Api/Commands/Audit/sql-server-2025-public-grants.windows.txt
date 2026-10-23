@@ -1,0 +1,31 @@
+# Grants to public and guest that SQL Server 2025 on Windows creates in the system databases beyond the
+# baseline measured on the Linux image (sql-server-2025-public-grants.txt; DEC-031, DEC-043 item 12). The
+# principal audit adds these when sys.dm_os_host_info reports Windows. Same format as the Linux file.
+# Measured by the Windows CI job on a fresh SQL Server 2025 Express (Microsoft's installer, windows-2025 runner,
+# 2026-10-22); its test WindowsBaselineTests fails, printing the measured lines, when this file differs. Other
+# editions and features may add more: SQL Server 2025 Developer with Machine Learning Services also grants
+# SELECT on msdb.dbo.external_libraries_installed, which such an installation accepts by ID.
+master|public|EXECUTE|OBJECT|[sys].[sp_backfill_discoveredtableproperties]
+master|public|EXECUTE|OBJECT|[sys].[sp_backfill_manageddeltatables_tableclassification]
+master|public|EXECUTE|OBJECT|[sys].[sp_check_inherited_metadata_files_cleanup_eligibility]
+master|public|EXECUTE|OBJECT|[sys].[sp_cleanup_dropped_table_metadata]
+master|public|EXECUTE|OBJECT|[sys].[sp_cleanup_expired_checkpoint_file_metadata]
+master|public|EXECUTE|OBJECT|[sys].[sp_cleanup_expired_log_file_metadata]
+master|public|EXECUTE|OBJECT|[sys].[sp_drop_discoveredtableproperties]
+master|public|EXECUTE|OBJECT|[sys].[sp_dw_clone_database]
+master|public|EXECUTE|OBJECT|[sys].[sp_get_expired_checkpoint_file_metadata]
+master|public|EXECUTE|OBJECT|[sys].[sp_get_expired_log_file_metadata]
+master|public|EXECUTE|OBJECT|[sys].[sp_get_fork_guids]
+master|public|EXECUTE|OBJECT|[sys].[sp_get_next_clone_islands]
+master|public|EXECUTE|OBJECT|[sys].[sp_get_top_internal_table]
+master|public|EXECUTE|OBJECT|[sys].[sp_list_storage_items_in_test]
+master|public|EXECUTE|OBJECT|[sys].[sp_migrate_manageddeltatablecheckpoints]
+master|public|EXECUTE|OBJECT|[sys].[sp_migrate_manageddeltatableforks]
+master|public|EXECUTE|OBJECT|[sys].[sp_migrate_manageddeltatablelogfiles]
+master|public|EXECUTE|OBJECT|[sys].[sp_migrate_manageddeltatables]
+master|public|EXECUTE|OBJECT|[sys].[sp_set_managed_delta_table_internals_migration_state]
+master|public|EXECUTE|OBJECT|[sys].[sp_update_warehouse_clone_metadata]
+master|public|SELECT|OBJECT|[sys].[dm_pal_cpu_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_disk_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_net_stats]
+master|public|SELECT|OBJECT|[sys].[dm_pal_vm_stats]

@@ -5,16 +5,15 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-21:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24) and **4
-(PR #32)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
+**As of 2026-10-22:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+(PR #32) and **4a (PR #38)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group) and #29. Slice 3 brought first-run
 setup, sign-in with TOTP, roles, invitations, deny by default and the M6 test, and the UI for its
 screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fixed). Slice 4 brought
-the audit log and screen 16 (DEC-041). **Slice 4a** (password recovery, #25, approved 2026-10-21) is
-in progress on `slice/04a-password-recovery`: the owner's decisions are DEC-042, the backend is
-built, and its screens are approved (`docs/design/screens/slice-4a/`). The owner placed the Windows
-service distribution as **slice 4b**, after slice 4 (DEC-036). Docker Compose is
-the first distribution, not the target deployment (DEC-030, rule 8).
+the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
+**Slice 4b**, the Windows service distribution (approved 2026-10-22, DEC-036, DEC-043), is in progress on
+`slice/04b-windows-service`. Docker Compose is the first distribution, not the target deployment
+(DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -31,8 +30,8 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 2c | **done** (PR #22) | `slice/02c-generated-credentials` | Generated administrator, migration and runtime credentials (prefixed random names, random passwords) stored in volumes; the app reads its password from a file; a CONNECT-only login for the SQL container's healthcheck; `sa` disabled after the first run, with a tested recovery (DEC-032) | `deploy/.env` holds only the `sa` password the image needs; `sa` disabled; recovery documented and tested; #18, #19 closed | — |
 | 3 | **done** (PR #24) | `slice/03-auth` | **Fluent UI v9 CSP/Trusted Types verification first** (done: per-response style nonce, DEC-037); design-system handoff (done, DEC-039); screens approved (DEC-040, `docs/design/screens/slice-3/`); first-run setup, local auth, TOTP, roles, invitations, deny-by-default policy, authz enumeration test; audit rows for every slice-3 mutation; admin two-factor reset and a self-service two-factor page; Dapper and the NFR-SEC-3 gate, moved from slice 5 (DEC-038); backend and UI done (DEC-040); merged by PR #24 after two review rounds | Fluent verified under the served CSP; US-02/03/04 | 1, 2, 17 |
 | 4 | **done** (PR #32, merged as `ecd7796`, DEC-041) | `slice/04-audit-log` | Audit log infrastructure (writes, filters, CSV export, retention path that is not the runtime login) + screen; audit events for sign-in and admin actions from slice 3 | US-07 for the log itself; later mutations audited per rule 7 | 16 |
-| 4a | **in progress** (approved 2026-10-21, DEC-042; built, screens approved, PR #38) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
-| 4b | pending | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20) | To be set by the owner when the slice starts | — |
+| 4a | **done** (PR #38, merged as `18b46ed`, DEC-042) | `slice/04a-password-recovery` | Password recovery (#25): an Admin's "Reset password…" (optionally with two-factor, never for an Admin) through the link and separate code; dual control for invitations and the password-and-two-factor reset (the asker gets the link, another Admin approves and gets the code); the emergency-Admin guidance and the recovery setting `GOLDMARK_RECOVER_ADMIN` for the operator; Change password for the signed-in person; the approvals count | #25's criteria as decided (DEC-042): the reset ends sessions and the old password at once, needs the person's authenticator (or sets up a new one) and is audited; the recovery setting for an Admin; Change password (ASVS 5.0 6.2.2, 6.2.3); dual control; every new endpoint with an access policy and in the M6 enumeration test; boards approved | 1, 1b, 16 (entries), 17, account menu |
+| 4b | **in progress** (approved 2026-10-22, DEC-043; built, PR #39) | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20); #6 moved here from slice 24 (DEC-043) | Owner, 2026-10-22 (DEC-043): (1) `Install-Goldmark.ps1` in a zip installs the service on Windows Server 2022/2025 against SQL Server 2025, Windows authentication or a SQL login; the operator's own Windows login runs `bootstrap-db migrate`; gMSA, or a domain user as fallback, `NT SERVICE\Goldmark` only with SQL Server on the same server, never LocalSystem or NetworkService; `/health/ready` 200 and the sign-in page; upgrade = run again; uninstall keeps the data. (2) Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the principal audit covers Windows logins and group rights; the password path only for SQL logins. (3) Folders for sign-in keys, TLS key, credential files, logs and settings: service account, SYSTEM and Administrators only, inheritance off, a start refuses wider; key ring and runtime credential file DPAPI-NG to the service account; administrator and migration passwords never stored on Windows; #6 closed. (4) JSON log files per day in `%ProgramData%\Goldmark\logs`; a configuration failure also to the Application log (setting names only); tested that 3001 and 3004 never reach the Event Log. (5) Service recovery restarts after a crash; a configuration error (exit 2) stops without a loop. (6) `rotate-db-credentials` (Docker and Windows): every generated SQL login, file before login, audited as System, then a restart (the wizard restarts the service); nothing to rotate under Windows authentication. (7) The recovery setting in the settings file from (3); the link's path in the log file. (8) #34's two criteria. (9) Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express on the runner, install smoke with Windows authentication as `NT SERVICE\Goldmark` (`/health/ready`, ACLs, log file), a SQL-login install with rotate, uninstall; the gMSA checked by hand per the ops guide. (10) `docs/ops/windows-service.md`; the installer's prompts as a text spec in the PR; rule 7; rule 8 both ways | — |
 | 5 | pending | `slice/05-ci-crud` | CI types/attributes metadata, CI CRUD API, list/detail UI, deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | pending | `slice/05b-types-admin` | Types & attributes admin screen, including relationship types and their impact propagation | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | pending | `slice/06-relationships` | Relationships CRUD, relationship tab, graph explorer | US-11 for relationships; US-40 | 5 (tab), 6 |
@@ -53,7 +52,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 21 | pending | `slice/21-csv-import` | CSV import wizard + quickstart sample dataset | US-25; M5 | 13 |
 | 22 | pending | `slice/22-webhooks` | Outbox, webhooks, delivery log | US-51 | 19 |
 | 23 | pending | `slice/23-data-quality-history` | Data quality + global change history, dashboard data-quality counts and recent-changes feed | Screens 11, 15 and the dashboard additions | 3 (counts, recent changes), 11, 15 |
-| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5, #6; relative-link check (#12); trusted reverse proxies (#31, DEC-042 item 1); #33 | US-60, NFR-SEC-7; #5, #6, #31 and the #12 link check closed | — |
+| 24 | pending | `slice/24-release-hardening` | ASVS L2 checklist, threat model, SBOM, cosign, signed collector module, backup + restore doc; #5; relative-link check (#12); trusted reverse proxies (#31, DEC-042 item 1); #33 | US-60, NFR-SEC-7; #5, #31 and the #12 link check closed | — |
 | 25 | pending (P1) | `slice/25-oidc` | OIDC sign-in (Entra) + group→role mapping | US-05 | 1 (Microsoft sign-in), 17 (group mappings) |
 | 25b | pending (P1) | `slice/25b-windows-sign-in` | Windows sign-in for domain users on the Windows service: Kerberos only, Goldmark's code still asked, accounts from mapped AD groups, self-service linking (#36, the owner's decisions there) | #36's acceptance criteria | 1, 1b, 17, account page |
 | 25c | pending (P1) | `slice/25c-ldap-sign-in` | LDAP sign-in: a directory password over LDAPS, Active Directory and LDAPv3, every distribution, the #36 account model (#37) | #37's acceptance criteria | 1, 17, account page |
@@ -130,8 +129,37 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **in progress**: built
-and tested locally, PR #38. The decisions are DEC-042, with the owner's words.
+Slice **4b** (`slice/04b-windows-service`, approved 2026-10-22, DEC-036, with #34 and #6) is **in
+progress**: built and tested locally on Linux and on a Windows 11 host, PR #39. The decisions are DEC-043, with
+the owner's words; the operator guide is `docs/ops/windows-service.md`.
+
+**What it adds:**
+- **The Windows service** (`Microsoft.Extensions.Hosting.WindowsServices`): `Install-Goldmark.ps1` in a
+  self-contained `win-x64` zip (`deploy/windows/`), with `Uninstall-Goldmark.ps1` and
+  `Rotate-GoldmarkCredentials.ps1`; a gMSA, a domain user or (local SQL Server only) `NT SERVICE\Goldmark`.
+- **Windows authentication** to SQL Server (`Goldmark:Database:Authentication`), migrations as the
+  installing administrator (`Goldmark:Migration:Login: Administrator`, no migration login), and the
+  service's own rights check at each start (`Goldmark:Database:CheckRightsAtStart`).
+- **Secrets at rest:** owner-only folders everywhere (`PrivateDirectory`; on Windows a protected ACL and a
+  wider folder refused, #6), the key ring and a SQL login's password encrypted to the service account.
+- **Logs** as JSON files per day (`Goldmark:Logging:Directory`); refusals in the Application log only.
+- **`rotate-db-credentials`** on Docker and Windows; **#34**: `bootstrap-db` checks the retention period.
+- The audit's baseline gains SQL Server 2025's Windows-only grants (`*.windows.txt`, DEC-043 item 12).
+
+**For the slices that follow:**
+- Rule 8 holds both ways: per-platform defaults live in `DefaultPaths`; Windows APIs behind
+  `OperatingSystem.IsWindows()`.
+- As a Windows service, anything that fails after the host starts looks like a crash and
+  restart-on-failure loops: validate in `Program.cs` before `RunAsync`, refuse through
+  `WindowsService.RefuseStart`, or stop with `ServiceBase.ExitCode` set (DEC-043 item 11).
+- `EXECUTE AS LOGIN` doesn't see a Windows login's group rights; only the login's own token does.
+- Test on Windows from WSL in a copy of the tree (`rsync` to `tmp/`), never the shared `bin/obj`;
+  Windows PowerShell 5.1 drops empty native arguments, misparses `"$name:"`, and turns native stderr
+  into errors under `Stop`.
+- The Windows CI job installs SQL Server 2025 Express on the runner; it can't run Linux containers.
+
+Slice **4a** (`slice/04a-password-recovery`, approved 2026-10-21, issue #25) is **merged** (PR #38,
+`18b46ed`). The decisions are DEC-042, with the owner's words.
 
 **What it adds:**
 - **Reset password** on Users & roles: the old password stops working at once and every session ends;
@@ -291,11 +319,9 @@ location, and nothing new assumes Linux or Docker.
 
 Slice 2c left these for slice 4b:
 
-- **Rotation command.** Generated passwords are not rotated automatically (DEC-034,
-  owner decision 3A); an explicit `rotate-db-credentials` command comes with 4b,
-  where DPAPI replaces the credential volumes.
-- **Credential storage on Windows.** The credential-file paths are settings; the
-  Windows service points them at a DPAPI-protected store (rule 8).
+- **Rotation command.** Done in 4b (PR #39): `rotate-db-credentials` (DEC-043 item 7).
+- **Credential storage on Windows.** Done in 4b (PR #39): the password is encrypted to the
+  service account (DEC-043 items 5 and 10).
 
 And for slice 24:
 
@@ -316,22 +342,24 @@ And for slice 24:
 | Generated credentials, `sa` disabled in the bundled deployment | 2c (done by PR #22: DEC-034) |
 | #18 principal audit: securables in the Goldmark database owned by `public` | 2c (closed by PR #22: DEC-035) |
 | #19 principal audit: the database owner's effective CONTROL SERVER, honouring `DENY` | 2c (closed by PR #22: DEC-035) |
-| Rotation command for generated credentials | 4b (DEC-034, 3A; DEC-036) |
+| Rotation command for generated credentials | 4b (done by PR #39: DEC-043 item 7) |
 | #20 principal audit: availability-group permission targets shown as `#id` | the availability-group slice (`deferred`, DEC-030) |
-| Windows service distribution, installer wizard, Windows authentication | 4b (DEC-036) |
+| Windows service distribution, installer wizard, Windows authentication | 4b (PR #39: DEC-043) |
 | Availability groups (and #20) | owner: place in the plan (DEC-030, DEC-036) |
 | Fluent UI v9 under the CSP: per-response style nonce, qualified in Chrome, Edge and Firefox (DEC-037) | 3 (done) |
 | #5 renew the generated TLS certificate without a restart | 24 |
-| #6 owner-only ACL for the generated key on Windows dev hosts | 24 |
+| #6 owner-only ACL for the generated key on Windows dev hosts | 4b (owner, 2026-10-22, DEC-043; was 24; closed by PR #39) |
 | #12 docs-only CI gating (`deferred`, no slice) and the relative-link check | link check: 24 |
 | #27 TypeScript 7, once typescript-eslint supports it (Dependabot ignores TypeScript majors until then) | any web slice, when supported |
 | #33 audit log: the people list and the count scan the whole log; abandoned requests aren't cancelled (DEC-041 items 6, 7) | 24 |
-| #34 db-init: the audit retention period is range-checked only by `migrate`, after `bootstrap-db` has run (DEC-041 item 7) | 4b (DEC-042 item 1) |
+| #34 db-init: the audit retention period is range-checked only by `migrate`, after `bootstrap-db` has run (DEC-041 item 7) | 4b (DEC-042 item 1; closed by PR #39) |
 | #35 audit API: `from` and `to` are parsed leniently, not as strict ISO 8601 (DEC-041 item 7) | 8 |
 | #31 trusted reverse proxies: the audit log's IP address and the sign-in rate limit use the TCP peer, so behind a proxy they show the proxy (DEC-041 item 4) | 24 (DEC-042 item 1) |
 | #25 forgotten passwords: an administrator's reset via link and code; an operator command for the last administrator (DEC-040 item 9) | 4a (DEC-042), PR #38; the command became the recovery setting (item 6) |
 | #36 Windows sign-in (Kerberos) for domain users on the Windows service | 25b (owner, 2026-10-21; DEC-042 item 12) |
 | #37 LDAP sign-in: a directory password over LDAPS, every distribution | 25c (owner, 2026-10-21; DEC-042 item 12) |
+| #40 Windows: a private folder where the service account can't write passes the start check, and the write fails later | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
+| #41 Windows installer: changing the service account, or the database authentication, on an upgrade (both refused before anything changes until then; the owner plans post-MVP admin settings for database authentication) | owner: place in the plan (`deferred`; owner, 2026-10-22, PR #39 review round 1) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Licensing (LICENSE, NOTICE, CONTRIBUTING/DCO, CODE_OF_CONDUCT) | owner decision (DEC-001) |

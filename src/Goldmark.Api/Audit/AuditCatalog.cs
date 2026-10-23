@@ -56,6 +56,8 @@ internal static class AuditCatalog
         new(AuditActions.Exported, "Audit log", "Audit log exported", Succeeded),
         new(AuditActions.RetentionPurged, "Audit log", "Old entries deleted", Succeeded),
         new(AuditActions.RetentionChanged, "Audit log", "Retention period changed", Succeeded),
+
+        new(AuditActions.CredentialsRotated, "Database", "Database passwords changed", Succeeded),
     ];
 
     private static readonly Dictionary<string, AuditActionInfo> ByCode = Actions.ToDictionary(a => a.Code, StringComparer.Ordinal);

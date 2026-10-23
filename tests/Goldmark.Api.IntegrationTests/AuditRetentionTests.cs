@@ -151,6 +151,33 @@ public sealed class AuditRetentionTests(SqlServerFixture sql)
         Assert.Equal(365, await PeriodAsync(installation));
     }
 
+    [Fact]
+    public async Task Db_init_refuses_a_period_under_the_floor_before_bootstrap_db_changes_anything()
+    {
+        // #34: db-init runs bootstrap-db before migrate, so migrate's check alone came after the
+        // database, the logins and the credential files existed.
+        var installation = sql.NewInstallation();
+        var files = sql.NewDirectory();
+        var settings = Retention("90");
+        settings["Goldmark:Database:CredentialFile"] = Path.Combine(files, "runtime.json");
+        settings["Goldmark:Migration:CredentialFile"] = Path.Combine(files, "migration.json");
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], settings);
+
+        Assert.Equal(2, refused.Code);
+        Assert.Contains("bootstrap-db: invalid configuration", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("Goldmark:Audit:RetentionDays", refused.Error, StringComparison.Ordinal);
+        Assert.DoesNotContain("90", refused.Error, StringComparison.Ordinal); // the setting's name, never its value
+        Assert.Empty(refused.Output);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master", $"""
+            SELECT COUNT(*) FROM sys.databases WHERE name = N'{installation.Database}';
+            """));
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master", $"""
+            SELECT COUNT(*) FROM sys.server_principals WHERE name IN (N'{installation.RuntimeUser}', N'{installation.MigrationUser}');
+            """));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(files));
+    }
+
     private static Dictionary<string, string?> Retention(string days) => new() { ["Goldmark:Audit:RetentionDays"] = days };
 
     /// <summary>Audit entries with the given action, dated the given number of days from now (negative: in the past).</summary>

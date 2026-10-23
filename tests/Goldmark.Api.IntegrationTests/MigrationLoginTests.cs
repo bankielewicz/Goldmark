@@ -12,6 +12,84 @@ namespace Goldmark.Api.IntegrationTests;
 public sealed class MigrationLoginTests(SqlServerFixture sql)
 {
     [Fact]
+    public async Task Without_a_migration_login_the_administrators_own_databases_are_not_findings()
+    {
+        // Found while testing Codex on #39: with one login the audit passed N'' as the other, and SUSER_SID(N'') is
+        // the caller's SID, so an administrator who owns another database was "mapped into" it and refused.
+        var installation = sql.NewInstallation();
+        var other = $"{installation.Database}_other";
+        await sql.AsAdminAsync("master", $"CREATE DATABASE [{other}];");
+        try
+        {
+            var result = await sql.RunAsync(installation, ["bootstrap-db"], new Dictionary<string, string?>
+            {
+                ["Goldmark:Migration:Login"] = "Administrator",
+                ["Goldmark:Migration:User"] = "",
+                ["Goldmark:Migration:Password"] = "",
+            });
+
+            Assert.True(result.Code == 0, result.ToString());
+            Assert.DoesNotContain("mapped-into", result.Error, StringComparison.Ordinal);
+        }
+        finally
+        {
+            await sql.AsAdminAsync("master", $"DROP DATABASE [{other}];");
+        }
+    }
+
+    [Theory]
+    [InlineData("GRANT CONTROL SERVER TO [{0}];", true)] // the documented prerequisite (DEC-043 item 13), not db_owner
+    [InlineData("USE [{1}]; CREATE USER [{0}] FOR LOGIN [{0}]; ALTER ROLE db_datareader ADD MEMBER [{0}];", false)]
+    public async Task Migrations_as_the_administrator_need_control_of_the_database_not_db_owner_membership(string grant, bool migrates)
+    {
+        // Codex on #39: IS_MEMBER('db_owner') is 0 for a CONTROL SERVER login that isn't the database's owner,
+        // so another DBA with the documented right couldn't upgrade.
+        var installation = sql.NewInstallation();
+        var administrator = new Dictionary<string, string?>
+        {
+            ["Goldmark:Migration:Login"] = "Administrator",
+            ["Goldmark:Migration:User"] = "",
+            ["Goldmark:Migration:Password"] = "",
+        };
+        var bootstrapped = await sql.RunAsync(installation, ["bootstrap-db"], administrator);
+        Assert.True(bootstrapped.Code == 0, bootstrapped.ToString());
+        var dba = $"{installation.RuntimeUser}_dba";
+        var password = SqlServerFixture.Secret();
+        await sql.AsAdminAsync("master", $"CREATE LOGIN [{dba}] WITH PASSWORD = N'{password}';");
+        try
+        {
+            await sql.AsAdminAsync("master", string.Format(System.Globalization.CultureInfo.InvariantCulture, grant, dba, installation.Database));
+
+            var result = await sql.RunAsync(installation, ["migrate"], new Dictionary<string, string?>(administrator)
+            {
+                ["Goldmark:Bootstrap:AdminUser"] = dba,
+                ["Goldmark:Bootstrap:AdminPassword"] = password,
+            });
+
+            if (migrates)
+            {
+                Assert.True(result.Code == 0, result.ToString());
+                Assert.Contains($"database schema version {Goldmark.Api.Data.SchemaMigrations.ExpectedVersion}", result.Output, StringComparison.Ordinal);
+            }
+            else
+            {
+                Assert.Equal(3, result.Code);
+                Assert.Contains($"the administrator needs CONTROL of '{installation.Database}' to migrate", result.Error, StringComparison.Ordinal);
+                Assert.Equal(0, await sql.AdminScalarAsync<int>(installation.Database, "SELECT COUNT(*) FROM sys.tables WHERE name = N'SchemaVersions';"));
+            }
+        }
+        finally
+        {
+            await sql.AsAdminAsync("master", $"""
+                DECLARE @kill nvarchar(max) = N'';
+                SELECT @kill += N'KILL ' + CAST(session_id AS nvarchar(10)) + N';' FROM sys.dm_exec_sessions WHERE login_name = N'{dba}';
+                EXEC (@kill);
+                DROP LOGIN [{dba}];
+                """);
+        }
+    }
+
+    [Fact]
     public async Task The_migration_login_is_db_owner_of_its_database_and_nothing_more()
     {
         var (installation, result) = await sql.SharedAsync("migration-login");

@@ -24,6 +24,15 @@ public sealed class BootstrapOptions
     public string AdminPassword { get; set; } = "";
 
     /// <summary>
+    /// <c>Sql</c> (default): <see cref="AdminUser"/> and <see cref="AdminPassword"/>. <c>Windows</c> (the
+    /// Windows installer, DEC-043 item 2): the administrator is this process's Windows account, the person
+    /// running the installer; <see cref="AdminUser"/> and <see cref="AdminPassword"/> stay empty.
+    /// </summary>
+    public string AdminAuthentication { get; set; } = DatabaseOptions.SqlAuthentication;
+
+    public bool AdminUsesWindows => AdminAuthentication == DatabaseOptions.WindowsAuthentication;
+
+    /// <summary>
     /// Optional path of a generated administrator's credential file (the bundled SQL Server). When
     /// set, <see cref="AdminUser"/> must be <c>sa</c> and is used only while this file does not exist:
     /// that run creates a sysadmin login with a generated name and password, writes it here and

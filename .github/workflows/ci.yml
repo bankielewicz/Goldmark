@@ -150,6 +150,62 @@ jobs:
           GOLDMARK_E2E_CHANNEL: chrome
         run: tests/smoke/compose-smoke.sh
 
+  windows-service:
+    # Slice 4b (DEC-043 item 8): the Windows service distribution. GitHub's Windows runners can't run
+    # Linux containers, so the Testcontainers suite stays on Linux; SQL Server 2025 Express is installed
+    # on the runner with a test certificate instead. The runner has no domain: the gMSA path is checked by
+    # hand (docs/ops/windows-service.md).
+    name: Windows service (build, in-process tests, install smoke on SQL Server Express)
+    needs: dependency-policy
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+      - name: Web app for the zip (the npm policy checks run before and after the install, as in the web job)
+        working-directory: web
+        run: |
+          node scripts/check-dependency-policy.mjs .
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          corepack enable pnpm
+          pnpm install --frozen-lockfile
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm run policy:installed
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          pnpm run build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Restore (locked mode), build, in-process tests on Windows
+        run: |
+          dotnet restore Goldmark.slnx --locked-mode
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet build Goldmark.slnx -c Release --no-restore
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          dotnet test --project tests/Goldmark.Api.Tests -c Release --no-build
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: The Windows service zip
+        run: deploy/windows/New-GoldmarkZip.ps1 -Output out
+      - name: SQL Server 2025 Express with a test certificate
+        run: tests/windows/Install-SqlExpress.ps1 -CertificateFile "$env:RUNNER_TEMP\sql.crt"
+      - name: SQL Server 2025's own grants on Windows match the audit baseline's Windows additions (DEC-043 item 12)
+        env:
+          GOLDMARK_WINDOWS_SQL_SERVER: localhost
+        run: |
+          $env:GOLDMARK_WINDOWS_SQL_CERTIFICATE = "$env:RUNNER_TEMP\sql.crt"
+          dotnet test --project tests/Goldmark.Api.IntegrationTests -c Release --no-build --filter-class Goldmark.Api.IntegrationTests.WindowsBaselineTests
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Install smoke (Windows authentication, refusals, uninstall, SQL login, rotation)
+        run: tests/windows/Test-WindowsService.ps1 -Zip out/goldmark-win-x64.zip -SqlCertificateFile "$env:RUNNER_TEMP\sql.crt"
+
   dependency-review:
     # NFR-SEC-7 / NFR-SEC-9: block PRs that add dependencies with known
     # vulnerabilities (npm and NuGet trees, via the dependency graph).

@@ -52,6 +52,10 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-037 | Fluent UI under the CSP: a per-response style nonce | Security |
 | DEC-038 | Slice 3: authentication decisions (audit, invitations, QR, Dapper, keys, defaults, setup token) | Security |
 | DEC-039 | Design system approved | Front end |
+| DEC-040 | Slice 3: sign-in on Identity's plug-in points, screens approved, password list | Security |
+| DEC-041 | Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited | Security |
+| DEC-042 | Slice 4a: password recovery, dual control for links that need none of the person's factors | Security |
+| DEC-043 | Slice 4b: the Windows service, its installer, secrets, logs and rotation | Deployment |
 
 ---
 
@@ -1531,6 +1535,147 @@ private, the agent's GitHub API token could not see it (public-repository scope 
     something, never on a timer: every request counts as activity, so polling would keep an idle
     Admin signed in past `Goldmark:Auth:SessionIdleMinutes` (a side agent's note).
 
+## DEC-043 Slice 4b: the Windows service, its installer, secrets, logs and rotation
+
+- **Decision (owner, 2026-10-22, asked in the HANDOFF rule-6 format; each answer quoted).** Slice 4b
+  was approved to start ("approved"). Its choices, left open by DEC-030, DEC-034 and DEC-036:
+  1. **Service account: "A. gMSA, domain account fallback (Recommended)".** A gMSA where possible; a
+     domain user is accepted (its password typed once into Windows' service settings, never stored by
+     Goldmark); the virtual account `NT SERVICE\Goldmark` only when SQL Server is on the same server;
+     never LocalSystem or NetworkService. Rejected: B, gMSA only (no workgroup installs); C, any account,
+     because LocalSystem and NetworkService reach a remote SQL Server as the computer account
+     (`CORP\APP01$`), which every other such service on that server shares: the known broadening
+     DEC-037's rule avoids.
+  2. **Migrations under Windows authentication: "A. The installing person, as themselves
+     (Recommended)".** The installer runs `bootstrap-db` and `migrate` under the operator's own Windows
+     login (with CONTROL SERVER: item 13 corrects the option's "or a `db_owner`"); no migration secret is stored
+     on the server; the service account never gets DDL. The same reach Docker's `db-init` has with the
+     administrator's file. Rejected: B, a second gMSA run through a scheduled task (more AD setup per
+     install); C, a generated SQL login (needs mixed-mode authentication, a stored password).
+  3. **Installer: "A. PowerShell wizard in a zip (Recommended)".** `Install-Goldmark.ps1` asks in the
+     terminal, calls the program's own commands and creates the service with its recovery actions and
+     ACLs; upgrading is running it again; an MSI can wrap it later. Its prompts are a text spec in the PR,
+     not a Claude Design board (rule 3). The package `Microsoft.Extensions.Hosting.WindowsServices`
+     (Microsoft; not in the shared framework) was approved with this answer. Rejected: B, an MSI with
+     WiX (dialogs need a design handoff; WiX v6 and later binaries are under the Open Source Maintenance
+     Fee EULA, which v7 enforces at build, a licensing question while Goldmark's own is open, DEC-001);
+     C, a graphical setup program.
+  4. **Logs: "A. JSON files, Administrators only (Recommended)".** The same JSON as on stdout, one file
+     per day in `%ProgramData%\Goldmark\logs`, readable by the service account, SYSTEM and
+     Administrators only. A start that fails on its configuration also writes the setting names to the
+     Application log. Asked as a security choice: the log carries the setup token (event 3001) and the
+     recovery link's path (3004), and older Microsoft documentation gives Interactive Users read access to
+     the Application log; measured on Windows 11 build 26300 (2026-10-22, `wevtutil gl Application`): its
+     channel access still grants `(A;;0x3;;;IU)`, read and write for Interactive Users. No new package: `Serilog.Sinks.File` is already
+     in the lock file through `Serilog.AspNetCore`. Rejected: B, the Event Log only (new package; the
+     two secrets readable by anyone signed in on the server); C, both.
+  5. **Secrets at rest: "A. ACLs + DPAPI to the service account (Recommended)".** The folders for the
+     sign-in keys, the TLS key, the credential files, the logs and the settings allow only the service
+     account, SYSTEM and Administrators, with inheritance off, and a start refuses a wider one. The key
+     ring and the runtime login's credential file are encrypted with DPAPI-NG to the service account's
+     SID (Data Protection's own, in the framework). The administrator's and the migration login's
+     passwords are never stored on Windows. That a restore on another server running as the same gMSA
+     still reads them is inferred from Microsoft's documentation; neither this machine nor CI has a domain,
+     so it is part of the gMSA check by hand. The consequence (a side agent's note): the service account
+     is part of the backup. A key ring restored under another account, after a change of account (a
+     domain user to a gMSA), or with the virtual account on a rebuilt server, can't be read, and everyone
+     signs in with a recovery code and sets up two-factor again; the ops guide's backup and restore steps
+     say so. Rejected: B, ACLs only
+     (a copy off the server stays readable); C, DPAPI machine scope (any account on the server decrypts
+     what it can read; a package for the credential file).
+  6. **#6 moves into 4b: "A. Yes, close #6 in 4b (Recommended)".** A scope change: the ACL code of item 5
+     protects the generated TLS key on Windows dev hosts too, and the Windows CI job checks it. HANDOFF
+     moves #6 from slice 24 to 4b.
+  7. **`rotate-db-credentials`: "A. All generated logins, then restart (Recommended)".** For SQL-login
+     mode (Windows authentication has no passwords; a gMSA's rotates itself). Runtime, migration and the
+     bundled administrator get new passwords in one run, each file written before its login changes, so
+     the next run finishes an interrupted one (DEC-034). It prints that Goldmark must be restarted; the
+     Windows wizard restarts the service itself. The SQL container's healthcheck login keeps its own
+     repair script. Rejected: B, one login at a time; C, rotation without a restart.
+  8. **Windows CI: "A. Build, tests, install smoke (Recommended)".** A windows-2025 runner builds, runs
+     the in-process tests, installs SQL Server 2025 Express, installs the service with Windows
+     authentication as `NT SERVICE\Goldmark` and checks `/health/ready`, the folder ACLs and the log
+     file, installs again with a SQL login and rotates, and uninstalls. GitHub's Windows runners can't run
+     Linux containers, so the Testcontainers suite stays on Linux; CI has no domain, so the gMSA path is
+     checked by hand following the ops guide. Rejected: B, build and tests only; C, the integration suite
+     on Windows too (a second database backend in its fixture).
+  9. **Row 4b's "Done when": "A. Approve as written (Recommended)"**, recorded in HANDOFF §1. Settled in
+     the slice, open to veto: the zip carries a self-contained build, so the server needs no .NET
+     install; a rotation is audited as System.
+  10. **The credential file when the installer can't encrypt to the service account: "A. Service
+     encrypts it at start (Recommended)".** Measured on a Windows 11 host outside a domain (2026-10-22):
+     DPAPI-NG `SID=` refuses to encrypt ("Encryption failed"), for the current account and for
+     `NT SERVICE\Goldmark`'s SID; `LOCAL=user` and classic DPAPI work. So, in SQL-login mode, with a
+     domain service account `bootstrap-db` encrypts the runtime file to that account (DPAPI-NG);
+     otherwise it writes the file with the owner-only ACL (as on Linux) and the service replaces it with a
+     copy encrypted to itself at its next start, which the wizard triggers at once. The plain copy exists
+     only between an install or a rotation and that start. Rejected: B, SQL logins only with a domain
+     account (CI has no domain, so that path would be checked by hand only); C, ACLs only for credential
+     files. Settled in the slice, open to veto: the service writes the key ring itself, so it uses DPAPI-NG
+     to a domain account and classic DPAPI to the virtual account; either way only the service account
+     reads it.
+  11. **Measured on the host with a probe service as `NT SERVICE\GoldmarkProbe` (2026-10-22, owner's
+     permission "A. Yes, a UAC prompt per script (Recommended)"; everything removed afterwards):**
+     - With restart-on-failure actions set, a configuration error found after the host started
+       (`ValidateOnStart`) looks like a crash (event 7031) and restarts every 2 seconds without end (9
+       starts in 14 s); one found before the host exists leaves the start hanging 30 s ("did not respond",
+       7009/7000, exit code 0). So a refused start reports itself to Windows as stopped with an error, which
+       failure actions don't restart (Done when item 5).
+     - An administrator's `EXECUTE AS LOGIN = N'NT SERVICE\GoldmarkProbe'` showed only the login and
+       `public`; the service's own token also held its local Windows group and that group's
+       `VIEW SERVER STATE`. Impersonation misses rights granted through Windows groups, so under Windows
+       authentication the service's own check at each start is the one that counts (settled, open to veto:
+       told the owner 2026-10-22); `bootstrap-db`'s check by impersonation is an early warning only.
+     - SQL Server gives a Windows login `CONTROL`, `ALTER`, `IMPERSONATE` and `VIEW DEFINITION` on each Windows
+       group login in its own token, the same implicit rights it has on itself (measured: the owner's login on
+       itself on the host; `NT SERVICE\Goldmark` on `BUILTIN\Users`, which a fresh SQL Server 2025 Express has,
+       in CI on 2026-10-22, where the service refused its first start). They can't be revoked, so the service's
+       check skips those group logins as securables, as it skips its own login; what such a group is granted is
+       still refused (smoke phase 2). Owner, 2026-10-22: "a" (A. skip only the automatic rights on group logins
+       the service belongs to), after Microsoft's guidance: group membership is its "preferred strategy" for
+       access, and Express's `BUILTIN\Users` login can be safely removed. Not covered: a Windows group mapped as a
+       user in Goldmark's own database, where the database-level check still refuses (unmeasured).
+     - The service's check at each start also covers every other database its own token can enter (Codex on #39):
+       an administrator's impersonation doesn't see a user that one of the account's Windows groups has there.
+       Owner, 2026-10-22: "A. Refuse; acceptable if via group (Recommended)": a user for one of its groups (such as
+       `NT AUTHORITY\Authenticated Users` in another application's database) is the finding
+       `group-database-access`, which an operator can accept by ID like guest access; a user for the account itself
+       stays `database-access`, never acceptable. The check runs at every start, so a later grant to a broad group
+       stops Goldmark at its next restart until it is accepted or reverted.
+     - The installer copies an operator's HTTPS certificate and key into `tls\`, and the pinned SQL Server certificate
+       into `settings\` (Codex on #39: the originals may sit where others can read them). Owner, 2026-10-22: "A. Copy,
+       document renewal (Recommended)": a renewal replaces the copies (installer again with the paths, or copy and
+       restart from a renewal script); `docs/ops/windows-service.md` "Renewing certificates".
+     - Codex round 2 on #39 (no owner decision needed, each a tightening): the installer trusts what is already in a
+       data folder only if nobody but Administrators, SYSTEM, the installing account and (outside `settings`) the
+       service's account may change it; the program folder lets only SYSTEM and Administrators change it and may not
+       overlap the data folder; `bootstrap-db` and `rotate-db-credentials` share one lock (`goldmark:credentials`).
+     - After the two review rounds, the owner's fix-now answers (2026-10-22): "A. Fix now (Recommended)" for
+       `Rotate-GoldmarkCredentials.ps1` checking the settings as the installer does before asking for the SQL
+       administrator's password; "Option a. Post mvp will expand upon admin/settings which can include configuration
+       for database authentication." for refusing a change of `-Authentication` on an upgrade before anything changes
+       (#41 covers both principal changes until then); "A. Fix both now (Recommended)" for full install and data paths
+       and resetting an existing operator key copy's permissions.
+     - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
+       copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
+  12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**
+     (owner, 2026-10-22). The principal audit's baseline (DEC-031) was measured on the Linux image; on the owner's
+     Windows SQL Server 2025 Developer, `public` also holds `SELECT` on `master.sys.dm_pal_cpu_stats`,
+     `dm_pal_disk_stats`, `dm_pal_vm_stats`, `dm_pal_net_stats` and `msdb.dbo.external_libraries_installed`, so
+     `bootstrap-db` refused before changing anything. The CI job measures a fresh SQL Server 2025 Express on
+     Windows; exactly those grants join the baseline as Windows entries, and anything else is still refused or
+     accepted by ID. Rejected: B, every Windows install accepts them by ID; C, a built-in exception for the
+     `dm_pal_*` views without measuring. Measured by CI on PR #39 (2026-10-22): a fresh Express has the four
+     `dm_pal_*` grants and `EXECUTE` for `public` on 20 SQL Server 2025 procedures in `master` (warehouse,
+     managed delta table and clone metadata), not the `msdb` grant, which comes with the owner's Machine
+     Learning Services; that installation accepts it by ID.
+  13. **Who runs the installer: "A. Correct the record: CONTROL SERVER (Recommended)"** (owner, 2026-10-22).
+     Item 2's option said "a sysadmin, or a db_owner after a DBA's Mode Existing setup"; in the build,
+     `bootstrap-db` audits the instance before every change (DEC-031), which needs CONTROL SERVER, and the
+     installer runs it on every install and upgrade. So the installing person needs CONTROL SERVER: a DBA runs
+     the installer, or grants it for the run. `migrate` alone still runs as a `db_owner`. Rejected: B, an
+     upgrade switch that runs `migrate` only (upgrades would no longer re-audit the instance).
+
 ---
 
 ## Slice 1 acceptance mapping
@@ -1711,4 +1856,27 @@ policy tests and 56 dist and contrast tests, lint, typecheck and format; Compose
 | 9 | Rule 7: new mutations write audit records, tested | **Met** | The new actions in `AuditCatalog` (catalog test); each flow's audit rows asserted in `PasswordRecoveryTests`; the audit page's words for the new details |
 | 10 | Rule 7: every UI function is available through `/api/v1` | **Met** | The pages call only `/api/v1/users*`, `/links/*`, `/enrolment/*`, `/account/password` |
 | 11 | NFR-A11Y-1/3: WCAG 2.2 AA, axe in Playwright | **Met for the slice's screens** | `web/e2e/auth.spec.ts` "slice 4a screens": sign-in caption, Change password, the link page (new password; authenticator, dark; done), the reset dialog (light and dark), the link panel, the link before approval, the nav count (dark, and the 1024 rail) |
+| 12 | CI green | **Not executed** | Runs on the PR |
+
+## Slice 4b acceptance mapping
+
+Same status vocabulary as slice 1. Local runs, 2026-10-22: on the owner's WSL machine, 428 in-process tests
+(10 Windows-only ones skipped) and the integration suite (232 tests, the Windows baseline one skipped); on the
+owner's Windows 11 host, the same 428 in-process tests (2 POSIX-only ones skipped) and all 35 checks of
+`tests/windows/Test-WindowsService.ps1` against SQL Server 2025 Developer with a test certificate; the Compose
+smoke test, with a rotation check added, passes (Playwright 10/10).
+
+| # | Criterion (row 4b, DEC-043) | Status | Evidence |
+|---|---|---|---|
+| 1 | The installer sets up the service on Windows Server against SQL Server 2025, Windows authentication or a SQL login; the installing person's login runs `bootstrap-db migrate`; gMSA, domain user, or `NT SERVICE\Goldmark` for a local SQL Server only, never LocalSystem or NetworkService; ready and the sign-in page; upgrade = run again; uninstall keeps the data | **Met on Windows 11**; Windows Server in CI (windows-2025); gMSA and domain user by hand | `deploy/windows/Install-Goldmark.ps1`; `Test-WindowsService.ps1` phases 1, 1b (an upgrade keeps the database and the sign-in keys), 3 and 4; the installer refuses LocalSystem, NetworkService and a virtual account for a remote server; it needs CONTROL SERVER (item 13) |
+| 2 | Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the audit covers Windows logins and group rights; the password path only for SQL logins | **Met** | `bootstrap-db` creates `FROM WINDOWS` logins and checks them by impersonation; `RuntimeRightsCheck` checks as the service itself (a right through a Windows group is refused: smoke phase 2); `WindowsSettingsTests` |
+| 3 | Owner-only folders, a start refuses a wider one; the key ring and a SQL login's password encrypted to the service account; administrator and migration passwords never stored on Windows; #6 | **Met**; DPAPI-NG to a gMSA by hand | `PrivateDirectory`, `CredentialProtector`, `KeyRingEncryption`; `WindowsProtectionTests` (run on Windows); smoke phase 1 (folders, encrypted keys) and 4 (the service encrypts its file) |
+| 4 | JSON log files per day; a configuration failure in the Application log with setting names only; 3001 and 3004 never in the Event Log | **Met** | `LoggingSetup`; smoke phase 1 (the token is in the file, nothing in the Application log) and phase 2 (event 2 names `Goldmark:Https:Port`) |
+| 5 | Restart after a crash; a configuration error stops without a loop | **Met** (measured) | DEC-043 item 11; `WindowsService.RefuseStart`; the rights refusal sets `ServiceBase.ExitCode`; smoke phase 2: both stop with exit code 13 and stay stopped past the restart delay |
+| 6 | `rotate-db-credentials` on Docker and Windows: every generated SQL login, file before login, audited as System, then a restart; nothing under Windows authentication | **Met** | `RotateCredentialsCommand`; `CredentialRotationTests`, `GeneratedAdministratorTests`, `WindowsSettingsTests`; Compose smoke (the documented `docker compose run --rm db-init rotate-db-credentials`, then a restart); Windows smoke phase 4 (`Rotate-GoldmarkCredentials.ps1`) |
+| 7 | The recovery setting in the settings file; the link's path in the log file | **Met** (configuration) | `Goldmark__SettingsFile` (`SettingsFile`); the installer keeps `Goldmark:Auth` on an upgrade; `docs/ops/windows-service.md`. The recovery flow itself is unchanged and tested in slice 4a |
+| 8 | #34: `bootstrap-db` refuses an out-of-range retention period before connecting; a test proves nothing changes | **Met** | `AuditRetentionTests.Db_init_refuses_a_period_under_the_floor_before_bootstrap_db_changes_anything` (fails on the old code); `ContainerCommandsTests` |
+| 9 | Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express, the install smoke, a SQL-login install with rotate, uninstall; the gMSA by hand | **Not executed** | Job `windows-service`; runs on the PR. Hand check: `docs/ops/windows-service.md` "Checking a gMSA by hand" |
+| 10 | `docs/ops/windows-service.md`; the installer's prompts as a text spec; rule 7; rule 8 both ways | **Met** | The ops guide (parameters and prompts table); `database.credentials.rotated` in the audit catalog; `DefaultPaths`, Windows APIs behind `OperatingSystem.IsWindows()` |
+| 11 | Rule 7 / M6: new endpoints | **Not applicable** | The slice adds no endpoint |
 | 12 | CI green | **Not executed** | Runs on the PR |

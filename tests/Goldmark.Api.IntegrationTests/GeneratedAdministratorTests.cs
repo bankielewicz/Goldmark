@@ -91,6 +91,70 @@ public sealed class GeneratedAdministratorTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task Rotation_gives_the_generated_administrator_a_new_password_and_later_runs_sign_in_with_it() // DEC-043 item 7
+    {
+        var (installation, files, _) = await FirstRunAsync();
+        var (admin, oldPassword) = Read(files.Admin);
+
+        var rotated = await sql.RunAsync(installation, ["rotate-db-credentials"], Bundled(files));
+
+        Assert.True(rotated.Code == 0, rotated.ToString());
+        var (sameAdmin, newPassword) = Read(files.Admin);
+        Assert.Equal(admin, sameAdmin);
+        Assert.NotEqual(oldPassword, newPassword);
+        Assert.False(File.Exists(files.Admin + ".new"));
+        Assert.Contains($"rotate-db-credentials: administrator login '{admin}': new password", rotated.Output, StringComparison.Ordinal);
+        Assert.DoesNotContain(newPassword, rotated.Output + rotated.Error, StringComparison.Ordinal);
+        Assert.Equal(1, await SaDisabledAsync());
+
+        var again = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], Bundled(files));
+        Assert.True(again.Code == 0, again.ToString());
+        Assert.Contains($"bootstrap-db: signed in as the generated administrator '{admin}'", again.Output, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("rotate-db-credentials")]
+    [InlineData("bootstrap-db")]
+    public async Task A_rotation_interrupted_after_the_administrators_login_changed_is_finished_by_the_next_run(string command)
+    {
+        // Codex on #39: the login took the staged password, the file kept the old one, and with sa disabled nothing
+        // could sign in. The state an interruption between ALTER LOGIN and the rename leaves:
+        var (installation, files, _) = await FirstRunAsync();
+        var (admin, oldPassword) = Read(files.Admin);
+        var staged = SqlServerFixture.Secret();
+        await File.WriteAllTextAsync(files.Admin + ".new", JsonSerializer.Serialize(new { user = admin, password = staged }), TestContext.Current.CancellationToken);
+        await sql.AsAdminAsync("master", $"ALTER LOGIN [{admin}] WITH PASSWORD = N'{staged}';");
+
+        var next = await sql.RunAsync(installation, [command], Bundled(files));
+
+        Assert.True(next.Code == 0, next.ToString());
+        Assert.Contains($"{command}: finished an interrupted rotation", next.Output, StringComparison.Ordinal);
+        Assert.False(File.Exists(files.Admin + ".new"));
+        var (sameAdmin, password) = Read(files.Admin);
+        Assert.Equal(admin, sameAdmin);
+        Assert.NotEqual(oldPassword, password);
+        Assert.Equal(1, await sql.AdminScalarAsync<int>("master", $"SELECT PWDCOMPARE(N'{password}', password_hash) FROM sys.sql_logins WHERE name = N'{admin}';"));
+        Assert.Equal(1, await SaDisabledAsync());
+    }
+
+    [Fact]
+    public async Task A_stale_staged_administrator_file_is_ignored_and_replaced()
+    {
+        // Interrupted before ALTER LOGIN: the login kept the file's password, so the staged one is never used.
+        var (installation, files, _) = await FirstRunAsync();
+        var (admin, _) = Read(files.Admin);
+        await File.WriteAllTextAsync(files.Admin + ".new", JsonSerializer.Serialize(new { user = admin, password = SqlServerFixture.Secret() }), TestContext.Current.CancellationToken);
+
+        var rotated = await sql.RunAsync(installation, ["rotate-db-credentials"], Bundled(files));
+
+        Assert.True(rotated.Code == 0, rotated.ToString());
+        Assert.DoesNotContain("finished an interrupted rotation", rotated.Output, StringComparison.Ordinal);
+        Assert.False(File.Exists(files.Admin + ".new"));
+        var (_, password) = Read(files.Admin);
+        Assert.Equal(1, await sql.AdminScalarAsync<int>("master", $"SELECT PWDCOMPARE(N'{password}', password_hash) FROM sys.sql_logins WHERE name = N'{admin}';"));
+    }
+
+    [Fact]
     public async Task A_lost_administrator_file_is_recovered_by_re_enabling_sa()
     {
         var (installation, files, _) = await FirstRunAsync();

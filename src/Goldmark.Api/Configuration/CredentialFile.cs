@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Goldmark.Api.Security;
 
 namespace Goldmark.Api.Configuration;
 
@@ -9,9 +10,10 @@ internal sealed record LoginCredential(string User, string Password);
 /// <summary>
 /// Credential files (slice 2c, DEC-034): one JSON file per login, <c>{"user": ..., "password": ...}</c>,
 /// written by <c>bootstrap-db</c> and read by <c>migrate</c> and the application. The path comes
-/// from settings, so another deployment can point it elsewhere (later a DPAPI-protected store).
-/// On Unix the file is created 0600 in a 0700 directory and replaced atomically. Its contents
-/// never appear in messages: a problem names the file's setting only.
+/// from settings. On Unix the file is created 0600 in a 0700 directory; on Windows its folder is
+/// owner-only (<see cref="PrivateDirectory"/>) and the file is encrypted to the service account
+/// (<see cref="CredentialProtection"/>, DEC-043 items 5 and 10). It is replaced atomically. Its
+/// contents never appear in messages: a problem names the file's setting only.
 /// </summary>
 internal static class CredentialFile
 {
@@ -22,9 +24,16 @@ internal static class CredentialFile
 
     private const string SuffixAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
     private const string PasswordAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    private const UnixFileMode DirectoryMode = UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute;
     private const UnixFileMode PrivateFileMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-    private const long MaximumFileSize = 4096;
+    private const long MaximumFileSize = 16384; // an encrypted file is larger than the plain one
+    private const string FolderSetting = "The credential file's folder";
+
+    /// <summary>
+    /// The problem when the password is encrypted to another account (the service account, read by an
+    /// operator's command). <see cref="TryRead(string, out LoginCredential, out string, out CredentialProtection)"/>
+    /// still returns the login's name.
+    /// </summary>
+    public const string NotForThisAccount = "is encrypted to another Windows account (the service account) and can't be read by this one";
 
     /// <summary>A generated login name: <c>goldmark_&lt;purpose&gt;_</c> and 10 random lowercase letters and digits.</summary>
     public static string GenerateName(string purpose) =>
@@ -83,10 +92,15 @@ internal static class CredentialFile
     /// Reads a credential file. On failure, <paramref name="problem"/> describes it without any
     /// of the file's contents ("does not exist", "is not a valid credential file", ...).
     /// </summary>
-    public static bool TryRead(string path, out LoginCredential credential, out string problem)
+    public static bool TryRead(string path, out LoginCredential credential, out string problem) =>
+        TryRead(path, out credential, out problem, out _);
+
+    /// <summary>As above, and how the file was protected (<see cref="CredentialProtection.Plain"/> on Unix).</summary>
+    public static bool TryRead(string path, out LoginCredential credential, out string problem, out CredentialProtection protection)
     {
         credential = new LoginCredential("", "");
         problem = "";
+        protection = CredentialProtection.Plain;
         string text;
         try
         {
@@ -118,20 +132,33 @@ internal static class CredentialFile
             if (root.ValueKind != JsonValueKind.Object
                 || root.EnumerateObject().Count() != 2
                 || !root.TryGetProperty("user", out var user) || user.ValueKind != JsonValueKind.String
-                || !root.TryGetProperty("password", out var password) || password.ValueKind != JsonValueKind.String)
+                || !root.TryGetProperty("password", out var password) || password.ValueKind is not (JsonValueKind.String or JsonValueKind.Object)
+                || !SqlIdentifier.IsValid(user.GetString()!))
             {
                 problem = "is not a valid Goldmark credential file";
                 return false;
             }
 
-            var value = new LoginCredential(user.GetString()!, password.GetString()!);
-            if (!SqlIdentifier.IsValid(value.User) || value.Password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
+            // On Windows the password is encrypted to the service account (DEC-043 item 5); the login's
+            // name is not a secret and stays readable, so a reader that can't decrypt still knows it.
+            credential = new LoginCredential(user.GetString()!, "");
+            var secret = password.ValueKind == JsonValueKind.String ? password.GetString() : null;
+            if (password.ValueKind == JsonValueKind.Object)
+            {
+                if (!CredentialProtector.TryUnprotect(password, out secret, out protection))
+                {
+                    problem = protection == CredentialProtection.Plain ? "is not a valid Goldmark credential file" : NotForThisAccount;
+                    return false;
+                }
+            }
+
+            if (secret!.Length is < MinimumPasswordLength or > MaximumPasswordLength)
             {
                 problem = "is not a valid Goldmark credential file";
                 return false;
             }
 
-            credential = value;
+            credential = credential with { Password = secret };
             return true;
         }
         catch (JsonException)
@@ -143,13 +170,25 @@ internal static class CredentialFile
 
     /// <summary>
     /// Writes the file atomically (temporary file in the same directory, flushed to disk, then
-    /// renamed over the old one). On Unix the directory is forced to 0700 and the file is created 0600.
+    /// renamed over the old one) in an owner-only folder (<see cref="PrivateDirectory"/>). On Unix the
+    /// file is created 0600. On Windows it is encrypted to <paramref name="serviceAccount"/>, or to this
+    /// process's account when that is unset or the same; when Windows can't encrypt to another account
+    /// (outside a domain), it is written plain and the service encrypts it at its next start (DEC-043
+    /// item 10). Returns how it was protected.
     /// </summary>
-    public static void Write(string path, LoginCredential credential)
+    public static CredentialProtection Write(string path, LoginCredential credential, string? serviceAccount = null)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
-        EnsurePrivateDirectory(directory);
+        PrivateDirectory.Ensure(FolderSetting, directory, serviceAccount);
 
+        var protection = CredentialProtection.Plain;
+        string? encrypted = null;
+        if (OperatingSystem.IsWindows())
+        {
+            (encrypted, protection) = CredentialProtector.Protect(credential.Password, serviceAccount);
+        }
+
+        var json = Json(credential, protection, encrypted);
         var temp = path + ".tmp";
         File.Delete(temp);
         var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
@@ -160,33 +199,36 @@ internal static class CredentialFile
 
         using (var stream = new FileStream(temp, options))
         {
-            using (var writer = new Utf8JsonWriter(stream))
-            {
-                writer.WriteStartObject();
-                writer.WriteString("user", credential.User);
-                writer.WriteString("password", credential.Password);
-                writer.WriteEndObject();
-            }
-
+            stream.Write(json);
             stream.Flush(flushToDisk: true);
         }
 
         File.Move(temp, path, overwrite: true);
+        return protection;
     }
 
-    private static void EnsurePrivateDirectory(string directory)
+    private static byte[] Json(LoginCredential credential, CredentialProtection protection, string? encrypted)
     {
-        if (OperatingSystem.IsWindows())
+        using var buffer = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(buffer))
         {
-            Directory.CreateDirectory(directory);
-            return;
+            writer.WriteStartObject();
+            writer.WriteString("user", credential.User);
+            if (encrypted is null)
+            {
+                writer.WriteString("password", credential.Password);
+            }
+            else
+            {
+                writer.WriteStartObject("password");
+                writer.WriteString("protection", CredentialProtector.Name(protection));
+                writer.WriteString("encrypted", encrypted);
+                writer.WriteEndObject();
+            }
+
+            writer.WriteEndObject();
         }
 
-        Directory.CreateDirectory(directory, DirectoryMode);
-        if (File.GetUnixFileMode(directory) != DirectoryMode)
-        {
-            // A volume mount point may have been created with a wider mode by the image build.
-            File.SetUnixFileMode(directory, DirectoryMode);
-        }
+        return buffer.ToArray();
     }
 }

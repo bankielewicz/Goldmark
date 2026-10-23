@@ -281,14 +281,6 @@
           "Serilog": "4.0.0"
         }
       },
-      "Serilog.Sinks.File": {
-        "type": "Transitive",
-        "resolved": "7.0.0",
-        "contentHash": "fKL7mXv7qaiNBUC71ssvn/dU0k9t0o45+qm2XgKAlSt19xF+ijjxyA3R6HmCgfKEKwfcfkwWjayuQtRueZFkYw==",
-        "dependencies": {
-          "Serilog": "4.2.0"
-        }
-      },
       "SharpZipLib": {
         "type": "Transitive",
         "resolved": "1.4.2",
@@ -328,6 +320,11 @@
         "type": "Transitive",
         "resolved": "9.0.18",
         "contentHash": "1/iz9Eex1TBMYdAk+m3igaMvL+nk+rY1EqL6u93an/j1ghxmB24vGOKXkVFy3NSPA39s1H/+SNoK257tHoXoLA=="
+      },
+      "System.ServiceProcess.ServiceController": {
+        "type": "Transitive",
+        "resolved": "10.0.13",
+        "contentHash": "0Zh/U/1+hy1MCxx1BTikJi4L5o1Ys6VhB8PKlTNOB4/n2d6ua2+TuoD6T7xN9RV0uiOGod575pQrUSTXg+aYGQ=="
       },
       "Testcontainers": {
         "type": "Transitive",
@@ -413,8 +410,10 @@
         "dependencies": {
           "Dapper": "[2.1.89, )",
           "Microsoft.Data.SqlClient": "[7.1.1, )",
+          "Microsoft.Extensions.Hosting.WindowsServices": "[10.0.13, )",
           "Net.Codecrete.QrCodeGenerator": "[3.2.1, )",
           "Serilog.AspNetCore": "[10.0.0, )",
+          "Serilog.Sinks.File": "[7.0.0, )",
           "System.Security.Cryptography.Pkcs": "[10.0.13, )",
           "dbup-sqlserver": "[7.2.0, )"
         }
@@ -452,6 +451,15 @@
           "System.Security.Cryptography.Pkcs": "9.0.18"
         }
       },
+      "Microsoft.Extensions.Hosting.WindowsServices": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.13, )",
+        "resolved": "10.0.13",
+        "contentHash": "sk3VNcYEmgwYGPF4ze/112jpaeDKSsKGhmEZ8IlhOR8F6JT+1DYaZUb14jobVXiKhuXWIKcYXV7mkSPeA4dc3g==",
+        "dependencies": {
+          "System.ServiceProcess.ServiceController": "10.0.13"
+        }
+      },
       "Net.Codecrete.QrCodeGenerator": {
         "type": "CentralTransitive",
         "requested": "[3.2.1, )",
@@ -471,6 +479,15 @@
           "Serilog.Sinks.Console": "6.1.1",
           "Serilog.Sinks.Debug": "3.0.0",
           "Serilog.Sinks.File": "7.0.0"
+        }
+      },
+      "Serilog.Sinks.File": {
+        "type": "CentralTransitive",
+        "requested": "[7.0.0, )",
+        "resolved": "7.0.0",
+        "contentHash": "fKL7mXv7qaiNBUC71ssvn/dU0k9t0o45+qm2XgKAlSt19xF+ijjxyA3R6HmCgfKEKwfcfkwWjayuQtRueZFkYw==",
+        "dependencies": {
+          "Serilog": "4.2.0"
         }
       },
       "System.Security.Cryptography.Pkcs": {

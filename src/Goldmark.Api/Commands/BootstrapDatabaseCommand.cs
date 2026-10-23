@@ -1,5 +1,7 @@
+using Goldmark.Api.Audit;
 using Goldmark.Api.Configuration;
 using Goldmark.Api.Data;
+using Goldmark.Api.Security;
 using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.Commands;
@@ -81,7 +83,7 @@ internal static class BootstrapDatabaseCommand
 
     // Read-only. Run in master: whether the administrator can see and change everything the
     // audit and provisioning need (PWDCOMPARE reads password hashes, which needs CONTROL SERVER).
-    private const string AdminRightsSql = "SELECT ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, 'CONTROL SERVER'), 0);";
+    internal const string AdminRightsSql = "SELECT ISNULL(HAS_PERMS_BY_NAME(NULL, NULL, 'CONTROL SERVER'), 0);";
 
     // Read-only. The migrations use SQL Server 2025's native json type (DEC-030: 2025 is the
     // minimum), so an older server is refused before anything is created (Codex on #17).
@@ -192,18 +194,25 @@ internal static class BootstrapDatabaseCommand
         SET XACT_ABORT ON;
         DECLARE @sql nvarchar(max);
         IF @create = 0 AND (SUSER_ID(@login) IS NULL
-            OR ISNULL((SELECT PWDCOMPARE(@password, password_hash) FROM sys.sql_logins WHERE name = @login), 0) = 0
+            OR (@windows = 0 AND ISNULL((SELECT PWDCOMPARE(@password, password_hash) FROM sys.sql_logins WHERE name = @login), 0) = 0)
             OR NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE sid = SUSER_SID(@login))
             OR (@db_owner = 1 AND IS_ROLEMEMBER(N'db_owner', (SELECT name FROM sys.database_principals WHERE sid = SUSER_SID(@login))) = 0))
             THROW 50001, N'bootstrap-db (Mode Existing) would have to create or change a login or user; nothing was changed.', 1;
-        IF SUSER_ID(@login) IS NULL
+        IF SUSER_ID(@login) IS NULL AND @windows = 1
+        BEGIN
+            -- The Windows service's account (DEC-043): no password; Windows authenticates it.
+            SET @sql = N'CREATE LOGIN ' + QUOTENAME(@login) + N' FROM WINDOWS WITH DEFAULT_DATABASE = ' + QUOTENAME(@db) + N';';
+            EXEC sys.sp_executesql @sql;
+            SELECT N'created Windows login';
+        END
+        ELSE IF SUSER_ID(@login) IS NULL
         BEGIN
             SET @sql = N'CREATE LOGIN ' + QUOTENAME(@login) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''')
                 + N', DEFAULT_DATABASE = ' + QUOTENAME(@db) + N', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;';
             EXEC sys.sp_executesql @sql;
             SELECT N'created login';
         END
-        ELSE IF ISNULL((SELECT PWDCOMPARE(@password, password_hash) FROM sys.sql_logins WHERE name = @login), 0) = 0
+        ELSE IF @windows = 0 AND ISNULL((SELECT PWDCOMPARE(@password, password_hash) FROM sys.sql_logins WHERE name = @login), 0) = 0
         BEGIN
             SET @sql = N'ALTER LOGIN ' + QUOTENAME(@login) + N' WITH PASSWORD = ' + QUOTENAME(@password, N'''') + N';';
             EXEC sys.sp_executesql @sql;
@@ -302,7 +311,7 @@ internal static class BootstrapDatabaseCommand
     /// <summary>A login Goldmark manages, with the settings and marker that identify it.</summary>
     private sealed record Principal(
         string Purpose, string Login, string Password, string MarkerValue, bool DbOwner, string ExpectedRole,
-        string UserVariable, string PasswordVariable, string? CredentialFile, CredentialSource Source);
+        string UserVariable, string PasswordVariable, string? CredentialFile, CredentialSource Source, bool Windows = false);
 
     private readonly record struct LoginState(string Type, bool PasswordMatches);
 
@@ -314,18 +323,28 @@ internal static class BootstrapDatabaseCommand
         var db = new DatabaseOptions();
         var migration = new MigrationOptions();
         var bootstrap = new BootstrapOptions();
+        var service = new ServiceOptions();
         var sources = (Runtime: CredentialSource.Settings, Migration: CredentialSource.Settings);
         LoginCredential? generatedAdmin = null;
+        var fingerprint = "";
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
             migration = configuration.GetSection(MigrationOptions.SectionName).Get<MigrationOptions>() ?? migration;
             bootstrap = configuration.GetSection(BootstrapOptions.SectionName).Get<BootstrapOptions>() ?? bootstrap;
+            service = configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>() ?? service;
+            var audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? new AuditOptions();
+            await RotateCredentialsCommand.FinishStagedAdministratorAsync(db, bootstrap.AdminCredentialFile, bootstrap.WaitSeconds, output, Name);
+            fingerprint = CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile);
             errors = PlanCredentials(db, migration, bootstrap, out sources, out generatedAdmin);
             if (errors.Count == 0)
             {
-                errors = Validate(db, migration, bootstrap);
+                errors = Validate(db, migration, bootstrap, service);
             }
+
+            // migrate applies the retention period, but db-init runs bootstrap-db first: a period migrate
+            // would refuse is refused here, before anything changes (#34).
+            errors.AddRange(AuditOptions.Errors(audit));
         }
 
         if (errors.Count > 0)
@@ -340,20 +359,33 @@ internal static class BootstrapDatabaseCommand
         }
 
         var existing = bootstrap.Mode == BootstrapOptions.ExistingMode;
-        Principal[] principals =
-        [
-            new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, RuntimeRole, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD",
-                db.CredentialFile, sources.Runtime),
-            new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true, "db_owner",
-                "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD", migration.CredentialFile, sources.Migration),
-        ];
+        // Under Windows authentication the runtime login is the service account's Windows login, with no
+        // password; with Migration:Login Administrator there is no migration login (DEC-043 item 2).
+        var list = new List<Principal>
+        {
+            db.UsesWindowsAuthentication
+                ? new("runtime", service.Account!, "", RuntimeMarkerValue, DbOwner: false, RuntimeRole, $"{ServiceOptions.SectionName}:Account", "",
+                    null, CredentialSource.Settings, Windows: true)
+                : new("runtime", db.User, db.Password, RuntimeMarkerValue, DbOwner: false, RuntimeRole, "GOLDMARK_DB_USER", "GOLDMARK_DB_PASSWORD",
+                    db.CredentialFile, sources.Runtime),
+        };
+        if (!migration.UsesAdministrator)
+        {
+            list.Add(new("migration", migration.User, migration.Password, MigrationMarkerValue, DbOwner: true, "db_owner",
+                "GOLDMARK_DB_MIGRATION_USER", "GOLDMARK_DB_MIGRATION_PASSWORD", migration.CredentialFile, sources.Migration));
+        }
+
+        var principals = list.ToArray();
         var policy = FindingPolicy.Parse(bootstrap.AcceptedFindings);
 
         // With a generated administrator (the bundled SQL Server), its credential file is used
         // whenever it exists, and sa never is; sa signs in only to create that administrator.
         var adminFile = string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile) ? null : bootstrap.AdminCredentialFile;
-        var admin = SqlConnectionFactory.Build(db, generatedAdmin?.User ?? bootstrap.AdminUser, generatedAdmin?.Password ?? bootstrap.AdminPassword, database: "master");
+        var admin = bootstrap.AdminUsesWindows
+            ? SqlConnectionFactory.BuildIntegrated(db, database: "master")
+            : SqlConnectionFactory.Build(db, generatedAdmin?.User ?? bootstrap.AdminUser, generatedAdmin?.Password ?? bootstrap.AdminPassword, database: "master");
         admin.Pooling = false;
+        var adminName = bootstrap.AdminUsesWindows ? $"{Environment.UserDomainName}\\{Environment.UserName}" : generatedAdmin?.User ?? bootstrap.AdminUser;
         var adminConnected = false;
         try
         {
@@ -369,8 +401,20 @@ internal static class BootstrapDatabaseCommand
             if (await ScalarAsync(connection, AdminRightsSql, db) != 1)
             {
                 return await RefuseAsync(error,
-                    $"the administrator login '{generatedAdmin?.User ?? bootstrap.AdminUser}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
+                    $"the administrator login '{adminName}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
                     "Goldmark's logins. Nothing was changed.");
+            }
+
+            // One writer of the credentials at a time, rotate-db-credentials included, and the files still those
+            // planned above, which were read before this connection could be opened (CredentialLock).
+            if (await ScalarAsync(connection, CredentialLock.Sql, db) < 0)
+            {
+                return await RefuseAsync(error, CredentialLock.Held);
+            }
+
+            if (CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile) != fingerprint)
+            {
+                return await RefuseAsync(error, CredentialLock.Changed);
             }
 
             if (await ScalarAsync(connection, ServerVersionSql, db) is var major and < MinimumMajorVersion)
@@ -414,8 +458,15 @@ internal static class BootstrapDatabaseCommand
                 }
             }
 
-            db.User = principals[0].Login;
-            migration.User = principals[1].Login;
+            if (!db.UsesWindowsAuthentication)
+            {
+                db.User = principals[0].Login;
+            }
+
+            if (principals.Length > 1)
+            {
+                migration.User = principals[1].Login;
+            }
 
             var states = new List<(Principal Principal, LoginState? Login, UserState User)>();
             foreach (var principal in principals)
@@ -459,7 +510,7 @@ internal static class BootstrapDatabaseCommand
             {
                 foreach (var (principal, login, _) in states)
                 {
-                    if (login is not { PasswordMatches: true })
+                    if (!principal.Windows && login is not { PasswordMatches: true })
                     {
                         await ExecuteAsync(connection, PasswordPolicyProbeSql, db, principal, bootstrap);
                     }
@@ -476,7 +527,7 @@ internal static class BootstrapDatabaseCommand
             // the next one applies the file (DEC-034).
             foreach (var principal in principals)
             {
-                WriteCredentialFile(output, principal);
+                WriteCredentialFile(output, principal, service.Account);
             }
 
             await connection.ChangeDatabaseAsync(db.Name);
@@ -501,15 +552,21 @@ internal static class BootstrapDatabaseCommand
                 return await RefuseAsync(error, $"{FindingPolicy.Describe(after)}{Environment.NewLine}The changes listed above were made; fix these and run db-init again.");
             }
 
-            // 4. Verify each login's effective permissions, as that login.
-            var (runtimeExcess, runtimeFindings) = await VerifyAsync(db, principals[0], VerifySql, runtime: true);
+            // 4. Verify each login's effective permissions, as that login. A Windows login can't be signed in
+            //    as from here: an impersonation shows its direct rights but not those from Windows groups
+            //    (measured, DEC-043 item 11), which the service checks itself at each start.
+            var (runtimeExcess, runtimeFindings) = principals[0].Windows
+                ? await VerifyByImpersonationAsync(admin, db, principals[0])
+                : await VerifyAsync(db, principals[0], VerifySql, runtime: true);
             if (runtimeExcess.Count > 0)
             {
                 return await RefuseAsync(error,
-                    $"the runtime login '{db.User}' has rights beyond CONNECT and {RuntimeRole}: {string.Join("; ", runtimeExcess)}. Remove them.");
+                    $"the runtime login '{principals[0].Login}' has rights beyond CONNECT and {RuntimeRole}: {string.Join("; ", runtimeExcess)}. Remove them.");
             }
 
-            var (migrationExcess, migrationFindings) = await VerifyAsync(db, principals[1], VerifyMigrationSql, runtime: false);
+            var (migrationExcess, migrationFindings) = principals.Length > 1
+                ? await VerifyAsync(db, principals[1], VerifyMigrationSql, runtime: false)
+                : ([], []);
             if (migrationExcess.Count > 0)
             {
                 return await RefuseAsync(error,
@@ -521,10 +578,13 @@ internal static class BootstrapDatabaseCommand
                 return await RefuseAsync(error, FindingPolicy.Describe(effective));
             }
 
-            await output.WriteLineAsync($"{Name}: verified runtime login '{db.User}' has no role memberships or permissions beyond CONNECT and {RuntimeRole}.");
-            await output.WriteLineAsync($"{Name}: verified migration login '{migration.User}' is db_owner of '{db.Name}' with no server roles or permissions beyond CONNECT.");
+            await output.WriteLineAsync($"{Name}: verified runtime login '{principals[0].Login}' has no role memberships or permissions beyond CONNECT and {RuntimeRole}" +
+                (principals[0].Windows ? " (rights from Windows groups: checked by the service at each start)." : "."));
+            await output.WriteLineAsync(principals.Length > 1
+                ? $"{Name}: verified migration login '{migration.User}' is db_owner of '{db.Name}' with no server roles or permissions beyond CONNECT."
+                : $"{Name}: no migration login: migrate runs as the administrator ({MigrationOptions.SectionName}:Login {MigrationOptions.AdministratorLogin}).");
             policy.ReportUnmatched(output, Name);
-            await output.WriteLineAsync($"{Name}: principal audit passed for both logins and the instance.");
+            await output.WriteLineAsync($"{Name}: principal audit passed for Goldmark's logins and the instance.");
             return adminFile is null ? 0 : await GeneratedAdministratorAsync(connection, db, adminFile, generatedAdmin, output, error);
         }
         catch (SqlException ex)
@@ -567,8 +627,13 @@ internal static class BootstrapDatabaseCommand
     {
         var errors = new List<string>();
         var existing = bootstrap.Mode == BootstrapOptions.ExistingMode;
-        var runtime = Plan(errors, DatabaseOptions.SectionName, "app", db.CredentialFile, db.User, db.Password, existing);
-        var migrator = Plan(errors, MigrationOptions.SectionName, "migrator", migration.CredentialFile, migration.User, migration.Password, existing);
+        var none = (Credential: new LoginCredential("", ""), Source: CredentialSource.Settings);
+        var runtime = db.UsesWindowsAuthentication
+            ? none with { Credential = new LoginCredential(db.User ?? "", db.Password ?? "") }
+            : Plan(errors, DatabaseOptions.SectionName, "app", db.CredentialFile, db.User, db.Password, existing);
+        var migrator = migration.UsesAdministrator
+            ? none with { Credential = new LoginCredential(migration.User ?? "", migration.Password ?? "") }
+            : Plan(errors, MigrationOptions.SectionName, "migrator", migration.CredentialFile, migration.User, migration.Password, existing);
         (db.User, db.Password) = (runtime.Credential.User, runtime.Credential.Password);
         (migration.User, migration.Password) = (migrator.Credential.User, migrator.Credential.Password);
         sources = (runtime.Source, migrator.Source);
@@ -613,8 +678,13 @@ internal static class BootstrapDatabaseCommand
                 return (stored, CredentialSource.File);
             }
 
-            errors.Add($"{section}:CredentialFile {problem}.");
-            return (given, CredentialSource.File);
+            // Encrypted to the Windows service account, which this operator's command can't read: the
+            // login keeps its name and gets a new password, as when the file is lost (DEC-043 item 10).
+            if (problem != CredentialFile.NotForThisAccount)
+            {
+                errors.Add($"{section}:CredentialFile {problem}.");
+                return (given, CredentialSource.File);
+            }
         }
 
         if (existing)
@@ -628,7 +698,7 @@ internal static class BootstrapDatabaseCommand
     }
 
     /// <summary>Writes the principal's credential file if one is configured and it does not already hold this login.</summary>
-    private static void WriteCredentialFile(TextWriter output, Principal principal)
+    private static void WriteCredentialFile(TextWriter output, Principal principal, string? serviceAccount)
     {
         if (string.IsNullOrWhiteSpace(principal.CredentialFile))
         {
@@ -641,9 +711,18 @@ internal static class BootstrapDatabaseCommand
             return;
         }
 
-        CredentialFile.Write(principal.CredentialFile, credential);
-        Report(output, principal, $"wrote its credential file {principal.CredentialFile}");
+        var protection = CredentialFile.Write(principal.CredentialFile, credential, serviceAccount);
+        Report(output, principal, $"wrote its credential file {principal.CredentialFile}{Describe(protection, serviceAccount)}");
     }
+
+    /// <summary>How a credential file was protected, for the report; nothing on Unix, where it is always 0600.</summary>
+    internal static string Describe(CredentialProtection protection, string? serviceAccount) =>
+        !OperatingSystem.IsWindows() ? ""
+        : protection == CredentialProtection.Plain
+            ? " (owner-only; the service encrypts it to itself at its next start)"
+            : string.IsNullOrWhiteSpace(serviceAccount)
+                ? " (encrypted to this account)"
+                : $" (encrypted to {serviceAccount})";
 
     /// <summary>
     /// The bundled SQL Server's own administrator (DEC-034). Signed in as sa: create it (or reset
@@ -719,10 +798,10 @@ internal static class BootstrapDatabaseCommand
         var findings = await PrincipalAudit.EnvironmentAsync(connection, db.Name);
         if (otherDatabases)
         {
-            findings.AddRange(await PrincipalAudit.DatabasesAsync(connection, db.Name, principals[0].Login, principals[1].Login));
+            findings.AddRange(await PrincipalAudit.DatabasesAsync(connection, db.Name, principals[0].Login, SecondLogin(principals)));
         }
 
-        findings.AddRange(await PrincipalAudit.GoldmarkDatabaseAsync(connection, db.Name, principals[0].Login, principals[1].Login));
+        findings.AddRange(await PrincipalAudit.GoldmarkDatabaseAsync(connection, db.Name, principals[0].Login, SecondLogin(principals)));
         foreach (var principal in principals)
         {
             findings.AddRange(await PrincipalAudit.PrincipalAsync(connection, db.Name, principal.Login, principal.ExpectedRole, bootstrap.AdoptExistingLogin));
@@ -731,13 +810,21 @@ internal static class BootstrapDatabaseCommand
         return findings;
     }
 
+    // The audit's queries take two logins; an empty name matches nobody (SUSER_SID returns NULL).
+    private static string SecondLogin(Principal[] principals) => principals.Length > 1 ? principals[1].Login : "";
+
     private static bool IsManaged(Principal principal, LoginState? login, UserState user) =>
         login is not null && user.Mapped && user.Marker == principal.MarkerValue;
 
     /// <summary>Why this principal must not be touched, or null if it may be provisioned.</summary>
     private static string? Refusal(Principal principal, LoginState? login, UserState user, BootstrapOptions bootstrap, string database)
     {
-        if (login is { Type: not "S" } nonSql)
+        if (principal.Windows && login is { Type: not "U" } nonWindows)
+        {
+            return $"'{principal.Login}' exists but is not a Windows user login (type {nonWindows.Type}): the service account must have its own login.";
+        }
+
+        if (!principal.Windows && login is { Type: not "S" } nonSql)
         {
             return $"'{principal.Login}' exists but is not a SQL Server login (type {nonSql.Type}).";
         }
@@ -771,8 +858,8 @@ internal static class BootstrapDatabaseCommand
         {
             var what = login is not null ? $"login '{principal.Login}'" : $"database user '{principal.Login}'";
             return $"the {what} already exists and was not created by Goldmark. Nothing was changed. " +
-                $"Configure a different {principal.UserVariable}, or set GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true to take it over " +
-                $"(its password is then set to {principal.PasswordVariable}).";
+                $"Configure a different {principal.UserVariable}, or set GOLDMARK_DB_ADOPT_EXISTING_LOGIN=true to take it over" +
+                (principal.Windows ? "." : $" (its password is then set to {principal.PasswordVariable}).");
         }
 
         return null;
@@ -785,11 +872,13 @@ internal static class BootstrapDatabaseCommand
         if (login is null)
         {
             return $"{mode}: the {principal.Purpose} login '{principal.Login}' does not exist, and this mode creates nothing. Nothing was changed. " +
-                $"Fix: CREATE LOGIN [{principal.Login}] WITH PASSWORD = '...', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF; " +
-                $"with the password in {principal.PasswordVariable}. See docs/ops/external-sql-server.md.";
+                (principal.Windows
+                    ? $"Fix: CREATE LOGIN {AuditFinding.Q(principal.Login)} FROM WINDOWS; See docs/ops/windows-service.md."
+                    : $"Fix: CREATE LOGIN [{principal.Login}] WITH PASSWORD = '...', CHECK_POLICY = ON, CHECK_EXPIRATION = OFF; " +
+                        $"with the password in {principal.PasswordVariable}. See docs/ops/external-sql-server.md.");
         }
 
-        if (!login.Value.PasswordMatches)
+        if (!principal.Windows && !login.Value.PasswordMatches)
         {
             return $"{mode}: the password of the {principal.Purpose} login '{principal.Login}' differs from {principal.PasswordVariable}, " +
                 "and this mode never changes passwords. Nothing was changed.";
@@ -837,6 +926,7 @@ internal static class BootstrapDatabaseCommand
         command.Parameters.Add(new SqlParameter("@adopt_user", System.Data.SqlDbType.Bit) { Value = bootstrap?.AdoptExistingLogin ?? false });
         command.Parameters.Add(new SqlParameter("@create", System.Data.SqlDbType.Bit) { Value = bootstrap?.Mode != BootstrapOptions.ExistingMode });
         command.Parameters.Add(new SqlParameter("@owner_sa", System.Data.SqlDbType.Bit) { Value = !string.IsNullOrWhiteSpace(bootstrap?.AdminCredentialFile) });
+        command.Parameters.Add(new SqlParameter("@windows", System.Data.SqlDbType.Bit) { Value = principal.Windows });
         return command;
     }
 
@@ -888,6 +978,30 @@ internal static class BootstrapDatabaseCommand
         return steps;
     }
 
+    /// <summary>
+    /// A Windows login's role/permission check and effective-rights layer, as the administrator impersonating it
+    /// (it can't be signed in as from here). Measured on 2026-10-22: the impersonated token has the login and
+    /// <c>public</c> only, without the account's Windows groups, so this is an early warning; the service's own
+    /// check at each start is the one that counts (DEC-043 item 11).
+    /// </summary>
+    private static async Task<(List<string> Excess, List<AuditFinding> Findings)> VerifyByImpersonationAsync(
+        SqlConnectionStringBuilder admin, DatabaseOptions db, Principal principal)
+    {
+        var builder = new SqlConnectionStringBuilder(admin.ConnectionString) { InitialCatalog = db.Name, Pooling = false };
+        await using var connection = new SqlConnection(builder.ConnectionString);
+        await connection.OpenAsync();
+        await using (var command = connection.CreateCommand())
+        {
+            // A plain batch, not sp_executesql: an EXECUTE AS inside it would end with it. The name was
+            // checked by WindowsAccount.IsValid (no quote can occur) and is quoted besides.
+            command.CommandText = $"EXECUTE AS LOGIN = N'{principal.Login.Replace("'", "''", StringComparison.Ordinal)}';";
+            await command.ExecuteNonQueryAsync();
+        }
+
+        // The connection is not pooled: closing it ends the impersonation.
+        return (await CommandSql.FindingsAsync(connection, VerifySql), await PrincipalAudit.SelfAsync(connection, db.Name, runtime: true));
+    }
+
     /// <summary>Runs, as the login itself, its role/permission check and the principal audit's effective-rights layer.</summary>
     private static async Task<(List<string> Excess, List<AuditFinding> Findings)> VerifyAsync(DatabaseOptions db, Principal principal, string sql, bool runtime)
     {
@@ -898,11 +1012,11 @@ internal static class BootstrapDatabaseCommand
         return (await CommandSql.FindingsAsync(connection, sql), await PrincipalAudit.SelfAsync(connection, db.Name, runtime));
     }
 
-    internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
+    internal static List<string> Validate(DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap, ServiceOptions? service = null)
     {
+        service ??= new ServiceOptions();
         var errors = new List<string>();
         const string database = DatabaseOptions.SectionName;
-        const string migrations = MigrationOptions.SectionName;
         const string admin = BootstrapOptions.SectionName;
         if (string.IsNullOrWhiteSpace(db.Host))
         {
@@ -923,62 +1037,9 @@ internal static class BootstrapDatabaseCommand
             errors.Add($"{database}:Name must not be a SQL Server system database.");
         }
 
-        LoginErrors(errors, $"{database}:User", db.User, bootstrap.AdminUser);
-        LoginErrors(errors, $"{migrations}:User", migration.User, bootstrap.AdminUser);
-        if (string.Equals(db.User, migration.User, StringComparison.OrdinalIgnoreCase))
-        {
-            errors.Add($"{migrations}:User must differ from {database}:User.");
-        }
-
-        if (db.Password.Length is < 12 or > MaxPasswordLength)
-        {
-            errors.Add($"{database}:Password must be 12 to {MaxPasswordLength} characters.");
-        }
-
-        if (migration.Password.Length is < 12 or > MaxPasswordLength)
-        {
-            errors.Add($"{migrations}:Password must be 12 to {MaxPasswordLength} characters.");
-        }
-
-        if (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword))
-        {
-            errors.Add($"{admin}:AdminUser and AdminPassword are required.");
-        }
-        else
-        {
-            var isSa = string.Equals(bootstrap.AdminUser, "sa", StringComparison.OrdinalIgnoreCase);
-            if (string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile))
-            {
-                if (isSa)
-                {
-                    // A well-known name with every right is what attackers try first (DEC-032).
-                    errors.Add($"{admin}:AdminUser must not be 'sa': use a dedicated administrator login with CONTROL SERVER. " +
-                        $"Only with {admin}:AdminCredentialFile (the bundled SQL Server) does sa sign in, once, to create Goldmark's own administrator, and it is then disabled.");
-                }
-            }
-            else if (!isSa)
-            {
-                errors.Add($"{admin}:AdminUser must be 'sa' with {admin}:AdminCredentialFile: sa creates the generated administrator and is then disabled. " +
-                    $"With an administrator of your own, leave {admin}:AdminCredentialFile unset.");
-            }
-
-            // The app container would hold a credential that also authenticates as the administrator.
-            if (string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
-            {
-                errors.Add($"{database}:Password must differ from {admin}:AdminPassword.");
-            }
-
-            if (string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
-            {
-                errors.Add($"{migrations}:Password must differ from {admin}:AdminPassword.");
-            }
-        }
-
-        if (!string.IsNullOrEmpty(migration.Password) && string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
-        {
-            // Otherwise the app container's credential would also authenticate as db_owner.
-            errors.Add($"{migrations}:Password must differ from {database}:Password.");
-        }
+        RuntimeErrors(errors, db, bootstrap, service);
+        MigrationErrors(errors, db, migration, bootstrap);
+        AdminErrors(errors, db, migration, bootstrap);
 
         errors.AddRange(CommonConnectionErrors(db));
 
@@ -995,6 +1056,142 @@ internal static class BootstrapDatabaseCommand
         }
 
         return errors;
+    }
+
+    /// <summary>The runtime login: a SQL login, or under Windows authentication the service account (DEC-043).</summary>
+    private static void RuntimeErrors(List<string> errors, DatabaseOptions db, BootstrapOptions bootstrap, ServiceOptions service)
+    {
+        const string database = DatabaseOptions.SectionName;
+        if (db.Authentication is not (DatabaseOptions.SqlAuthentication or DatabaseOptions.WindowsAuthentication))
+        {
+            errors.Add($"{database}:Authentication must be '{DatabaseOptions.SqlAuthentication}' or '{DatabaseOptions.WindowsAuthentication}'.");
+            return;
+        }
+
+        if (db.UsesWindowsAuthentication)
+        {
+            if (!string.IsNullOrEmpty(db.User) || !string.IsNullOrEmpty(db.Password) || !string.IsNullOrWhiteSpace(db.CredentialFile))
+            {
+                errors.Add($"{database}:User, Password and CredentialFile must be empty with Authentication '{DatabaseOptions.WindowsAuthentication}': " +
+                    $"the runtime login is {ServiceOptions.SectionName}:Account's Windows login.");
+            }
+
+            if (!WindowsAccount.IsValid(service.Account))
+            {
+                errors.Add($"{ServiceOptions.SectionName}:Account must name the service's Windows account (DOMAIN\\name, DOMAIN\\gmsa$ or NT SERVICE\\name) " +
+                    $"with Authentication '{DatabaseOptions.WindowsAuthentication}'.");
+            }
+
+            return;
+        }
+
+        LoginErrors(errors, $"{database}:User", db.User, bootstrap.AdminUser);
+        if (db.Password.Length is < 12 or > MaxPasswordLength)
+        {
+            errors.Add($"{database}:Password must be 12 to {MaxPasswordLength} characters.");
+        }
+    }
+
+    /// <summary>The migration login (Docker), or none: migrate runs as the administrator (DEC-043 item 2).</summary>
+    private static void MigrationErrors(List<string> errors, DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
+    {
+        const string migrations = MigrationOptions.SectionName;
+        if (migration.Login is not (MigrationOptions.DedicatedLogin or MigrationOptions.AdministratorLogin))
+        {
+            errors.Add($"{migrations}:Login must be '{MigrationOptions.DedicatedLogin}' or '{MigrationOptions.AdministratorLogin}'.");
+            return;
+        }
+
+        if (migration.UsesAdministrator)
+        {
+            if (!string.IsNullOrEmpty(migration.User) || !string.IsNullOrEmpty(migration.Password) || !string.IsNullOrWhiteSpace(migration.CredentialFile))
+            {
+                errors.Add($"{migrations}:User, Password and CredentialFile must be empty with Login '{MigrationOptions.AdministratorLogin}': " +
+                    "migrate runs as the administrator.");
+            }
+
+            return;
+        }
+
+        if (db.UsesWindowsAuthentication)
+        {
+            // A dedicated migration login would need its password stored on the server (DEC-043 item 5).
+            errors.Add($"{migrations}:Login must be '{MigrationOptions.AdministratorLogin}' with {DatabaseOptions.SectionName}:Authentication " +
+                $"'{DatabaseOptions.WindowsAuthentication}'.");
+            return;
+        }
+
+        LoginErrors(errors, $"{migrations}:User", migration.User, bootstrap.AdminUser);
+        if (string.Equals(db.User, migration.User, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"{migrations}:User must differ from {DatabaseOptions.SectionName}:User.");
+        }
+
+        if (migration.Password.Length is < 12 or > MaxPasswordLength)
+        {
+            errors.Add($"{migrations}:Password must be 12 to {MaxPasswordLength} characters.");
+        }
+
+        if (!string.IsNullOrEmpty(migration.Password) && string.Equals(migration.Password, db.Password, StringComparison.Ordinal))
+        {
+            // Otherwise the app container's credential would also authenticate as db_owner.
+            errors.Add($"{migrations}:Password must differ from {DatabaseOptions.SectionName}:Password.");
+        }
+    }
+
+    /// <summary>The administrator: a SQL login (sa only to create Goldmark's own, DEC-034), or the operator's Windows account.</summary>
+    private static void AdminErrors(List<string> errors, DatabaseOptions db, MigrationOptions migration, BootstrapOptions bootstrap)
+    {
+        const string admin = BootstrapOptions.SectionName;
+        if (bootstrap.AdminAuthentication is not (DatabaseOptions.SqlAuthentication or DatabaseOptions.WindowsAuthentication))
+        {
+            errors.Add($"{admin}:AdminAuthentication must be '{DatabaseOptions.SqlAuthentication}' or '{DatabaseOptions.WindowsAuthentication}'.");
+            return;
+        }
+
+        if (bootstrap.AdminUsesWindows)
+        {
+            if (!string.IsNullOrEmpty(bootstrap.AdminUser) || !string.IsNullOrEmpty(bootstrap.AdminPassword) || !string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile))
+            {
+                errors.Add($"{admin}:AdminUser, AdminPassword and AdminCredentialFile must be empty with AdminAuthentication " +
+                    $"'{DatabaseOptions.WindowsAuthentication}': the administrator is the Windows account running this command.");
+            }
+
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(bootstrap.AdminUser) || string.IsNullOrEmpty(bootstrap.AdminPassword))
+        {
+            errors.Add($"{admin}:AdminUser and AdminPassword are required.");
+            return;
+        }
+
+        var isSa = string.Equals(bootstrap.AdminUser, "sa", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile))
+        {
+            if (isSa)
+            {
+                // A well-known name with every right is what attackers try first (DEC-032).
+                errors.Add($"{admin}:AdminUser must not be 'sa': use a dedicated administrator login with CONTROL SERVER. " +
+                    $"Only with {admin}:AdminCredentialFile (the bundled SQL Server) does sa sign in, once, to create Goldmark's own administrator, and it is then disabled.");
+            }
+        }
+        else if (!isSa)
+        {
+            errors.Add($"{admin}:AdminUser must be 'sa' with {admin}:AdminCredentialFile: sa creates the generated administrator and is then disabled. " +
+                $"With an administrator of your own, leave {admin}:AdminCredentialFile unset.");
+        }
+
+        // The app would hold a credential that also authenticates as the administrator.
+        if (!db.UsesWindowsAuthentication && string.Equals(db.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+        {
+            errors.Add($"{DatabaseOptions.SectionName}:Password must differ from {admin}:AdminPassword.");
+        }
+
+        if (!migration.UsesAdministrator && string.Equals(migration.Password, bootstrap.AdminPassword, StringComparison.Ordinal))
+        {
+            errors.Add($"{MigrationOptions.SectionName}:Password must differ from {admin}:AdminPassword.");
+        }
     }
 
     /// <summary>Connection settings every database command needs.</summary>

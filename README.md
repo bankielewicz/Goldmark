@@ -1,8 +1,9 @@
 # Goldmark CMDB
 
 > **Status: under development. Not for production use.**
-> Slices 1–4 of the MVP: an HTTPS host with health endpoints, a Docker Compose
-> deployment with SQL Server 2025 Express or an existing SQL Server 2025, the
+> Slices 1–4b of the MVP: an HTTPS host with health endpoints, a Docker Compose
+> deployment with SQL Server 2025 Express or an existing SQL Server 2025, a Windows
+> service with Windows authentication to SQL Server, the
 > baseline database schema with separate migration and runtime logins, audited
 > on every start, and a web UI for first-run setup, sign-in with two-factor
 > authentication, invitations, user roles and the audit log (filters, CSV
@@ -149,6 +150,16 @@ shared server, `db-init` refuses findings such as `guest` access to other
 databases until they are fixed or accepted by ID. Details, the DBA script and
 every finding: [docs/ops/external-sql-server.md](docs/ops/external-sql-server.md).
 
+## Run it as a Windows service
+
+On Windows Server 2022 or 2025, against SQL Server 2025 on the same server or another: unpack
+`goldmark-win-x64.zip` (built by `deploy/windows/New-GoldmarkZip.ps1`) and run `.\Install-Goldmark.ps1` in an
+elevated PowerShell. It asks for what it needs (or takes parameters), creates the service under a gMSA, a domain
+user or, for a local SQL Server, `NT SERVICE\Goldmark`, sets up the database with Windows authentication as you,
+and starts it. SQL Server must present a certificate Goldmark can check (a trusted CA, or one you pin). The
+choices, upgrades, `Rotate-GoldmarkCredentials.ps1`, backups and the gMSA check:
+[docs/ops/windows-service.md](docs/ops/windows-service.md).
+
 ## Develop
 
 Pinned toolchain (CI and the Dockerfile use exactly these):
@@ -231,8 +242,10 @@ it, and ask first if the PRD did not anticipate it.
   anything not on the allow-list and any SSR/RSC package.
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
-  `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`.
-  Commit the updated `packages.lock.json` files. Restore fails on any package
+  `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and
+  `dotnet restore tests/sql-gate/fixture -p:RestoreLockedMode=false --force-evaluate`
+  (that fixture references the API but isn't in the solution; then run
+  `tests/sql-gate/check-sql-gate.sh`). Commit the updated `packages.lock.json` files. Restore fails on any package
   with a known vulnerability, or without a valid nuget.org signature.
 
 ## Repository layout
@@ -243,11 +256,13 @@ db/migrations/            forward-only schema migrations (DbUp) and their hash m
 tests/Goldmark.Api.Tests/ in-process tests (xUnit v3)
 tests/Goldmark.Api.IntegrationTests/ tests against a real SQL Server 2025 container
 tests/smoke/              Compose smoke test (real containers + browser)
+tests/windows/            Windows service smoke test, SQL Server Express and test-certificate setup (CI)
 tests/sql-gate/           proves non-constant SQL to DbSession fails the build (NFR-SEC-3)
 tools/common-passwords/   rebuilds the bundled common-password list from its pinned source
 web/                      React + TypeScript + Vite SPA, browser-only; dependency policy
 deploy/                   docker-compose.yml (bundled SQL Server), docker-compose.external-sql.yml,
-                          .env.example, SQL Server scripts
+                          .env.example, SQL Server scripts; windows/: the service installer, uninstall,
+                          rotation and zip scripts
 docs/                     PRD, decisions, design system and screens, operations and security notes
 ```
 

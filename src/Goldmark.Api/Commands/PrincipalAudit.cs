@@ -30,7 +30,7 @@ internal static class PrincipalAudit
     private static readonly HashSet<string> AcceptableKinds = new(StringComparer.Ordinal)
     {
         "guest-connect", "linked-login-all-logins", "remote-login-all-logins", "system-grant",
-        "cross-db-chaining", "database-unreadable",
+        "cross-db-chaining", "database-unreadable", "group-database-access",
     };
 
     public static bool IsAcceptableKind(string kind) => AcceptableKinds.Contains(kind);
@@ -42,13 +42,14 @@ internal static class PrincipalAudit
         "system-grant", "cross-db-chaining", "goldmark-grant", "goldmark-database-option", "goldmark-database-owner",
         "goldmark-database-principal", "goldmark-public-owner", "runtime-role-grant", "login-disabled", "login-policy-off", "login-expiration-on",
         "login-expired", "login-locked", "login-must-change", "login-connect-denied", "login-credential", "server-role",
-        "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "database-role",
+        "server-grant", "owns", "linked-login", "remote-login", "mapped-into", "database-access", "group-database-access", "database-role",
         "database-grant", "database-connect-denied", "server-securable", "database-securable",
     };
 
     public static IReadOnlyCollection<string> AcceptableKindNames => AcceptableKinds;
 
     private const string BaselineResource = "Goldmark.Audit.sql-server-2025-public-grants.txt";
+    private const string WindowsBaselineResource = "Goldmark.Audit.sql-server-2025-public-grants.windows.txt";
 
     /// <summary>System databases whose public/guest grants are compared with the measured baseline.</summary>
     public static readonly string[] SystemDatabases = ["master", "msdb", "tempdb", "model"];
@@ -192,7 +193,8 @@ internal static class PrincipalAudit
     private const string DatabasesSql = $"""
         SET NOCOUNT ON;
         {FindingsTable}
-        DECLARE @sid1 varbinary(85) = SUSER_SID(@login1), @sid2 varbinary(85) = SUSER_SID(@login2);
+        -- With one login, the other is empty: SUSER_SID(N'') is the caller's own SID, so NULLIF.
+        DECLARE @sid1 varbinary(85) = SUSER_SID(NULLIF(@login1, N'')), @sid2 varbinary(85) = SUSER_SID(NULLIF(@login2, N''));
         DECLARE @name sysname, @id int, @sql nvarchar(max), @guest int, @mapped1 int, @mapped2 int;
         DECLARE dbs CURSOR LOCAL FAST_FORWARD FOR SELECT name, database_id FROM sys.databases WHERE state = 0 AND name <> @db;
         OPEN dbs;
@@ -304,7 +306,7 @@ internal static class PrincipalAudit
         INSERT @f SELECT DISTINCT N'goldmark-database-principal', DB_NAME(), u.name, NULL, NULL
         FROM sys.database_principals AS u
         WHERE u.type NOT IN ('R') AND u.principal_id > 4
-            AND u.sid NOT IN (ISNULL(SUSER_SID(@login1), 0x00), ISNULL(SUSER_SID(@login2), 0x00))
+            AND u.sid NOT IN (ISNULL(SUSER_SID(NULLIF(@login1, N'')), 0x00), ISNULL(SUSER_SID(NULLIF(@login2, N'')), 0x00))
             AND (EXISTS (SELECT 1 FROM sys.database_role_members AS m WHERE m.member_principal_id = u.principal_id)
                 OR EXISTS (SELECT 1 FROM sys.database_permissions AS p WHERE p.grantee_principal_id = u.principal_id
                     AND p.state IN ('G', 'W') AND NOT (p.class = 0 AND p.permission_name = N'CONNECT' AND p.state = 'G'))
@@ -407,7 +409,17 @@ internal static class PrincipalAudit
                 BEGIN TRY
                     SET @exec = QUOTENAME(@name) + N'.sys.sp_executesql';
                     EXEC @exec N'SELECT @user = USER_NAME();', N'@user sysname OUTPUT', @user = @user OUTPUT;
-                    IF @user <> N'guest' INSERT @f VALUES (N'database-access', @me, @name, @user, NULL);
+                    -- A user of this login's own is never acceptable. Without one, the users of its Windows groups that
+                    -- let it in can be accepted by ID, like guest access (owner, 2026-10-22, DEC-043 item 11).
+                    IF @user <> N'guest' INSERT @f EXEC @exec N'
+                        IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE sid = SUSER_SID())
+                            AND EXISTS (SELECT 1 FROM sys.database_principals AS p JOIN sys.login_token AS t ON t.sid = p.sid
+                                WHERE p.type = N''G'' AND t.type = N''WINDOWS GROUP'')
+                            SELECT N''group-database-access'', DB_NAME(), p.name, NULL, NULL
+                            FROM sys.database_principals AS p JOIN sys.login_token AS t ON t.sid = p.sid
+                            WHERE p.type = N''G'' AND t.type = N''WINDOWS GROUP'';
+                        ELSE
+                            SELECT N''database-access'', @me, DB_NAME(), USER_NAME(), NULL;', N'@me sysname', @me = @me;
                     ELSE IF @name NOT IN (N'master', N'tempdb', N'msdb') INSERT @f VALUES (N'guest-connect', @name, NULL, NULL, NULL);
                 END TRY
                 BEGIN CATCH
@@ -420,12 +432,16 @@ internal static class PrincipalAudit
         END;
 
         -- Rights on other logins and server roles (e.g. IMPERSONATE), and on endpoints beyond CONNECT
-        -- on the system endpoints. A login's implicit rights on itself are expected.
+        -- on the system endpoints. A login's implicit rights on itself are expected, and SQL Server
+        -- gives a Windows login the same ones (CONTROL, ALTER, IMPERSONATE, VIEW DEFINITION) on each
+        -- Windows group login in its own token, such as Express's BUILTIN\Users (DEC-043 item 11).
+        -- Rights granted to such a group still show up on everything else.
         INSERT @f SELECT N'server-securable', @me, c.class, p.name, f.permission_name
         FROM sys.server_principals AS p
         CROSS APPLY (SELECT CASE p.type WHEN 'R' THEN N'SERVER ROLE' ELSE N'LOGIN' END AS class) AS c
         CROSS APPLY sys.fn_my_permissions(QUOTENAME(p.name), c.class) AS f
-        WHERE p.sid <> SUSER_SID() AND f.subentity_name = N'';
+        WHERE p.sid <> SUSER_SID() AND f.subentity_name = N''
+            AND p.sid NOT IN (SELECT t.sid FROM sys.login_token AS t WHERE t.type = N'WINDOWS GROUP');
         INSERT @f SELECT N'server-securable', @me, N'ENDPOINT', e.name, f.permission_name
         FROM sys.endpoints AS e CROSS APPLY sys.fn_my_permissions(QUOTENAME(e.name), N'ENDPOINT') AS f
         WHERE NOT (e.endpoint_id < 65536 AND f.permission_name = N'CONNECT');
@@ -490,6 +506,11 @@ internal static class PrincipalAudit
     {
         var findings = await QueryAsync(admin, EnvironmentSql, ("@db", database));
         var baseline = Baseline.Value;
+        // SQL Server 2025 on Windows creates a few grants the Linux image doesn't (measured, DEC-043 item 12).
+        var windows = await IsWindowsAsync(admin) ? WindowsBaseline.Value : new Dictionary<string, HashSet<string>>();
+        bool Known(string scope, string key) =>
+            baseline["*"].Contains(key) || (baseline.TryGetValue(scope, out var own) && own.Contains(key))
+            || (windows.TryGetValue("*", out var every) && every.Contains(key)) || (windows.TryGetValue(scope, out var extra) && extra.Contains(key));
         foreach (var system in SystemDatabases)
         {
             await admin.ChangeDatabaseAsync(system);
@@ -501,7 +522,7 @@ internal static class PrincipalAudit
                     continue; // reported as guest-connect by DatabasesAsync (model; the others are SQL Server's default)
                 }
 
-                if (!baseline["*"].Contains(key) && !(baseline.TryGetValue(system, out var own) && own.Contains(key)))
+                if (!Known(system, key))
                 {
                     findings.Add(new AuditFinding("system-grant", [system, grantee, permission, securable, target]));
                 }
@@ -514,7 +535,7 @@ internal static class PrincipalAudit
             await admin.ChangeDatabaseAsync(database);
             foreach (var (grantee, permission, securable, target) in await PublicGrantsAsync(admin))
             {
-                if (!baseline["*"].Contains(BaselineKey(grantee, permission, securable, target)))
+                if (!Known("*", BaselineKey(grantee, permission, securable, target)))
                 {
                     findings.Add(new AuditFinding("goldmark-grant", [database, grantee, permission, securable, target]));
                 }
@@ -593,12 +614,23 @@ internal static class PrincipalAudit
     private static readonly string GuestConnect = BaselineKey("guest", "CONNECT", "DATABASE", "");
 
     /// <summary>Measured baseline: scope ("*" or a database) → grantee|permission|target.</summary>
-    internal static readonly Lazy<Dictionary<string, HashSet<string>>> Baseline = new(LoadBaseline);
+    internal static readonly Lazy<Dictionary<string, HashSet<string>>> Baseline = new(() => LoadBaseline(BaselineResource));
 
-    private static Dictionary<string, HashSet<string>> LoadBaseline()
+    /// <summary>What SQL Server 2025 on Windows adds to <see cref="Baseline"/> (DEC-043 item 12).</summary>
+    internal static readonly Lazy<Dictionary<string, HashSet<string>>> WindowsBaseline = new(() => LoadBaseline(WindowsBaselineResource));
+
+    /// <summary>Whether this SQL Server runs on Windows (<c>sys.dm_os_host_info</c>, readable by any login).</summary>
+    internal static async Task<bool> IsWindowsAsync(SqlConnection connection)
     {
-        using var stream = typeof(PrincipalAudit).Assembly.GetManifestResourceStream(BaselineResource)
-            ?? throw new InvalidOperationException($"Embedded resource {BaselineResource} is missing.");
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT host_platform FROM sys.dm_os_host_info;";
+        return string.Equals(await command.ExecuteScalarAsync() as string, "Windows", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static Dictionary<string, HashSet<string>> LoadBaseline(string resource)
+    {
+        using var stream = typeof(PrincipalAudit).Assembly.GetManifestResourceStream(resource)
+            ?? throw new InvalidOperationException($"Embedded resource {resource} is missing.");
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var baseline = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase) { ["*"] = new(StringComparer.Ordinal) };
         while (reader.ReadLine() is { } line)
@@ -709,6 +741,8 @@ internal sealed record AuditFinding(string Kind, IReadOnlyList<string> Parts)
         "remote-login" => $"login '{P(0)}' has a remote-login mapping on server '{P(1)}'. Fix: EXEC sp_dropremotelogin @remoteserver = {L(P(1))}, @loginame = {L(P(0))};",
         "mapped-into" => $"login '{P(0)}' has a user in database '{P(1)}' and holds that user's rights there. Fix: drop that user, or configure another login.",
         "database-access" => $"login '{P(0)}' can enter database '{P(1)}' as user '{P(2)}'. Fix: drop that user (or the group's), or configure another login.",
+        "group-database-access" => $"database '{P(0)}' has a user for the Windows group '{P(1)}', which Goldmark's login belongs to, so Goldmark can enter it " +
+            $"with that user's rights. Fix: USE {Q(P(0))}; DROP USER {Q(P(1))}; or accept this finding if every member of the group is meant to have that access.",
         "database-role" => $"the database user of login '{P(0)}' is a member of database role {P(1)}. Fix: ALTER ROLE {Q(P(1))} DROP MEMBER {Q(P(0))};",
         "database-grant" => $"the database user of login '{P(0)}' holds {P(1)} on {Target(P(2), P(3))} directly; Goldmark's rights come only through its role. " +
             $"Fix: REVOKE {Revocable(P(1))} {On(P(2), P(3))}FROM {Q(P(0))}{Cascade(P(1))};",

@@ -99,4 +99,7 @@ internal static class AuditActions
     public const string Exported = "audit.exported";
     public const string RetentionPurged = "audit.retention.purged";
     public const string RetentionChanged = "audit.retention.changed";
+
+    // Slice 4b (DEC-043): written by SQL, by the rotate-db-credentials command.
+    public const string CredentialsRotated = "database.credentials.rotated";
 }

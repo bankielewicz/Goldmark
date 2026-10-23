@@ -18,17 +18,23 @@ internal static class GoldmarkApplication
     public static WebApplicationBuilder AddGoldmark(this WebApplicationBuilder builder)
     {
         builder.AddGoldmarkLogging();
+        // As a Windows service: the service lifetime (DEC-043). Elsewhere, and when started from a console, nothing.
+        builder.Services.AddWindowsService(service => service.ServiceName = WindowsService.ServiceName);
 
+        builder.Services.AddOptions<ServiceOptions>().BindConfiguration(ServiceOptions.SectionName);
         builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, DatabaseOptionsValidator>();
+        builder.Services.AddSingleton<IValidateOptions<DatabaseOptions>, CredentialFolderValidator>();
         builder.Services.AddOptions<DatabaseOptions>().BindConfiguration(DatabaseOptions.SectionName).ValidateOnStart()
             .PostConfigure<IHostEnvironment>((db, environment) =>
             {
                 // The runtime login's name and password come from bootstrap-db's credential file
-                // when one is configured (DEC-034); read once, at startup.
+                // when one is configured (DEC-034); read once, at startup. On Windows a password an
+                // operator's command left plain is encrypted to this account now (DEC-043 item 10).
                 db.CredentialFile = Rooted(db.CredentialFile, environment.ContentRootPath);
-                DatabaseOptionsValidator.ApplyCredentialFile(db);
+                DatabaseOptionsValidator.ApplyCredentialFile(db, protectPlain: OperatingSystem.IsWindows());
             });
         builder.Services.AddSingleton<IValidateOptions<HttpsOptions>, HttpsOptionsValidator>();
+        builder.Services.AddSingleton<IValidateOptions<HttpsOptions>, GeneratedCertificateFolderValidator>();
         builder.Services.AddOptions<HttpsOptions>().BindConfiguration(HttpsOptions.SectionName).ValidateOnStart()
             .PostConfigure<IHostEnvironment>((https, environment) =>
             {
@@ -41,10 +47,18 @@ internal static class GoldmarkApplication
         builder.Services.AddSingleton<IValidateOptions<DataProtectionSettings>, DataProtectionSettingsValidator>();
         builder.Services.AddOptions<DataProtectionSettings>().BindConfiguration(DataProtectionSettings.SectionName).ValidateOnStart()
             .PostConfigure<IHostEnvironment>((keys, environment) => keys.KeyDirectory = Rooted(keys.KeyDirectory, environment.ContentRootPath) ?? "");
-        // Data Protection keys as files in a directory from settings, 0700/0600 (DEC-038 item 5).
+        // Data Protection keys as files in an owner-only directory from settings (DEC-038 item 5); on
+        // Windows encrypted to the service account (DEC-043 item 5).
         builder.Services.AddDataProtection().SetApplicationName("Goldmark");
-        builder.Services.AddOptions<KeyManagementOptions>().Configure<IOptions<DataProtectionSettings>>((keys, settings) =>
-            keys.XmlRepository = new PrivateKeyRingRepository(settings.Value.KeyDirectory));
+        builder.Services.AddOptions<KeyManagementOptions>()
+            .Configure<IOptions<DataProtectionSettings>, IOptions<ServiceOptions>, ILoggerFactory>((keys, settings, service, loggers) =>
+            {
+                keys.XmlRepository = new PrivateKeyRingRepository(settings.Value.KeyDirectory, service.Value.Account);
+                if (OperatingSystem.IsWindows())
+                {
+                    keys.XmlEncryptor = KeyRingEncryption.ForCurrentAccount(loggers);
+                }
+            });
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SqlConnectionFactory>();

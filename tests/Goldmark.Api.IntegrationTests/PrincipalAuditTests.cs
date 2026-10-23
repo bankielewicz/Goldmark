@@ -253,7 +253,7 @@ public sealed class PrincipalAuditTests(SqlServerFixture sql)
     {
         var (installation, result) = await sql.SharedAsync("principal-audit");
 
-        Assert.Contains("bootstrap-db: principal audit passed for both logins and the instance.", result.Output, StringComparison.Ordinal);
+        Assert.Contains("bootstrap-db: principal audit passed for Goldmark's logins and the instance.", result.Output, StringComparison.Ordinal);
         Assert.Equal(0, await sql.AdminScalarAsync<int>("master", $"SELECT CAST(is_auto_close_on AS int) FROM sys.databases WHERE name = N'{installation.Database}';"));
 
         var again = await sql.RunAsync(installation, ["bootstrap-db", "migrate"]);

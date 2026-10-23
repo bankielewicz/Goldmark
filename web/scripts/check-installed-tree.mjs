@@ -10,7 +10,7 @@
 //
 // Usage: node scripts/check-installed-tree.mjs   (run in web/ after pnpm install)
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -66,10 +66,12 @@ export function checkInstalledTree(listOutput) {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const output = execFileSync('pnpm', ['list', '--json', '--depth', 'Infinity'], {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  });
+  const options = { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 };
+  // On Windows pnpm is a .cmd shim, which Node starts only through the shell; the command is a constant.
+  const output =
+    process.platform === 'win32'
+      ? execSync('pnpm list --json --depth Infinity', options)
+      : execFileSync('pnpm', ['list', '--json', '--depth', 'Infinity'], options);
   const { errors, count } = checkInstalledTree(JSON.parse(output));
   if (errors.length > 0) {
     console.error(`Installed-tree check FAILED (${errors.length} problem(s)):`);

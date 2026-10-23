@@ -25,7 +25,8 @@ login's, read-only, and receives no password in its environment.
   uses the native `json` type; `bootstrap-db` refuses an older server (exit 3)
   before it creates anything.
 - **TCP** reachable from the Docker host, SQL Server authentication enabled (mixed
-  mode). Windows authentication is not supported yet.
+  mode). Windows authentication needs the Windows service
+  ([windows-service.md](windows-service.md)), not Docker.
 - **Encryption.** `GOLDMARK_DB_ENCRYPT=Strict` (TDS 8, default) or `Mandatory`
   (TLS-encrypted TDS 7.x). The server certificate is always validated:
   - pin it with `GOLDMARK_SQL_SERVER_CERT_FILE` (an absolute host path, or `./…`
@@ -168,6 +169,7 @@ Acceptable kinds (about the shared instance):
 | `remote-login-all-logins:<server>` | A remote-login mapping for every login (#3) |
 | `system-grant:<db>:<grantee>:<permission>:<class>[:<target>]` | A grant to `public` or `guest` in master, msdb, tempdb or model beyond SQL Server 2025's own (#4; measured baseline in `src/Goldmark.Api/Commands/Audit/`) |
 | `cross-db-chaining` | The server option `cross db ownership chaining` is on |
+| `group-database-access:<db>:<group>` | Under Windows authentication, checked by the service at each start: a Windows group that Goldmark's service account belongs to (for example `NT AUTHORITY\Authenticated Users` or `CORP\Domain Users`) has a user in another database, so Goldmark can enter it with that user's rights. Accept it only if every member of the group is meant to have that access; a user for the service account itself is `database-access` and can't be accepted |
 | `database-unreadable:<db>:<error or state>` | A database could not be checked: it is not online (`OFFLINE`, `RESTORING`, …) or could not be read (for example a non-readable secondary). It may come online later with rights nobody checked |
 
 Kinds that must be fixed (about Goldmark's logins or database):
@@ -187,7 +189,7 @@ Kinds that must be fixed (about Goldmark's logins or database):
 | `server-role:<login>:<role>`, `server-grant:<login>:<permission>:<class>[:<target>]` | Server-level rights held directly |
 | `owns:<login>:<kind>:<name>` | The login owns a database, a schema, an object or another securable (everything Goldmark uses is owned by `dbo`, DEC-029) |
 | `linked-login:<login>:<server>`, `remote-login:<login>:<server>` | A mapping for this login (#3) |
-| `mapped-into:<login>:<db>`, `database-access:<login>:<db>:<user>` | The login has a user in another database (directly or through a group) |
+| `mapped-into:<login>:<db>`, `database-access:<login>:<db>:<user>` | The login has a user of its own in another database (through one of its Windows groups: `group-database-access`) |
 | `database-role:<login>:<role>`, `database-grant:<login>:<permission>:<class>[:<target>]` | In the Goldmark database, a role or a direct grant besides the expected ones (rights come only through `goldmark_runtime`, or `db_owner` for the migration login). When adopting, the same-name user that would be remapped to the login is checked before anything changes |
 | `database-connect-denied:<login>:<grantee>` | `CONNECT` on the Goldmark database is denied |
 | `server-securable:<login>:<class>:<name>:<permission>` | A right on another login, server role or endpoint (for example `IMPERSONATE`) |
@@ -195,8 +197,9 @@ Kinds that must be fixed (about Goldmark's logins or database):
 
 ## Changing passwords
 
-Generated passwords are not rotated automatically ([database-credentials.md](database-credentials.md#rotation)).
-In Mode `Create`, set the login's pair in `deploy/.env` and run `docker compose … up -d`:
+Generated passwords are not rotated automatically; `rotate-db-credentials` gives them new
+ones on demand ([database-credentials.md](database-credentials.md#rotation)).
+To choose a password yourself in Mode `Create`, set the login's pair in `deploy/.env` and run `docker compose … up -d`:
 `db-init` rotates the login's password and rewrites its credential file. In Mode
 `Existing`, the DBA changes the password first, then you update `deploy/.env`. Either
 way, recreate the app afterwards (`up -d --force-recreate app`): it reads its login
@@ -208,7 +211,8 @@ next run. In Mode `Create` you can then delete the four settings.
 
 ## Not supported yet
 
-- Windows authentication and group logins (planned with the Windows service
-  deployment).
+- Windows authentication from Docker: it needs the Windows service
+  ([windows-service.md](windows-service.md)), where the runtime login is the service
+  account's own Windows login (never a group's).
 - Availability groups and other multi-instance setups.
 - Running without the administrator login after installation.

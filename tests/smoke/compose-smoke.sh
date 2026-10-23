@@ -605,7 +605,7 @@ else
   fail "external SQL Server: db-init (Mode Existing, administrator smoke_dba) and the app start healthy" "$(tail -n 5 <<< "${ext_init_log}" | cut -c1-300)"
 fi
 if [[ "${ext_init_log}" == *"runtime login: using the existing login 'ext_app' (Mode Existing: nothing is created)"* \
-      && "${ext_init_log}" == *"principal audit passed for both logins and the instance"* && "${ext_init_log}" != *"bootstrap-db: created"* \
+      && "${ext_init_log}" == *"principal audit passed for Goldmark's logins and the instance"* && "${ext_init_log}" != *"bootstrap-db: created"* \
       && "${ext_init_log}" != *"changed login password"* ]]; then
   pass "Mode Existing creates nothing and the principal audit passes"
 else
@@ -726,6 +726,21 @@ if [[ ${recovery_code} -eq 0 ]] && wait_until 360 app_healthy_or_init_failed && 
 else
   fail "recovery: mssql-conf set-sa-password, then the stack starts healthy again" "mssql-conf exit ${recovery_code}: $(tail -n 2 <<< "${recovery}" | cut -c1-200)"
 fi
+
+# --- Rotation (slice 4b, DEC-043 item 7): every generated login, then a restart ---------------
+# The commands docs/ops/database-credentials.md gives.
+before_rotation=("${app_password}" "${migration_password}" "${admin_password}")
+rotation="$("${compose[@]}" run --rm db-init rotate-db-credentials 2>&1)"; rotation_code=$?
+"${compose[@]}" restart app >/dev/null 2>&1
+read_credentials
+if [[ ${rotation_code} -eq 0 && "${app_password}" != "${before_rotation[0]}" && "${migration_password}" != "${before_rotation[1]}" \
+      && "${admin_password}" != "${before_rotation[2]}" ]] && wait_until 120 is_status /health/ready 200 \
+      && [[ "$(sql_as "${app_user}" "${app_password}" "SELECT COUNT(*) FROM cmdb.AuditLog WHERE Action = N'database.credentials.rotated' AND ActorType = 'System';")" == 1 ]]; then
+  pass "rotate-db-credentials gives every generated login a new password, audited as System; restarted, the app is ready"
+else
+  fail "rotate-db-credentials, then a restart" "exit ${rotation_code}: $(tail -n 3 <<< "${rotation}" | cut -c1-300)"
+fi
+all_secrets+=("${app_password}" "${migration_password}" "${admin_password}")
 
 # --- Logs ------------------------------------------------------------------------
 "${compose[@]}" logs --no-color --no-log-prefix app > "${work}/app.log" 2> "${work}/compose-stderr.log"

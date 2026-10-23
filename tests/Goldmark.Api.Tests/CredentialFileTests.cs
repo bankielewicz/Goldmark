@@ -81,12 +81,17 @@ public sealed partial class CredentialFileTests : IDisposable
     {
         var directory = PathOf("wide");
         Directory.CreateDirectory(directory);
-        if (!OperatingSystem.IsWindows())
+        var path = Path.Combine(directory, "credential.json");
+        if (OperatingSystem.IsWindows())
         {
-            File.SetUnixFileMode(directory, (UnixFileMode)0b111_101_101); // 0755, as a fresh mount point may be
+            // Windows refuses a folder that inherits its permissions, and changes nothing (DEC-043 item 5).
+            var refused = Assert.Throws<IOException>(() => CredentialFile.Write(path, new LoginCredential("goldmark_app_aaaaaaaaaa", FilePassword)));
+            Assert.Contains("inherits its permissions", refused.Message, StringComparison.Ordinal);
+            Assert.False(File.Exists(path));
+            return;
         }
 
-        var path = Path.Combine(directory, "credential.json");
+        File.SetUnixFileMode(directory, (UnixFileMode)0b111_101_101); // 0755, as a fresh mount point may be
         CredentialFile.Write(path, new LoginCredential("goldmark_app_aaaaaaaaaa", "Old-Pa55word-123"));
         CredentialFile.Write(path, new LoginCredential("goldmark_app_aaaaaaaaaa", FilePassword));
 
@@ -147,7 +152,8 @@ public sealed partial class CredentialFileTests : IDisposable
         var db = new DatabaseOptions { CredentialFile = runtime };
         var migration = new MigrationOptions { CredentialFile = migrator };
 
-        Assert.Empty(MigrateCommand.ApplyCredentialFiles(db, migration));
+        Assert.Empty(MigrateCommand.ApplyCredentialFiles(db, migration, out var runtimeReadable));
+        Assert.True(runtimeReadable);
         Assert.Equal(("goldmark_app_x", FilePassword), (db.User, db.Password));
         Assert.Equal(("goldmark_migrator_x", "Migrator-Pa55word-1"), (migration.User, migration.Password));
     }
@@ -158,7 +164,10 @@ public sealed partial class CredentialFileTests : IDisposable
         await using var factory = new GoldmarkFactory();
         factory.Settings["Goldmark:Database:User"] = null;
         factory.Settings["Goldmark:Database:Password"] = null;
-        factory.Settings["Goldmark:Database:CredentialFile"] = factory.CreateFile("runtime.json", $"{{\"user\": \"goldmark_app_x\", \"password\": \"{FilePassword}\"}}");
+        // Written as bootstrap-db does, in an owner-only folder (encrypted to this account on Windows).
+        var path = Path.Combine(Path.GetDirectoryName(factory.CreateFile("unused"))!, "db-runtime", "credential.json");
+        CredentialFile.Write(path, new LoginCredential("goldmark_app_x", FilePassword));
+        factory.Settings["Goldmark:Database:CredentialFile"] = path;
 
         var db = factory.Services.GetRequiredService<IOptions<DatabaseOptions>>().Value;
         var ready = await factory.CreateClient().GetAsync(new Uri("/health/ready", UriKind.Relative), TestContext.Current.CancellationToken);

@@ -72,11 +72,14 @@ public sealed class SchemaMigrationsTests
 /// <summary>Container helper commands and how db-init chains them.</summary>
 public sealed class ContainerCommandsTests
 {
-    private static async Task<(int Code, string Output, string Error)> RunAsync(params string[] args)
+    private static Task<(int Code, string Output, string Error)> RunAsync(params string[] args) =>
+        RunAsync(new Dictionary<string, string?>(), args);
+
+    private static async Task<(int Code, string Output, string Error)> RunAsync(Dictionary<string, string?> settings, params string[] args)
     {
         using var output = new StringWriter();
         using var error = new StringWriter();
-        var code = await ContainerCommands.RunAsync(args, new ConfigurationBuilder().Build(), output, error);
+        var code = await ContainerCommands.RunAsync(args, new ConfigurationBuilder().AddInMemoryCollection(settings).Build(), output, error);
         return (code, output.ToString(), error.ToString());
     }
 
@@ -119,6 +122,19 @@ public sealed class ContainerCommandsTests
         Assert.Equal(2, code);
         Assert.Contains("bootstrap-db: invalid configuration", error, StringComparison.Ordinal);
         Assert.DoesNotContain("migrate:", error, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Bootstrap_db_refuses_the_retention_period_migrate_would_refuse()
+    {
+        // #34: db-init runs bootstrap-db first, so the period is checked before anything changes.
+        var (code, output, error) = await RunAsync(new Dictionary<string, string?> { ["Goldmark:Audit:RetentionDays"] = "90" }, "bootstrap-db", "migrate");
+
+        Assert.Equal(2, code);
+        Assert.Contains("Goldmark:Audit:RetentionDays must be", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("90", error, StringComparison.Ordinal);
+        Assert.DoesNotContain("migrate:", error, StringComparison.Ordinal);
+        Assert.Empty(output);
     }
 
     [Fact]

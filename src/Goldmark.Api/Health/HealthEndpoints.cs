@@ -13,6 +13,8 @@ internal static class HealthEndpoints
     public static IServiceCollection AddGoldmarkHealthChecks(this IServiceCollection services)
     {
         services.AddSingleton<ReadinessGate>();
+        services.AddSingleton<RuntimeRights>();
+        services.AddHostedService<RuntimeRightsCheck>();
         services.AddHealthChecks()
             .AddCheck<SqlReadinessCheck>(SqlReadinessCheck.Name, tags: [ReadyTag], timeout: ReadinessGate.ProbeTimeout);
         return services;

@@ -11,6 +11,7 @@ internal static class ContainerCommands
     {
         [BootstrapDatabaseCommand.Name] = BootstrapDatabaseCommand.RunAsync,
         [MigrateCommand.Name] = MigrateCommand.RunAsync,
+        [RotateCredentialsCommand.Name] = RotateCredentialsCommand.RunAsync,
     };
 
     /// <summary>
@@ -31,7 +32,7 @@ internal static class ContainerCommands
                 return 1;
             }
 
-            return await HealthCheckCommand.RunAsync();
+            return await HealthCheckCommand.RunAsync(configuration);
         }
 
         if (args.FirstOrDefault(a => !Chainable.ContainsKey(a)) is { } unknown)
