@@ -35,16 +35,36 @@ public sealed class RightsAtStartTests(SqlServerFixture sql)
         var (installation, _) = await sql.ProvisionAsync();
         await sql.AsAdminAsync("master", $"GRANT VIEW SERVER STATE TO [{installation.RuntimeUser}];");
         await using var app = new GoldmarkApp(sql, installation, Path.Combine(sql.NewDirectory(), "keys"), Check);
-        // Taken before the refusal: once Goldmark stops itself, the host disposes its services.
-        var rights = app.Services.GetRequiredService<RuntimeRights>();
-        var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+        // Goldmark stops itself, and its host then disposes its services, possibly before the factory has
+        // finished starting it (it did on GitHub's runner): the stop is held until the test has looked.
+        var release = new TaskCompletionSource();
+        await using var started = app.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddHostedService(_ => new HeldStop(release.Task))));
+        try
+        {
+            var rights = started.Services.GetRequiredService<RuntimeRights>();
+            var lifetime = started.Services.GetRequiredService<IHostApplicationLifetime>();
 
-        var refused = await app.EventAsync(1005);
+            await app.Logs.WaitForAsync(e => e.Any(x => GoldmarkApp.IsEvent(x, 1005)), TimeSpan.FromSeconds(30));
+            var refused = Assert.Single(app.Logs.Events, e => GoldmarkApp.IsEvent(e, 1005));
 
-        Assert.Contains("holds more than goldmark_runtime", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.Contains("VIEW SERVER STATE", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
-        Assert.Equal(3, rights.ExitCode);
-        Assert.True(lifetime.ApplicationStopping.IsCancellationRequested);
-        Assert.False(rights.Checked);
+            Assert.Contains("holds more than goldmark_runtime", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            Assert.Contains("VIEW SERVER STATE", refused.RenderMessage(CultureInfo.InvariantCulture), StringComparison.Ordinal);
+            Assert.Equal(3, rights.ExitCode);
+            Assert.True(lifetime.ApplicationStopping.IsCancellationRequested);
+            Assert.False(rights.Checked);
+        }
+        finally
+        {
+            release.SetResult();
+        }
+    }
+
+    /// <summary>Registered last, so stopped first: the host stops, and is disposed, only once the test releases it.</summary>
+    private sealed class HeldStop(Task release) : IHostedService
+    {
+        public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task StopAsync(CancellationToken cancellationToken) => release.WaitAsync(cancellationToken);
     }
 }
