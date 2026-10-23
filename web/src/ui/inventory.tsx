@@ -195,6 +195,10 @@ export function fieldMessage(code: string, attribute: AttributeDef | null): stri
       return 'Remove the line breaks and other control characters.';
     case 'InvalidNumber':
       return 'Enter a number.';
+    case 'TooPrecise':
+      return 'This has more digits than Goldmark keeps exactly (28 significant digits). Round it.';
+    case 'NumberOutOfRange':
+      return 'This number is too large: Goldmark keeps numbers up to 79,228,162,514,264,337,593,543,950,335.';
     case 'InvalidDate':
       return 'Enter a date.';
     case 'InvalidChoice':

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Goldmark.Api.Inventory;
 
@@ -18,10 +19,11 @@ internal sealed record AttributeCheck(JsonObject Values, IReadOnlyDictionary<str
 /// them is saved (DEC-044 build notes). Whether a linked CI exists, isn't retired and has the right
 /// type needs the database: <see cref="CiStore"/> checks <see cref="AttributeCheck.Links"/>.
 /// </summary>
-internal static class AttributeValues
+internal static partial class AttributeValues
 {
     public const int MaxNameLength = 400;
     public const int MaxTextLength = 4000;
+
 
     /// <summary>The name's error code, or null when it's fine (trimmed, 1 to 400 characters, no control characters).</summary>
     public static string? NameError(string? name) => name?.Trim() switch
@@ -91,6 +93,24 @@ internal static class AttributeValues
 
     public static JsonObject Parse(string json) => JsonNode.Parse(json) as JsonObject ?? [];
 
+    /// <summary>
+    /// The stored values as the API sends them: a number as a decimal string with every digit as stored
+    /// ("9007199254740993", "1.50"), because a JSON number beyond a double's precision is rounded by
+    /// JavaScript and most JSON readers (DEC-044 item 12). Stored, it stays a JSON number.
+    /// </summary>
+    public static JsonObject ForResponse(CiTypeInfo type, JsonObject stored)
+    {
+        var response = new JsonObject();
+        foreach (var (name, node) in stored)
+        {
+            var number = type.Attributes.Any(a => a.Name == name && a.DataType == AttributeDataTypes.Number)
+                && node is JsonValue { } value && value.GetValueKind() == JsonValueKind.Number;
+            response[name] = number ? JsonValue.Create(node!.ToJsonString()) : node?.DeepClone();
+        }
+
+        return response;
+    }
+
     public static string Field(string attribute) => "attributes." + attribute;
 
     private static (JsonNode? Node, string? Error) Normalize(AttributeDefinition attribute, JsonElement value)
@@ -105,9 +125,12 @@ internal static class AttributeValues
             case AttributeDataTypes.String:
                 return (null, "InvalidText");
             case AttributeDataTypes.Number:
-                return value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var number)
-                    ? (JsonValue.Create(number), null)
-                    : (null, "InvalidNumber");
+                return value.ValueKind switch
+                {
+                    JsonValueKind.Number => ExactDecimal(value.GetRawText()),
+                    JsonValueKind.String => ExactDecimal(value.GetString()!.Trim()),
+                    _ => (null, "InvalidNumber"),
+                };
             case AttributeDataTypes.Bool:
                 return value.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? (JsonValue.Create(value.GetBoolean()), null)
@@ -129,4 +152,50 @@ internal static class AttributeValues
                 return (null, "InvalidValue");
         }
     }
+
+    /// <summary>
+    /// A number written as a JSON number or a decimal string, kept exactly as a .NET decimal (DEC-044 item 12): one
+    /// beyond its range (79,228,162,514,264,337,593,543,950,335 either way) is <c>NumberOutOfRange</c>, one it
+    /// would round (more than its 28 to 29 significant digits) is <c>TooPrecise</c>; nothing is rounded silently.
+    /// </summary>
+    private static (JsonNode? Node, string? Error) ExactDecimal(string text)
+    {
+        if (!NumberText().IsMatch(text))
+        {
+            return (null, "InvalidNumber");
+        }
+
+        if (!decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+        {
+            return (null, "NumberOutOfRange");
+        }
+
+        return Canonical(text) is { } written && written == Canonical(number.ToString(CultureInfo.InvariantCulture))
+            ? (JsonValue.Create(number), null)
+            : (null, "TooPrecise");
+    }
+
+    /// <summary>A number's sign, digits (no leading or trailing zeros) and power of ten, so equal values compare equal; null if the exponent overflows.</summary>
+    private static (bool Negative, string Digits, long Exponent)? Canonical(string text)
+    {
+        var negative = text.StartsWith('-');
+        var unsigned = text.TrimStart('+', '-');
+        var e = unsigned.IndexOfAny(['e', 'E']);
+        long exponent = 0;
+        if (e >= 0 && !long.TryParse(unsigned[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out exponent))
+        {
+            return null;
+        }
+
+        var mantissa = e >= 0 ? unsigned[..e] : unsigned;
+        var point = mantissa.IndexOf('.', StringComparison.Ordinal);
+        var digits = mantissa.Replace(".", "", StringComparison.Ordinal).TrimStart('0');
+        exponent -= point >= 0 ? mantissa.Length - point - 1 : 0;
+        var trimmed = digits.TrimEnd('0');
+        exponent += digits.Length - trimmed.Length;
+        return trimmed.Length == 0 ? (false, "", 0) : (negative, trimmed, exponent);
+    }
+
+    [GeneratedRegex(@"^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$", RegexOptions.CultureInvariant)]
+    private static partial Regex NumberText();
 }

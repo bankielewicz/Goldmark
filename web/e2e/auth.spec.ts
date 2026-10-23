@@ -587,6 +587,69 @@ test.describe('slice 5 screens', () => {
     await expect(page).toHaveURL(new RegExp(`/search\\?q=${name}$`));
     await expect(page.getByRole('link', { name: `${name}-renamed` })).toBeVisible();
   });
+
+  test('a number keeps every digit when typed, shown and saved again after another field changes', async ({ page }) => {
+    await signIn(page);
+    const stamp = Date.now();
+    const attribute = `capacity${stamp}`;
+    const label = `Capacity ${stamp}`;
+    // The page's own session calls the API (an attribute's screen is slice 5b's); a GET reads the exact text.
+    const call = (method: string, path: string, body: unknown = null) =>
+      page.evaluate(
+        async ({ method, path, body }) => {
+          const token = ((await (await fetch('/api/v1/auth/antiforgery')).json()) as { token: string }).token;
+          const response = await fetch(path, {
+            method,
+            headers: { 'Content-Type': 'application/json', 'X-Goldmark-Antiforgery': token },
+            ...(body === null ? {} : { body: JSON.stringify(body) }),
+          });
+          return { status: response.status, json: (await response.json()) as Record<string, unknown> };
+        },
+        { method, path, body },
+      );
+    const stored = async (id: string) =>
+      ((await call('GET', `/api/v1/cis/${id}`)).json.attributes as Record<string, unknown>)[attribute];
+
+    expect(
+      (await call('POST', '/api/v1/types/StorageArray/attributes', { name: attribute, label, dataType: 'number' }))
+        .status,
+    ).toBe(201);
+
+    // Typed in the form: 2^53 + 1, which a JavaScript number would round to ...992.
+    await page.goto('/search');
+    await page.getByRole('button', { name: 'New CI' }).first().click();
+    const panel = page.getByRole('dialog', { name: 'New CI' });
+    await panel.getByRole('combobox', { name: /^Type/ }).click();
+    await page.getByRole('option', { name: 'StorageArray' }).click();
+    await panel.getByRole('textbox', { name: /^Name/ }).fill(`e2e-array-${stamp}`);
+    await panel.getByRole('textbox', { name: label }).fill('9007199254740993');
+    await panel.getByRole('button', { name: 'Create' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: `e2e-array-${stamp}` })).toBeVisible();
+    await expect(page.getByText('9007199254740993', { exact: true })).toBeVisible();
+    const typedId = page.url().split('/').pop() ?? '';
+    expect(await stored(typedId)).toBe('9007199254740993');
+
+    // Written through the API, then shown, and kept when only the name is edited.
+    for (const value of ['1125899906842624', '9007199254740993', '0.1', '0.1234567890123456789']) {
+      const name = `e2e-array-${stamp}-${value}`;
+      const created = await call('POST', '/api/v1/cis', {
+        type: 'StorageArray',
+        name,
+        attributes: { [attribute]: value },
+      });
+      expect(created.status).toBe(201);
+      await page.goto(`/ci/${String(created.json.id)}`);
+      await expect(page.getByText(value, { exact: true })).toBeVisible();
+      await page.getByRole('button', { name: 'Edit' }).click();
+      const edit = page.getByRole('dialog', { name: `Edit ${name}` });
+      await expect(edit.getByRole('textbox', { name: label })).toHaveValue(value);
+      await edit.getByRole('textbox', { name: /^Name/ }).fill(`${name}-renamed`);
+      await edit.getByRole('button', { name: 'Save' }).click();
+      await expect(page.getByRole('heading', { level: 1, name: `${name}-renamed` })).toBeVisible();
+      await expect(page.getByText(value, { exact: true })).toBeVisible();
+      expect(await stored(String(created.json.id))).toBe(value);
+    }
+  });
 });
 
 /** The shown-once panel's link and code (screen 17). */

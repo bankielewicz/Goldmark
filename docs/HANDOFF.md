@@ -169,6 +169,9 @@ owner's words; the deep-link contract is `docs/integration/deep-links.md`.
 - `PUT /cis/{id}` replaces every value: an attribute not sent is unset. Slice 8 adds the partial save,
   `PATCH` with JSON Merge Patch (#48, DEC-044 item 11): merge the stored values with the patch, then run the
   same checks (`AttributeValues.Check`, `CheckAsync`).
+- A number attribute is a .NET `decimal`, stored as a JSON number, sent as a decimal string with every digit,
+  accepted as either (DEC-044 item 12): slice 8's OpenAPI declares it `type: string, format: decimal`, slice
+  10's ingest keeps the same check (`AttributeValues.ExactDecimal`), and no screen makes it a JavaScript number.
 - `/api/v1/cis` is a real route now: tests use `/api/v1/no-such-resource` for an unknown one.
 - The CI page has one tab; an unknown `?tab=` is corrected to the CI's address. Slices 6, 7, 10 and 19 add
   their tabs (`docs/integration/deep-links.md` lists the values).

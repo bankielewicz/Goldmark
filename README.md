@@ -139,7 +139,11 @@ stable contract: [docs/integration/deep-links.md](docs/integration/deep-links.md
 Goldmark ships the CI types of the PRD (§9.3) with the few attributes it names;
 until the Types & attributes screen (slice 5b), an Admin adds custom attributes
 only through the API (`POST /api/v1/types/{type}/attributes`, signed in from a
-browser, since API tokens come in slice 8).
+browser, since API tokens come in slice 8). A number attribute keeps every digit
+of a .NET `decimal` (28 to 29 significant digits, up to ±79,228,162,514,264,337,593,543,950,335):
+the API returns it as a decimal string (`"1125899906842624"`, `"0.1"`) and accepts a
+JSON number or a decimal string; a number it can't keep exactly is refused
+(`TooPrecise`, `NumberOutOfRange`), never rounded (DEC-044 item 12).
 
 Without the required values, Compose refuses to start and names the missing
 variable. Every variable is documented in

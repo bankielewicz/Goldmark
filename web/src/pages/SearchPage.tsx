@@ -270,27 +270,41 @@ export function SearchPage() {
   const [creating, setCreating] = useState(false);
   // No CI at all, rather than none that isn't retired: asked only when the list is empty.
   const [anyCi, setAnyCi] = useState<boolean | null>(null);
-  const shownQuery = useRef('');
+  // The query the shown page was loaded with: Load more continues that one, never a newer one still loading.
+  const pageQuery = useRef('');
+  const [replacing, setReplacing] = useState(false);
   const listRequest = useRef(0);
   const [focusRow, setFocusRow] = useState<string | null>(null);
 
   const apply = useCallback((next: Query) => navigate(pageAddress(next), { replace: true }), []);
 
+  // A link's types as this Goldmark names them. One it doesn't have is dropped from the address, so the
+  // filters, the list and the page agree (docs/integration/deep-links.md).
+  const knownTypes = useMemo(
+    () =>
+      types
+        ? query.types.flatMap((t) => types.filter((x) => x.name.toLowerCase() === t.toLowerCase()).map((x) => x.name))
+        : query.types,
+    [types, query.types],
+  );
+  const typesSettled = knownTypes.length === query.types.length && knownTypes.every((t, i) => t === query.types[i]);
+  useEffect(() => {
+    if (!typesSettled) apply({ ...query, types: knownTypes });
+  }, [typesSettled, knownTypes, query, apply]);
+
   const load = useCallback(async () => {
-    // The types first: a link may name a type this Goldmark doesn't have, which the list ignores.
-    if (types === null && typesFailure === null) return;
+    // The types first: a link may name a type this Goldmark doesn't have, which the address then drops.
+    if ((types === null && typesFailure === null) || !typesSettled) return;
     const request = ++listRequest.current;
     setFailure(null);
     setMoreFailure(null);
     setLoadingMore(false);
-    const known = types
-      ? query.types.filter((t) => types.some((x) => x.name.toLowerCase() === t.toLowerCase()))
-      : query.types;
-    const text = apiQuery({ ...query, types: known }).toString();
-    shownQuery.current = text;
+    setReplacing(true);
+    const text = apiQuery(query).toString();
     try {
       const { data } = await api<CiPageData>('GET', `/api/v1/cis?${text}`);
       if (listRequest.current !== request) return;
+      pageQuery.current = text;
       setPage(data);
       setCounts(data.types);
       if (data.total === 0 && !query.q.trim() && query.types.length === 0 && !query.retired) {
@@ -302,8 +316,10 @@ export function SearchPage() {
     } catch (error) {
       // The last list stays under the error (the board), so only the failure is set.
       if (listRequest.current === request) setFailure(asApiError(error));
+    } finally {
+      if (listRequest.current === request) setReplacing(false);
     }
-  }, [query, types, typesFailure]);
+  }, [query, types, typesFailure, typesSettled]);
 
   useEffect(() => {
     void load();
@@ -327,14 +343,14 @@ export function SearchPage() {
   }, [focusRow, page]);
 
   const loadMore = async () => {
-    if (!page?.next) return;
+    if (!page?.next || replacing) return;
     const request = listRequest.current;
     setLoadingMore(true);
     setMoreFailure(null);
     try {
       const { data } = await api<CiPageData>(
         'GET',
-        `/api/v1/cis?${shownQuery.current}&cursor=${encodeURIComponent(page.next)}`,
+        `/api/v1/cis?${pageQuery.current}&cursor=${encodeURIComponent(page.next)}`,
       );
       if (listRequest.current !== request) return;
       setPage((shown) => shown && { ...shown, items: [...shown.items, ...data.items], next: data.next });
@@ -546,7 +562,7 @@ export function SearchPage() {
                       : `Showing all ${page.items.length.toLocaleString('en-US')}`}
                   </Text>
                   {page.next ? (
-                    <Button disabled={loadingMore} onClick={() => void loadMore()}>
+                    <Button disabled={loadingMore || replacing} onClick={() => void loadMore()}>
                       {loadingMore ? <Spinner size="tiny" aria-label="Loading more" /> : null}
                       Load more
                     </Button>
@@ -584,7 +600,9 @@ export function SearchPage() {
         </OverlayDrawer>
       )}
 
-      {creating && types ? <CiPanel mode={{ kind: 'new' }} types={types} onClose={() => setCreating(false)} /> : null}
+      {creating && types ? (
+        <CiPanel mode={{ kind: 'new' }} types={types} onTypesChanged={reloadTypes} onClose={() => setCreating(false)} />
+      ) : null}
     </>
   );
 }

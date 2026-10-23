@@ -1944,6 +1944,24 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       (issue #48, label `enhancement`). Adding it then is additive under US-54; scripts can't call the API
       before slice 8. Rejected: B, add PATCH in slice 5 (a second save path before any script can use it);
       C, make PUT partial (not HTTP's meaning for PUT, and fixed in v1 for good).
+  12. **Numbers keep every digit (Codex review round 1 on PR #49).** Codex found that the panel converted a
+      typed number to a JavaScript number, which rounds beyond a double's precision (9007199254740993 was saved
+      as ...992), and that editing another field rewrote a long stored number the same way. A first fix capped
+      numbers at 15 significant digits; after a side agent noted it would refuse exact byte counts such as 1 PiB,
+      the owner chose neither that nor "refuse only what a JavaScript number can't hold": "Please fix the precision
+      loss without restricting the API's numeric range to JavaScript's limitations. [...] Keep numeric attributes
+      numeric in the data model, and preserve supported .NET decimal values exactly through API responses,
+      browser display/editing, and saves. Decimal strings for transport and form state are acceptable; users
+      should not have to redefine byte counts as text attributes. Document any wire-format change and its
+      compatibility implications. [...] Values outside the supported decimal range or precision should produce an
+      explicit validation error rather than silent rounding." So: a number attribute is a .NET `decimal`, stored
+      as a JSON number (SQL Server 2025's `json` keeps every digit, checked); `GET /api/v1/cis/{id}` and every
+      CI response return it as a decimal string with its digits and scale as stored (`"9007199254740993"`,
+      `"1.50"`); `POST` and `PUT` accept a JSON number or a decimal string; a value the decimal would round is
+      `TooPrecise`, one beyond its range `NumberOutOfRange`, never rounded; the screens keep the text from
+      response to form to request and never make it a JavaScript number. Compatibility: the change lands before
+      any release and before API tokens (slice 8), so no client depends on numbers being JSON numbers; slice 8's
+      OpenAPI document describes them as strings (`format: decimal`), and the request side stays lenient.
 - **Build notes (slice 5, not owner decisions; listed for review).**
   - A required attribute added to a type that already has CIs is enforced the next time each of them is
     saved; nothing is migrated.

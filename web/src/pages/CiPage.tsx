@@ -149,7 +149,7 @@ function CiView({ id }: { id: string }) {
   const canEdit = canEditCis(session.user);
   const wide = useWide();
   const { search } = useLocation();
-  const { types } = useCiTypes();
+  const { types, failure: typesFailure, reload: reloadTypes } = useCiTypes();
   const toasterId = useId('ci-toaster');
   const { dispatchToast } = useToastController(toasterId);
   const [ci, setCi] = useState<CiDetail | null>(null);
@@ -355,6 +355,13 @@ function CiView({ id }: { id: string }) {
       {changeFailure ? (
         <ErrorBar error={changeFailure.error} onRetry={() => void change(changeFailure.change)} />
       ) : null}
+      {typesFailure && !types ? (
+        <ErrorBar
+          error={typesFailure}
+          message="Couldn’t load the CI types, so this CI’s attributes aren’t shown and it can’t be edited."
+          onRetry={reloadTypes}
+        />
+      ) : null}
 
       <TabList selectedValue="attributes" aria-label="CI sections">
         <Tab value="attributes" id="tab-attributes" aria-controls="panel-attributes">
@@ -369,6 +376,7 @@ function CiView({ id }: { id: string }) {
         <CiPanel
           mode={{ kind: 'edit', ci }}
           types={types}
+          onTypesChanged={reloadTypes}
           onClose={() => setEditing(false)}
           onSaved={(saved, changed) => {
             setCi(saved);

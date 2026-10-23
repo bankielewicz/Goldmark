@@ -326,8 +326,7 @@ internal sealed class CiStore(DbSession db)
         var linkIds = type.Attributes.Where(a => a.DataType == AttributeDataTypes.CiRef && values[a.Name] is not null)
             .Select(a => Guid.Parse(values[a.Name]!.GetValue<string>()));
         var linked = await LinkedAsync(linkIds);
-        using var document = JsonDocument.Parse(row.Attributes);
-        return new CiDetail(row.Id, row.Name, row.Type, row.LifecycleState, document.RootElement.Clone(),
+        return new CiDetail(row.Id, row.Name, row.Type, row.LifecycleState, JsonSerializer.SerializeToElement(AttributeValues.ForResponse(type, values)),
             linked.Values.ToDictionary(l => l.Id.ToString("D"), l => new CiReference(l.Id, l.Name, l.Type, l.LifecycleState)),
             row.ValidFrom, Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, Stamp(row.ValidFrom));
     }

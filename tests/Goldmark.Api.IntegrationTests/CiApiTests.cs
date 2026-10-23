@@ -98,7 +98,7 @@ public sealed class CiApiTests(SqlServerFixture sql)
         var id = vm.GetProperty("id").GetGuid();
         Assert.Equal($"/api/v1/cis/{id:D}", created.Headers["Location"]);
         Assert.Equal(("app-erp-db01", "VirtualMachine", "Active"), (vm.Value("name"), vm.Value("type"), vm.Value("lifecycleState")));
-        Assert.Equal("{\"costCentre\":\"CC-4410\",\"vcpusReserved\":8,\"monitored\":true,\"patchWindowStarts\":\"2026-11-07\",\"backupTier\":\"Gold\",\"supportsService\":\""
+        Assert.Equal("{\"costCentre\":\"CC-4410\",\"vcpusReserved\":\"8\",\"monitored\":true,\"patchWindowStarts\":\"2026-11-07\",\"backupTier\":\"Gold\",\"supportsService\":\""
             + erp.Value("id") + "\"}", vm.GetProperty("attributes").GetRawText());
         Assert.Equal("ERP", vm.GetProperty("references").GetProperty(erp.Value("id")).Value("name"));
         Assert.Equal(editorPerson.Id, vm.GetProperty("changedBy").GetProperty("id").GetGuid());
@@ -305,6 +305,53 @@ public sealed class CiApiTests(SqlServerFixture sql)
 
         Assert.Equal([HttpStatusCode.OK, HttpStatusCode.PreconditionFailed], results.Select(r => r.Status).Order());
         Assert.Single(await scenario.AuditAsync("ci.changed"));
+    }
+
+    [Fact]
+    public async Task A_number_keeps_every_digit_through_a_save_a_read_and_an_edit_of_another_field()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var added = await admin.PostAsync("/api/v1/types/StorageArray/attributes", new { name = "capacityBytes", label = "Capacity (bytes)", dataType = "number" });
+        Assert.True(added.Status == HttpStatusCode.Created, added.ToString());
+
+        // Sent as a JSON number or a decimal string, a number comes back as a decimal string with every digit
+        // and is stored as a JSON number (DEC-044 item 12).
+        foreach (var (sent, expected) in new (object Sent, string Expected)[]
+        {
+            (1125899906842624m, "1125899906842624"), // 1 PiB in bytes
+            (9007199254740993m, "9007199254740993"), // 2^53 + 1, which a JavaScript number rounds to ...992
+            ("0.1", "0.1"),
+            ("0.1234567890123456789", "0.1234567890123456789"),
+            ("1.50", "1.50"),
+        })
+        {
+            var array = await CreateAsync(editor, new { type = "StorageArray", name = $"array-{expected}", attributes = new { capacityBytes = sent } });
+            Assert.Equal(expected, array.GetProperty("attributes").Value("capacityBytes"));
+            Assert.Equal(expected, AuthScenario.Ok(await editor.GetAsync($"/api/v1/cis/{array.Value("id")}")).Body.GetProperty("attributes").Value("capacityBytes"));
+
+            // Renaming sends the value back as read: it is unchanged, and the audit names only the name.
+            var renamed = await editor.PutAsync($"/api/v1/cis/{array.Value("id")}",
+                new { name = $"array-{expected}-renamed", attributes = new { capacityBytes = expected } }, $"\"{array.Value("eTag")}\"");
+            Assert.True(renamed.Status == HttpStatusCode.OK, renamed.ToString());
+            Assert.Equal(expected, renamed.Body.GetProperty("attributes").Value("capacityBytes"));
+            Assert.Equal($"{{\"capacityBytes\":{expected}}}", await scenario.Sql.AdminScalarAsync<string>(scenario.Installation.Database,
+                $"SELECT CAST(Attributes AS nvarchar(max)) FROM cmdb.Ci WHERE Id = '{array.Value("id")}';"));
+        }
+
+        Assert.All(await scenario.AuditAsync("ci.changed"), row => Assert.EndsWith(",\"fields\":[\"Name\"]}", row, StringComparison.Ordinal));
+        Assert.Equal(5, (await scenario.AuditAsync("ci.changed")).Count);
+
+        // Never rounded silently: beyond a decimal's precision or range, or not a number, it is refused.
+        Assert.Equal("TooPrecise", NumberError(await editor.PostAsync("/api/v1/cis", Refused("0.12345678901234567890123456789012"))));
+        Assert.Equal("TooPrecise", NumberError(await editor.PostAsync("/api/v1/cis", Refused("1e-40"))));
+        Assert.Equal("NumberOutOfRange", NumberError(await editor.PostAsync("/api/v1/cis", Refused("79228162514264337593543950336"))));
+        Assert.Equal("NumberOutOfRange", NumberError(await editor.PostAsync("/api/v1/cis", Refused("1e400"))));
+        Assert.Equal("InvalidNumber", NumberError(await editor.PostAsync("/api/v1/cis", Refused("12 TB"))));
+
+        static object Refused(string capacity) => new { type = "StorageArray", name = "refused", attributes = new { capacityBytes = capacity } };
+        static string? NumberError(Response response) => Field(response, "attributes.capacityBytes");
     }
 
     private static async Task AddVmAttributesAsync(ApiClient admin)

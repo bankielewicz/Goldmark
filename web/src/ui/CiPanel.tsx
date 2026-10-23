@@ -104,7 +104,8 @@ function initialValue(attribute: AttributeDef, ci: CiDetail | null): FieldValue 
         : null;
     }
     case 'number':
-      return typeof value === 'number' ? String(value) : '';
+      // The API sends numbers as decimal strings, every digit kept (DEC-044 item 12); the form keeps the text.
+      return typeof value === 'string' ? value : typeof value === 'number' ? String(value) : '';
     default:
       return typeof value === 'string' ? value : '';
   }
@@ -139,7 +140,8 @@ function requestValue(attribute: AttributeDef, value: FieldValue | undefined): u
   if (isEmpty(value)) return null;
   switch (attribute.dataType) {
     case 'number':
-      return Number(value);
+      // Sent as the decimal string typed: converting it to a JavaScript number would round long ones.
+      return (value as string).trim();
     case 'ciRef':
       return (value as LinkValue).id;
     case 'bool':
@@ -148,6 +150,9 @@ function requestValue(attribute: AttributeDef, value: FieldValue | undefined): u
       return (value as string).trim();
   }
 }
+
+/** A number as the API reads it: digits with an optional point, sign and exponent (its range and precision it checks itself). */
+const numberText = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
 
 /** The form's own checks, before the server's (which it mirrors). */
 function check(form: FormState, type: CiType | undefined): Record<string, string> {
@@ -158,7 +163,7 @@ function check(form: FormState, type: CiType | undefined): Record<string, string
   for (const attribute of type?.attributes ?? []) {
     const value = form.values[attribute.name];
     if (attribute.required && isEmpty(value)) errors[`attributes.${attribute.name}`] = 'Required';
-    else if (attribute.dataType === 'number' && !isEmpty(value) && !Number.isFinite(Number(value))) {
+    else if (attribute.dataType === 'number' && !isEmpty(value) && !numberText.test(String(value).trim())) {
       errors[`attributes.${attribute.name}`] = 'InvalidNumber';
     }
   }
@@ -187,11 +192,14 @@ function list(labels: string[]): string {
 export function CiPanel({
   mode,
   types,
+  onTypesChanged,
   onClose,
   onSaved,
 }: {
   mode: PanelMode;
   types: CiType[];
+  /** The server named a field the loaded types don't have (an Admin added one meanwhile): reload them. */
+  onTypesChanged?: () => void;
   onClose: () => void;
   onSaved?: (ci: CiDetail, changed: boolean) => void;
 }) {
@@ -216,6 +224,7 @@ export function CiPanel({
   const [mine, setMine] = useState<FormState | null>(null);
   const [reviewed, setReviewed] = useState<CiDetail | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [typesChanged, setTypesChanged] = useState(false);
   const firstField = useRef<HTMLInputElement>(null);
   const type = types.find((t) => t.name === form.type);
   const dirty = changedLabels(base, form, type).length > 0 || base.type !== form.type;
@@ -235,6 +244,7 @@ export function CiPanel({
     const local = check(form, type);
     setErrors(local);
     setFailure(null);
+    setTypesChanged(false);
     if (Object.keys(local).length > 0 || !type) {
       focusFirstError(local);
       return;
@@ -272,6 +282,11 @@ export function CiPanel({
           Object.entries(problem.fieldErrors).map(([field, codes]) => [field, codes[0] ?? '']),
         );
         setErrors(server);
+        const shown = new Set(['name', 'type', ...(type?.attributes ?? []).map((a) => `attributes.${a.name}`)]);
+        if (Object.keys(server).some((field) => !shown.has(field))) {
+          setTypesChanged(true);
+          onTypesChanged?.();
+        }
         focusFirstError(server);
       } else {
         setFailure(problem);
@@ -385,6 +400,12 @@ export function CiPanel({
             <Notice intent="warning">This CI was retired while you were editing. Restore it to make changes.</Notice>
           ) : null}
           {failure ? <ErrorBar error={failure} onRetry={() => void save()} /> : null}
+          {typesChanged ? (
+            <Notice intent="warning">
+              This type’s attributes changed while you were editing. The form now shows them; check the fields marked in
+              red and save again.
+            </Notice>
+          ) : null}
 
           {editing ? (
             <Field label="Type" hint="A CI’s type can’t change.">
@@ -415,9 +436,20 @@ export function CiPanel({
               ? { validationState: 'error' as const, validationMessage: fieldMessage(errors.name, null) }
               : {
                   hint:
-                    nameDiffers && mine
-                      ? `Yours: ${mine.name}`
-                      : 'Up to 400 characters. Names don’t need to be unique.',
+                    nameDiffers && mine ? (
+                      <span className={styles.yours}>
+                        Yours: <strong>{mine.name}</strong>
+                        <Button
+                          size="small"
+                          appearance="transparent"
+                          onClick={() => setForm((f) => ({ ...f, name: mine.name }))}
+                        >
+                          Use mine
+                        </Button>
+                      </span>
+                    ) : (
+                      'Up to 400 characters. Names don’t need to be unique.'
+                    ),
                 })}
           >
             <Input
@@ -702,6 +734,7 @@ function LinkPicker({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<CiSummary[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const request = useRef(0);
 
   useEffect(() => {
@@ -713,10 +746,14 @@ function LinkPicker({
       setSearching(true);
       api<CiPageData>('GET', `/api/v1/cis?${query.toString()}`)
         .then(({ data }) => {
-          if (request.current === current) setOptions(data.items);
+          if (request.current !== current) return;
+          setOptions(data.items);
+          setSearchFailed(false);
         })
         .catch(() => {
-          if (request.current === current) setOptions([]);
+          if (request.current !== current) return;
+          setOptions([]);
+          setSearchFailed(true);
         })
         .finally(() => {
           if (request.current === current) setSearching(false);
@@ -744,7 +781,11 @@ function LinkPicker({
     >
       {options.length === 0 ? (
         <Option disabled value="" text="">
-          {searching ? 'Searching…' : 'No matching CIs'}
+          {searching
+            ? 'Searching…'
+            : searchFailed
+              ? 'Couldn’t search the CIs. Type again to retry.'
+              : 'No matching CIs'}
         </Option>
       ) : (
         options.map((o) => (
