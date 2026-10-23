@@ -2038,5 +2038,14 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      version and every deleted row stays in their history tables. A delete still does what items 2 and 6 say.
      An attribute's or a relationship type's version (its ETag) is its `ValidFrom`, as a CI's is. Rejected: B,
      deleted rows kept and marked (deletes only, not changes); C, no history for definitions.
+  9. **The as-built differences from the boards (after a side agent noted they were chosen without asking).**
+     Screen 14: "A. Keep all five (Recommended)": the choice list's Add button is named "Add choice" for screen
+     readers, the Impact explanation is a Tooltip on an info button, "Show again" acts at once, "Any type" has the
+     generic icon, a type's CI count links to Search with retired CIs shown. The audit filter: "A. Label
+     "Affected" then (Recommended)" when it names a CI, a type or a relationship type (slice 5's "Person affected"
+     otherwise). A CI's audit entry: "A. Keep it (Recommended)", "Show all entries about" as slice 5's board had
+     it. From now on: "A. Ask before building it (Recommended)": a visible difference from an approved board is
+     asked before the code, not listed afterwards. Rejected: matching the boards exactly; always "Person
+     affected"; removing the CI's button; building first and listing it in the PR.
 - **Design handoff:** `tmp/screen-handoff-slice5b.md` (screen 14, the Administration nav item, screen 16's
   new entries); the boards came back and were approved (item 7) before any UI code (rule 3).

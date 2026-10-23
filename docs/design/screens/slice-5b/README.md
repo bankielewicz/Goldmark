@@ -58,7 +58,7 @@ Name, From and To read only), and the 1024 navigation rail. The audit action cod
 samples; the backend names them.
 
 As built (`web/src/pages/TypesPage.tsx`, `web/src/ui/TypePanels.tsx`, `web/src/pages/AuditPage.tsx`), the
-differences from the boards: the choice list's Add button is named "Add choice" (the panel's own Add saves the
+differences from the boards, approved by the owner on 2026-10-23 (DEC-045 item 9): the choice list's Add button is named "Add choice" (the panel's own Add saves the
 attribute); the Impact column's explanation is a Tooltip on an info button beside the header; "Show again" in the
 More actions menu shows the type at once, as the MessageBar's button does; "Any type" has the generic type icon; a
 type's count of CIs links to Search with retired CIs shown, as the count includes them; the audit details of the
