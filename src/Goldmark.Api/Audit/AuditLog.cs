@@ -22,7 +22,8 @@ internal sealed class AuditLog(DbSession db)
         CAST(a.Details AS nvarchar(max)) AS Details,
         actor.UserName AS ActorUserName, actor.DisplayName AS ActorDisplayName,
         target.UserName AS TargetUserName, target.DisplayName AS TargetDisplayName,
-        targetCi.Name AS TargetCiName, targetCiType.Name AS TargetCiTypeName, targetType.Name AS TargetTypeName
+        targetCi.Name AS TargetCiName, targetCiType.Name AS TargetCiTypeName, targetType.Name AS TargetTypeName,
+        targetRelationshipType.Name AS TargetRelationshipTypeName
         """;
 
     private const string Joins = """
@@ -32,6 +33,8 @@ internal sealed class AuditLog(DbSession db)
         LEFT JOIN cmdb.Ci AS targetCi ON a.TargetType = 'Ci' AND targetCi.Id = TRY_CAST(a.TargetId AS uniqueidentifier)
         LEFT JOIN cmdb.CiType AS targetCiType ON targetCiType.Id = targetCi.CiTypeId
         LEFT JOIN cmdb.CiType AS targetType ON a.TargetType = 'CiType' AND targetType.Id = TRY_CAST(a.TargetId AS int)
+        LEFT JOIN cmdb.RelationshipType AS targetRelationshipType
+            ON a.TargetType = 'RelationshipType' AND targetRelationshipType.Id = TRY_CAST(a.TargetId AS int)
         """;
 
     // Every filter is a parameter (NFR-SEC-3); an unset one is NULL. Times arrive as UTC
@@ -41,7 +44,8 @@ internal sealed class AuditLog(DbSession db)
             AND (@to IS NULL OR a.At < CAST(@to AS datetime2(7)))
             AND (@actorType IS NULL OR a.ActorType = @actorType)
             AND (@actorId IS NULL OR TRY_CAST(a.ActorId AS uniqueidentifier) = @actorId)
-            AND (@targetId IS NULL OR (a.TargetType = 'User' AND TRY_CAST(a.TargetId AS uniqueidentifier) = @targetId))
+            AND (@targetType IS NULL OR (a.TargetType = @targetType
+                AND (TRY_CAST(a.TargetId AS uniqueidentifier) = @targetId OR TRY_CAST(a.TargetId AS int) = @targetNumber)))
             AND (@actions IS NULL OR a.Action IN (SELECT [value] FROM OPENJSON(@actions)))
             AND (@ip IS NULL OR a.Ip LIKE @ip + N'%')
         """;
@@ -124,6 +128,7 @@ internal sealed class AuditLog(DbSession db)
     {
         { Type: AuditTargetTypes.Ci, Name: var name, CiType: var type } => $"{name} ({type})",
         { Type: AuditTargetTypes.CiType, Name: var name } => $"{name} (CI type)",
+        { Type: AuditTargetTypes.RelationshipType, Name: var name } => $"{name} (relationship type)",
         { DisplayName: { } name, UserName: { } user } => $"{name} ({user})",
         { Removed: true, UserName: { } user } => $"{user} (account removed)",
         { Removed: true } => "Removed account",
@@ -139,7 +144,9 @@ internal sealed class AuditLog(DbSession db)
         to = query.To,
         actorType = query.ActorType,
         actorId = query.ActorId,
-        targetId = query.TargetId,
+        targetType = query.Target?.Type,
+        targetId = query.Target?.Id,
+        targetNumber = query.Target?.Number,
         actions = query.ActionsJson(),
         ip = query.IpPrefix,
     };
@@ -160,11 +167,15 @@ internal sealed class AuditLog(DbSession db)
         var target = row.TargetType switch
         {
             AuditActorTypes.User when row.TargetId is not null => Person(row.TargetId, row.TargetUserName, row.TargetDisplayName, RecordedUserName(details)),
-            // CIs and types are never deleted; the names the entry recorded are the fallback all the same.
+            // CIs are never deleted, custom types and relationship types may be (slice 5b): the names the entry
+            // recorded are the fallback.
             AuditTargetTypes.Ci => new AuditParty(AuditTargetTypes.Ci, Guid.TryParse(row.TargetId, out var ci) ? ci : null, null, null,
                 Removed: row.TargetCiName is null, Name: row.TargetCiName ?? Recorded(details, "name"), CiType: row.TargetCiTypeName ?? Recorded(details, "type")),
             AuditTargetTypes.CiType => new AuditParty(AuditTargetTypes.CiType, null, null, null, Removed: row.TargetTypeName is null,
-                Name: row.TargetTypeName ?? Recorded(details, "type")),
+                Name: row.TargetTypeName ?? Recorded(details, "type"), Number: Number(row.TargetId)),
+            AuditTargetTypes.RelationshipType => new AuditParty(AuditTargetTypes.RelationshipType, null, null, null,
+                Removed: row.TargetRelationshipTypeName is null, Name: row.TargetRelationshipTypeName ?? Recorded(details, "name"),
+                Number: Number(row.TargetId)),
             _ => null,
         };
         return new AuditEntry(row.Id, row.At, actor, row.Action, action.Label, action.Outcome, target, row.Ip, details);
@@ -178,6 +189,8 @@ internal sealed class AuditLog(DbSession db)
     /// <summary>The user name an administrator's action recorded for the person affected (slice 3 writes it).</summary>
     private static string? RecordedUserName(JsonElement? details) => Recorded(details, "userName");
 
+    private static int? Number(string? id) => int.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : null;
+
     private static string? Recorded(JsonElement? details, string property) =>
         details is { ValueKind: JsonValueKind.Object } d && d.TryGetProperty(property, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
@@ -185,7 +198,7 @@ internal sealed class AuditLog(DbSession db)
 
     private sealed record Row(long Id, DateTime At, string ActorType, string? ActorId, string Action, string? TargetType, string? TargetId,
         string? Ip, string? Details, string? ActorUserName, string? ActorDisplayName, string? TargetUserName, string? TargetDisplayName,
-        string? TargetCiName, string? TargetCiTypeName, string? TargetTypeName);
+        string? TargetCiName, string? TargetCiTypeName, string? TargetTypeName, string? TargetRelationshipTypeName);
 }
 
 internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string Action, string Label, string Outcome, AuditParty? Target,
@@ -193,15 +206,18 @@ internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string
 
 /// <summary>
 /// Who acted, or what it was about: a person (a removed account is <c>Removed</c>), a CI (<c>Name</c>,
-/// <c>CiType</c>) or a CI type (<c>Name</c>; slice 5).
+/// <c>CiType</c>), a CI type (<c>Name</c>; slice 5) or a relationship type (<c>Name</c>; slice 5b), these two with
+/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>).
 /// </summary>
-internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null);
+internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null,
+    int? Number = null);
 
 /// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5.</summary>
 internal static class AuditTargetTypes
 {
     public const string Ci = "Ci";
     public const string CiType = "CiType";
+    public const string RelationshipType = "RelationshipType";
 }
 
 internal sealed record AuditPerson(Guid Id, string UserName, string DisplayName);

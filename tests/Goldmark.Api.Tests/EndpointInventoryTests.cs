@@ -85,7 +85,17 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["CIs: retire"] = ("POST", "/api/v1/cis/{id:guid}/retire", AccessPolicy.CiEditor),
             ["CIs: restore"] = ("POST", "/api/v1/cis/{id:guid}/restore", AccessPolicy.CiEditor),
             ["Types: list"] = ("GET", "/api/v1/types", AccessPolicy.SignedIn),
+            ["Types: usage"] = ("GET", "/api/v1/types/usage", AccessPolicy.Admin),
+            ["Types: add"] = ("POST", "/api/v1/types", AccessPolicy.Admin),
+            ["Types: delete"] = ("DELETE", "/api/v1/types/{type}", AccessPolicy.Admin),
+            ["Types: hide"] = ("POST", "/api/v1/types/{type}/hide", AccessPolicy.Admin),
+            ["Types: show"] = ("POST", "/api/v1/types/{type}/show", AccessPolicy.Admin),
             ["Types: add an attribute"] = ("POST", "/api/v1/types/{type}/attributes", AccessPolicy.Admin),
+            ["Types: change an attribute"] = ("PUT", "/api/v1/types/{type}/attributes/{name}", AccessPolicy.Admin),
+            ["Types: delete an attribute"] = ("DELETE", "/api/v1/types/{type}/attributes/{name}", AccessPolicy.Admin),
+            ["Relationship types: add"] = ("POST", "/api/v1/relationship-types", AccessPolicy.Admin),
+            ["Relationship types: change"] = ("PUT", "/api/v1/relationship-types/{name}", AccessPolicy.Admin),
+            ["Relationship types: delete"] = ("DELETE", "/api/v1/relationship-types/{name}", AccessPolicy.Admin),
         };
 
     [Fact]
@@ -190,7 +200,8 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
     private static string Policy(RouteEndpoint endpoint) => endpoint.Metadata.GetMetadata<EndpointAccess>()?.Policy ?? "(none)";
 
     private static string Url(string pattern) =>
-        pattern.Replace("{id:guid}", Guid.NewGuid().ToString("D"), StringComparison.Ordinal).Replace("{type}", "VirtualMachine", StringComparison.Ordinal);
+        pattern.Replace("{id:guid}", Guid.NewGuid().ToString("D"), StringComparison.Ordinal).Replace("{type}", "VirtualMachine", StringComparison.Ordinal)
+            .Replace("{name}", "costCentre", StringComparison.Ordinal);
 
     private static StringContent? Json(string method) =>
         method is "GET" or "HEAD" or "DELETE" ? null : new StringContent("{}", Encoding.UTF8, "application/json");

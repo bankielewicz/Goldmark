@@ -64,7 +64,16 @@ internal static class AuditCatalog
         new(AuditActions.CiRetired, "CIs", "CI retired", Succeeded),
         new(AuditActions.CiRestored, "CIs", "CI restored", Succeeded),
 
+        new(AuditActions.TypeAdded, "Types & attributes", "CI type added", Succeeded),
+        new(AuditActions.TypeDeleted, "Types & attributes", "CI type deleted", Succeeded),
+        new(AuditActions.TypeHidden, "Types & attributes", "CI type hidden", Succeeded),
+        new(AuditActions.TypeShown, "Types & attributes", "CI type shown again", Succeeded),
         new(AuditActions.AttributeAdded, "Types & attributes", "Custom attribute added", Succeeded),
+        new(AuditActions.AttributeChanged, "Types & attributes", "Custom attribute changed", Succeeded),
+        new(AuditActions.AttributeDeleted, "Types & attributes", "Custom attribute deleted", Succeeded),
+        new(AuditActions.RelationshipTypeAdded, "Types & attributes", "Relationship type added", Succeeded),
+        new(AuditActions.RelationshipTypeChanged, "Types & attributes", "Relationship type changed", Succeeded),
+        new(AuditActions.RelationshipTypeDeleted, "Types & attributes", "Relationship type deleted", Succeeded),
     ];
 
     private static readonly Dictionary<string, AuditActionInfo> ByCode = Actions.ToDictionary(a => a.Code, StringComparer.Ordinal);

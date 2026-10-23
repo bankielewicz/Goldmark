@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slice 5b details to approve</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 880px; height: 1240px; box-sizing: border-box; padding: 40px 48px; background: #ffffff; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 15px; line-height: 22px; display: flex; flex-direction: column; gap: 18px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Details settled on these boards</h1>
+  <p style="margin: 0; color: #424242">The owner’s four answers are DEC-045. These are the smaller choices the boards make; each is a default to approve or change.</p>
+
+  <h2 style="margin: 8px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">Names and what can change</h2>
+  <ul style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px">
+    <li>Names never change once created, because the API and links use them: a type starts with a capital (Printer, LoadBalancerPool), an attribute with a small letter (costCentre), a relationship type is small letters, digits and _ (replicates_to).</li>
+    <li>An attribute’s label, required flag and choices change; its kind and its link target don’t. A choice can be added; one in use can’t be removed (“12 CIs use Gold. Change them first.”); renaming a choice is removing it and adding the new one.</li>
+    <li>A custom type’s group and icon are set when it’s created; changing them isn’t on these boards.</li>
+    <li>A custom relationship type’s impact and description change; its name and its From and To types don’t.</li>
+    <li>Built-in types, attributes and relationship types are locked: their actions show disabled, with the reason in a Tooltip.</li>
+  </ul>
+
+  <h2 style="margin: 8px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">Deleting and hiding</h2>
+  <ul style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px">
+    <li>Something that holds values (an attribute some CI has a value for) needs its name typed; something unused needs a plain confirmation.</li>
+    <li>A deleted attribute’s values leave the CIs in one change; each CI’s history keeps them, and the audit log has one entry with the count (“812 values removed”), not one per CI.</li>
+    <li>A type with CIs (retired ones included), or that an attribute or a relationship type points to, can’t be deleted; deleting a type deletes its attributes.</li>
+    <li>A custom type can be hidden instead (owner, DEC-045 item 5): it leaves the New CI type picker and Search’s type filter and moves to a “Hidden” group here; its CIs keep working and stay in search results; no new CI of it can be created; links naming it (/search?type=Prnter) still work; “Show again” undoes it. Hiding needs a plain confirmation, since nothing is lost.</li>
+  </ul>
+
+  <h2 style="margin: 8px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">Behaviour</h2>
+  <ul style="margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px">
+    <li>Turning Required on doesn’t touch existing CIs: each must have the value at its next save (as in slice 5, DEC-044 build notes). The panel says how many CIs have none.</li>
+    <li>Two Admins editing the same attribute: the second save gets the slice 5 “changed while you were editing” Dialog.</li>
+    <li>Admin only: /types, /types?type=VirtualMachine and /types?tab=relationships; other roles get the 403 page. Everyone signed in still reads types through the API and the CI screens.</li>
+    <li>The type list marks custom types with a “Custom” badge and leaves built-in types unbadged, so the list stays readable; the selected type’s header always shows its badge.</li>
+    <li>“Any type” is the first option for a link’s target type and for a relationship type’s From and To.</li>
+  </ul>
+
+  <h2 style="margin: 8px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">Not in this slice</h2>
+  <p style="margin: 0; color: #424242">Promoted attributes (#53); owner source policy and collector-owned attributes (slice 11); parent types; reordering attributes; relationships and redundancy groups (slices 6 and 19).</p>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":1240}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

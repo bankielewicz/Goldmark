@@ -418,7 +418,13 @@ export function CiPanel({
               types={types}
               value={form.type}
               inputRef={firstField}
-              error={errors.type ? 'Choose a type.' : null}
+              error={
+                errors.type
+                  ? errors.type === 'HiddenType'
+                    ? fieldMessage('HiddenType', null)
+                    : 'Choose a type.'
+                  : null
+              }
               onChange={(name) => setForm((f) => ({ ...f, type: name, values: {} }))}
             />
           )}
@@ -580,8 +586,9 @@ function TypePicker({
 }) {
   const styles = useStyles();
   const [typed, setTyped] = useState<string | null>(null);
+  // A hidden type takes no new CIs (DEC-045 item 5).
   const shown = useMemo(
-    () => types.filter((t) => typed === null || t.name.toLowerCase().includes(typed.toLowerCase())),
+    () => types.filter((t) => !t.hidden && (typed === null || t.name.toLowerCase().includes(typed.toLowerCase()))),
     [types, typed],
   );
   const groups = [...categories, null].map((category) => ({

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark type, attribute and relationship type panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px">
+    <h2 id="panel-title" style="margin: 0; flex: 1; font-size: 20px; line-height: 28px; font-weight: 600">{{title}}</h2>
+    <button type="button" aria-label="Close" style="width: 32px; height: 32px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 16px">✕</button>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+    <sc-if value="{{showSummary}}" hint-placeholder-val="{{false}}">
+      <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span><b>{{summaryLead}}</b> {{summaryRest}}</span></div>
+    </sc-if>
+
+    <sc-for list="{{fields}}" as="f" hint-placeholder-count="5">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <sc-if value="{{f.isLegend}}" hint-placeholder-val="{{false}}">
+          <span id="{{f.id}}" style="font-weight: 600">{{f.label}}<sc-if value="{{f.required}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: var(--rdfg)"> *</span></sc-if></span>
+        </sc-if>
+        <sc-if value="{{f.isLabel}}" hint-placeholder-val="{{true}}">
+          <label for="{{f.id}}" style="font-weight: 600">{{f.label}}<sc-if value="{{f.required}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: var(--rdfg)"> *</span></sc-if></label>
+        </sc-if>
+
+        <sc-if value="{{f.isInput}}" hint-placeholder-val="{{true}}">
+          <input id="{{f.id}}" value="{{f.value}}" placeholder="{{f.placeholder}}" aria-invalid="{{f.invalid}}" style="{{f.inputStyle}}">
+        </sc-if>
+        <sc-if value="{{f.isReadonly}}" hint-placeholder-val="{{false}}">
+          <input id="{{f.id}}" value="{{f.value}}" readonly style="{{f.readonlyStyle}}">
+        </sc-if>
+        <sc-if value="{{f.isSelect}}" hint-placeholder-val="{{false}}">
+          <button id="{{f.id}}" type="button" aria-haspopup="listbox" aria-invalid="{{f.invalid}}" style="{{f.selectStyle}}"><sc-if value="{{f.hasIcon}}" hint-placeholder-val="{{false}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{f.icon}}"></path></svg></sc-if><span style="{{f.selectText}}">{{f.value}}</span><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" style="color: var(--fg2)"><path d="M5 8l5 5 5-5"></path></svg></button>
+        </sc-if>
+        <sc-if value="{{f.isRadio}}" hint-placeholder-val="{{false}}">
+          <div role="radiogroup" aria-labelledby="{{f.id}}" style="display: flex; flex-direction: column; gap: 6px">
+            <sc-for list="{{f.options}}" as="o" hint-placeholder-count="2">
+              <label style="display: flex; align-items: flex-start; gap: 8px"><input type="radio" name="{{f.id}}" checked="{{o.checked}}" style="margin: 3px 0 0; accent-color: var(--cbrand); width: 16px; height: 16px"><span style="display: flex; flex-direction: column"><span>{{o.label}}</span><sc-if value="{{o.hasDesc}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{o.desc}}</span></sc-if></span></label>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{f.isSwitch}}" hint-placeholder-val="{{false}}">
+          <label style="display: inline-flex; align-items: center; gap: 8px"><button type="button" role="switch" aria-checked="{{f.checked}}" style="{{f.switchStyle}}"><span style="{{f.knobStyle}}"></span></button><span>{{f.switchText}}</span></label>
+        </sc-if>
+        <sc-if value="{{f.isIcons}}" hint-placeholder-val="{{false}}">
+          <div role="radiogroup" aria-labelledby="{{f.id}}" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px">
+            <sc-for list="{{f.icons}}" as="i" hint-placeholder-count="21">
+              <button type="button" role="radio" aria-checked="{{i.checked}}" aria-label="{{i.name}}" title="{{i.name}}" style="{{i.style}}"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{i.path}}"></path></svg></button>
+            </sc-for>
+          </div>
+        </sc-if>
+        <sc-if value="{{f.isChoices}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <ul aria-labelledby="{{f.id}}" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px">
+              <sc-for list="{{f.choices}}" as="c" hint-placeholder-count="3">
+                <li style="display: flex; flex-direction: column; gap: 2px">
+                  <div style="height: 32px; box-sizing: border-box; padding: 0 4px 0 10px; display: flex; align-items: center; gap: 8px; background: var(--sub); border-radius: 4px"><span style="flex: 1">{{c.text}}</span><span style="font-size: 12px; color: var(--fg3)">{{c.count}}</span><button type="button" aria-label="Remove {{c.text}}" aria-disabled="{{c.locked}}" style="{{c.removeStyle}}">✕</button></div>
+                  <sc-if value="{{c.hasReason}}" hint-placeholder-val="{{false}}"><span style="padding-left: 10px; font-size: 12px; line-height: 16px; color: var(--fg3)">{{c.reason}}</span></sc-if>
+                </li>
+              </sc-for>
+            </ul>
+            <div style="display: flex; gap: 8px"><input aria-label="New choice" placeholder="Add a choice" style="flex: 1; min-width: 0; height: 32px; box-sizing: border-box; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit; outline: none"><button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Add</button></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{f.isTextarea}}" hint-placeholder-val="{{false}}">
+          <textarea id="{{f.id}}" rows="3" style="box-sizing: border-box; padding: 6px 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit; resize: vertical; outline: none">{{f.value}}</textarea>
+          <span style="align-self: flex-end; font-size: 12px; line-height: 16px; color: var(--fg3)">{{f.counter}}</span>
+        </sc-if>
+
+        <sc-if value="{{f.hasHint}}" hint-placeholder-val="{{false}}">
+          <span style="{{f.hintStyle}}">{{f.hint}}</span>
+        </sc-if>
+        <sc-if value="{{f.hasError}}" hint-placeholder-val="{{false}}">
+          <span style="display: flex; align-items: flex-start; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 4.5v4M8 11v.5"></path></svg>{{f.error}}</span>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 16px; border-top: 1px solid var(--st2)">
+    <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">{{primary}}</button>
+    <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"height":{"editor":"int","default":852},"mode":{"editor":"enum","options":["newtype","newtypeerror","addchoices","addlink","adderrors","editchoice","newrel"],"default":"addchoices"},"$preview":{"width":480,"height":852}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--sub:#f5f5f5;--brand:#8a5a00;--bbg2:#fcefd8;--cbrand:#8a5a00;--rdfg:#bc2f32;--rdbd:#bc2f32;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--wnfg:#8a3707;--fo:#000000;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--sub:#383838;--brand:#7d5200;--bbg2:#2c1d00;--cbrand:#c28a2a;--rdfg:#e37d80;--rdbd:#dc626d;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--wnfg:#f98845;--fo:#ffffff;';
+    const dark = this.props.dark ?? false;
+    const height = this.props.height ?? 852;
+    const mode = this.props.mode ?? 'addchoices';
+    const field = (o) => Object.assign({
+      isLabel: true, isLegend: false, isInput: false, isReadonly: false, isSelect: false, isRadio: false, isSwitch: false, isIcons: false, isChoices: false, isTextarea: false,
+      required: false, value: '', placeholder: '', hint: '', error: '', hasIcon: false, icon: '', options: [], icons: [], choices: [], counter: '', warn: false, mono: false
+    }, o);
+    const done = (f) => {
+      const invalid = f.error !== '';
+      const base = 'height: 32px; box-sizing: border-box; padding: 0 8px; background: var(--bg1); border: 1px solid ' + (invalid ? 'var(--rdbd)' : 'var(--st1)') + '; border-bottom: ' + (invalid ? '2px solid var(--rdbd)' : '1px solid var(--stacc)') + '; border-radius: 4px; color: var(--fg1); outline: none; ';
+      return Object.assign(f, {
+        invalid: invalid ? 'true' : 'false',
+        hasHint: f.hint !== '', hasError: invalid,
+        hintStyle: 'font-size: 12px; line-height: 16px; color: ' + (f.warn ? 'var(--wnfg)' : 'var(--fg3)'),
+        inputStyle: base + (f.mono ? 'font-family: Consolas, \'Cascadia Mono\', monospace; font-size: 14px' : 'font: inherit'),
+        readonlyStyle: 'height: 32px; box-sizing: border-box; padding: 0 8px; background: var(--sub); border: 1px solid transparent; border-radius: 4px; color: var(--fg2); outline: none; ' + (f.mono ? 'font-family: Consolas, \'Cascadia Mono\', monospace; font-size: 14px' : 'font: inherit'),
+        selectStyle: base + 'display: flex; align-items: center; gap: 8px; font: inherit; text-align: left',
+        selectText: 'flex: 1; color: ' + (f.placeholderShown ? 'var(--fg3)' : 'var(--fg1)'),
+        switchStyle: 'width: 40px; height: 20px; padding: 0; position: relative; border-radius: 10px; border: 1px solid ' + (f.checked === 'true' ? 'var(--cbrand)' : 'var(--fg2)') + '; background: ' + (f.checked === 'true' ? 'var(--cbrand)' : 'transparent'),
+        knobStyle: 'position: absolute; top: 3px; left: ' + (f.checked === 'true' ? '23px' : '3px') + '; width: 12px; height: 12px; border-radius: 50%; background: ' + (f.checked === 'true' ? '#ffffff' : 'var(--fg2)'),
+        options: f.options.map((o) => ({ label: o[0], checked: o[1] ? true : false, desc: o[2] ?? '', hasDesc: !!o[2] })),
+        choices: f.choices.map(([text, count, locked, reason]) => ({
+          text, count: count ?? '', locked: locked ? 'true' : 'false', reason: reason ?? '', hasReason: !!reason,
+          removeStyle: 'width: 28px; height: 28px; border: none; border-radius: 4px; background: transparent; font-size: 13px; ' + (locked ? 'color: var(--fgdis); cursor: not-allowed' : 'color: var(--fg2)')
+        }))
+      });
+    };
+    const ICONS = [
+      ['Generic', 'M10 2.5l7 4v7l-7 4-7-4v-7zM3 6.5l7 4 7-4M10 10.5v7'], ['Location', 'M10 17s-5-4.6-5-8.5a5 5 0 0 1 10 0C15 12.4 10 17 10 17zM10 10.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
+      ['Team', 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5'], ['Person', 'M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 17c0-3.3 2.7-5 6-5s6 1.7 6 5'],
+      ['Hypervisor manager', 'M4 3h12v8H4zM10 11v3M5 17h10M7 14h6'], ['Hypervisor cluster', 'M2 5h7v5H2zM11 5h7v5h-7zM6.5 13h7v5h-7z'], ['Hypervisor host', 'M3 4h14v12H3zM3 8h14M3 12h14'],
+      ['Chassis', 'M3 3h14v14H3zM6 6v8M9 6v8M12 6v8'], ['Virtual machine', 'M3 4h14v9H3zM7 16h6M10 13v3'], ['Server', 'M4 3h12v5H4zM4 11h12v5H4zM7 5.5h1M7 13.5h1'],
+      ['Appliance', 'M3 7l7-4 7 4v6l-7 4-7-4zM3 7l7 4 7-4M10 11v6'], ['Network device', 'M3 8h14v5H3zM6 10.5h.5M9 10.5h.5M12 5l2 3M8 5l-2 3'], ['Datastore', 'M4 4h12v4H4zM4 8h12v4H4zM4 12h12v4H4z'],
+      ['Storage group', 'M3 6h6v8H3zM11 6h6v8h-6zM9 10h2'], ['Storage array', 'M3 4h14v12H3zM3 8h14M3 12h14M6 6h.5M6 10h.5M6 14h.5'], ['Windows cluster', 'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z'],
+      ['Cluster network name', 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM2.5 10h15M10 2.5c2 2.2 3 4.7 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.7-3-7.5s1-5.3 3-7.5z'],
+      ['SQL instance', 'M4 5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5-2.7 2.5-6 2.5S4 6.4 4 5zM4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5'],
+      ['SQL availability group', 'M3 6c0-1.1 1.8-2 4-2s4 .9 4 2-1.8 2-4 2-4-.9-4-2zM3 6v7c0 1.1 1.8 2 4 2s4-.9 4-2V6M9 9c0-1.1 1.8-2 4-2s4 .9 4 2v7c0 1.1-1.8 2-4 2'],
+      ['SQL database', 'M5 6c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2zM5 6v8c0 1.1 2.2 2 5 2s5-.9 5-2V6M5 10c0 1.1 2.2 2 5 2s5-.9 5-2'], ['Business service', 'M3 7h14v9H3zM7 7V4.5h6V7']
+    ];
+    const iconGrid = (picked) => ICONS.map(([name, path]) => ({
+      name, path, checked: name === picked ? 'true' : 'false',
+      style: 'height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: var(--bg1); color: var(--fg2); ' + (name === picked ? 'border: 2px solid var(--cbrand); background: var(--bbg2); color: var(--fg1)' : 'border: 1px solid var(--st1)')
+    }));
+    const KINDS = (pick) => [['Text'], ['Number'], ['Yes/no'], ['Date'], ['List of choices'], ['Link to a CI']].map(([k]) => [k, k === pick]);
+    const nameHelp = 'Suggested from the label. Letters and digits, starting with a small letter. It can’t change later.';
+    const typeHelp = 'Letters and digits, starting with a capital: Printer, LoadBalancerPool. It can’t change later; the API and links use it.';
+    const SERVER = 'M4 3h12v5H4zM4 11h12v5H4zM7 5.5h1M7 13.5h1';
+    const ARRAY = 'M3 4h14v12H3zM3 8h14M3 12h14M6 6h.5M6 10h.5M6 14h.5';
+    let title = '';
+    let primary = 'Add';
+    let summary = null;
+    let fields = [];
+    if (mode === 'newtype' || mode === 'newtypeerror') {
+      const err = mode === 'newtypeerror';
+      title = 'New CI type';
+      primary = 'Create';
+      if (err) summary = ['The type isn’t created yet.', 'Fix the 2 fields marked below.'];
+      fields = [
+        field({ id: 'nt-name', label: 'Name', required: true, isInput: true, value: err ? 'VirtualMachine' : 'Printer', mono: true, hint: typeHelp, error: err ? 'A type with this name already exists.' : '' }),
+        field({ id: 'nt-group', label: 'Group', required: true, isSelect: true, value: err ? 'Choose a group' : 'Network', placeholderShown: err, error: err ? 'Choose a group.' : '' }),
+        field({ id: 'nt-icon', label: 'Icon', isLabel: false, isLegend: true, isIcons: true, icons: iconGrid(err ? 'Generic' : 'Network device'), hint: 'Shown beside the type’s CIs everywhere.' })
+      ];
+    } else if (mode === 'editchoice') {
+      title = 'Edit Backup tier';
+      primary = 'Save';
+      fields = [
+        field({ id: 'ea-label', label: 'Label', required: true, isInput: true, value: 'Backup tier' }),
+        field({ id: 'ea-name', label: 'Name', isReadonly: true, value: 'backupTier', mono: true, hint: 'It can’t change.' }),
+        field({ id: 'ea-kind', label: 'Kind', isReadonly: true, value: 'List of choices' }),
+        field({ id: 'ea-req', label: 'Required', isSwitch: true, checked: 'true', switchText: 'Every CI of this type needs a value', hint: 'CIs that have no value keep it until they’re next saved; then it must be filled in. 874 VirtualMachine CIs have no Backup tier.', warn: true }),
+        field({ id: 'ea-choices', label: 'Choices', isLabel: false, isLegend: true, required: true, isChoices: true, choices: [['Gold', '12 CIs', true, '12 CIs use Gold. Change them first.'], ['Silver', '210 CIs', true], ['Bronze', '108 CIs', true], ['Platinum', 'New', false]], hint: 'A choice in use can’t be removed.' })
+      ];
+    } else if (mode === 'newrel') {
+      title = 'New relationship type';
+      primary = 'Create';
+      fields = [
+        field({ id: 'nr-name', label: 'Name', required: true, isInput: true, value: 'replicates_to', mono: true, hint: 'Small letters, digits and _, starting with a letter: replicates_to. It can’t change later.' }),
+        field({ id: 'nr-from', label: 'From type', required: true, isSelect: true, value: 'StorageArray', hasIcon: true, icon: ARRAY, hint: 'The dependent CI. “Any type” is first in the list.' }),
+        field({ id: 'nr-to', label: 'To type', required: true, isSelect: true, value: 'StorageArray', hasIcon: true, icon: ARRAY, hint: 'The CI it depends on.' }),
+        field({ id: 'nr-impact', label: 'Impact', isLabel: false, isLegend: true, required: true, isRadio: true, options: [['Down', true, 'When the CI it points to is down, this CI is impacted.'], ['None', false, 'No impact passes along this relationship.']] }),
+        field({ id: 'nr-desc', label: 'Description', isTextarea: true, value: 'Array-based replication to a second array.', counter: '42 / 400' })
+      ];
+    } else {
+      const errors = mode === 'adderrors';
+      const link = mode === 'addlink';
+      title = 'Add attribute to VirtualMachine';
+      if (errors) summary = ['The attribute isn’t added yet.', 'Fix the 3 fields marked below.'];
+      fields = [
+        field({ id: 'aa-label', label: 'Label', required: true, isInput: true, value: errors ? 'Backup tier' : link ? 'Backup server' : 'Support tier', error: errors ? 'This label is already used.' : '' }),
+        field({ id: 'aa-name', label: 'Name', required: true, isInput: true, mono: true, value: errors ? 'backupTier' : link ? 'backupServer' : 'supportTier', hint: errors ? '' : nameHelp, error: errors ? 'This name is already used by another attribute of VirtualMachine.' : '' }),
+        field({ id: 'aa-kind', label: 'Kind', isLabel: false, isLegend: true, required: true, isRadio: true, options: KINDS(link ? 'Link to a CI' : 'List of choices'), hint: 'It can’t change later.' }),
+        field({ id: 'aa-req', label: 'Required', isSwitch: true, checked: 'false', switchText: 'Every CI of this type needs a value' })
+      ];
+      if (link) {
+        fields.push(field({ id: 'aa-target', label: 'Target type', required: true, isSelect: true, value: 'Server', hasIcon: true, icon: SERVER, hint: 'The CIs it can link to; “Any type” is first in the list. It can’t change later.' }));
+      } else {
+        fields.push(field({ id: 'aa-choices', label: 'Choices', isLabel: false, isLegend: true, required: true, isChoices: true, choices: errors ? [] : [['Platinum'], ['Gold'], ['Silver']], error: errors ? 'Add at least one choice.' : '' }));
+      }
+    }
+    return {
+      title, primary,
+      showSummary: !!summary, summaryLead: summary ? summary[0] : '', summaryRest: summary ? summary[1] : '',
+      fields: fields.map(done),
+      rootStyle: (dark ? DARK : LIGHT) + 'width: 480px; height: ' + height + 'px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg1); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px'
+    };
+  }
+}
+</script>
+</body>
+</html>

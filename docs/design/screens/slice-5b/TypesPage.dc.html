@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark Types and attributes page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="flex: none; position: relative; z-index: 3">
+    <dc-import name="TopBar" dark="{{dark}}" width="{{width}}" search="{{search}}" hint-size="{{width}}px,48px"></dc-import>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <div style="flex: none">
+      <dc-import name="Nav" dark="{{dark}}" width="{{width}}" height="{{bodyHeight}}" current="types" role="admin" hint-size="{{navWidth}}px,{{bodyHeight}}px"></dc-import>
+    </div>
+
+    <main aria-busy="{{busy}}" style="{{mainStyle}}">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span style="color: var(--fg2)">Administration</span><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">Types &amp; attributes</span></nav>
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">Types &amp; attributes</h1>
+
+      <div role="tablist" aria-label="Types and attributes sections" style="display: flex; gap: 4px; border-bottom: 1px solid var(--st2)">
+        <button type="button" role="tab" aria-selected="{{tabTypesSelected}}" style="{{tabTypesStyle}}">CI types</button>
+        <button type="button" role="tab" aria-selected="{{tabRelsSelected}}" style="{{tabRelsStyle}}">Relationship types</button>
+      </div>
+
+      <sc-if value="{{showError}}" hint-placeholder-val="{{false}}">
+        <div role="alert" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span style="flex: 1; min-width: 240px"><b>Couldn’t load the CI types.</b> Check your connection, then try again. <span style="color: var(--fg3)">Reference ID 0HN7Q2K4A1B3:00000012</span></span><button type="button" style="height: 28px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button></div>
+      </sc-if>
+
+      <sc-if value="{{showTypesTab}}" hint-placeholder-val="{{true}}">
+        <div style="flex: 1; min-height: 0; display: flex; gap: 24px">
+          <sc-if value="{{wide}}" hint-placeholder-val="{{true}}">
+            <div style="width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; min-height: 0">
+              <button type="button" aria-haspopup="dialog" style="align-self: flex-start; height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>New CI type</button>
+              <div role="search" style="height: 32px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input type="search" aria-label="Filter types" placeholder="Filter types" value="{{filterText}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></div>
+
+              <sc-if value="{{showListSkeleton}}" hint-placeholder-val="{{false}}">
+                <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 4px">
+                  <sc-for list="{{listSkeleton}}" as="s" hint-placeholder-count="10"><span style="{{s}}"></span></sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{showNoMatch}}" hint-placeholder-val="{{false}}">
+                <div role="status" style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px 4px">
+                  <span>No types match ‘prn’.</span>
+                  <button type="button" style="height: 28px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Clear filter</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{showList}}" hint-placeholder-val="{{true}}">
+                <div role="listbox" aria-label="CI types" style="flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px">
+                  <sc-for list="{{groups}}" as="g" hint-placeholder-count="6">
+                    <div role="group" aria-label="{{g.name}}" style="display: flex; flex-direction: column; gap: 1px">
+                      <div aria-hidden="true" style="padding: 4px 8px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{g.name}}</div>
+                      <sc-for list="{{g.items}}" as="t" hint-placeholder-count="4">
+                        <div role="option" aria-selected="{{t.selected}}" style="{{t.style}}"><span style="{{t.bar}}"></span><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{t.icon}}"></path></svg><span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{t.name}}</span><sc-if value="{{t.custom}}" hint-placeholder-val="{{false}}"><span style="height: 18px; padding: 0 6px; display: inline-flex; align-items: center; border-radius: 4px; background: var(--bbg2); color: var(--bfg1); font-size: 11px; line-height: 14px; font-weight: 600">Custom</span></sc-if><span style="font-size: 12px; color: var(--fg3); min-width: 40px; text-align: right">{{t.count}}</span></div>
+                      </sc-for>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <section aria-labelledby="type-title" style="flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 16px">
+            <sc-if value="{{narrow}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap">
+                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 240px">
+                  <label for="type-picker" style="font-weight: 600">CI type</label>
+                  <div style="height: 32px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{sel.icon}}"></path></svg><input id="type-picker" role="combobox" aria-expanded="false" value="{{sel.name}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" style="color: var(--fg2)"><path d="M5 8l5 5 5-5"></path></svg></div>
+                </div>
+                <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>New CI type</button>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{showDetailSkeleton}}" hint-placeholder-val="{{false}}">
+              <div style="display: flex; flex-direction: column; gap: 12px">
+                <span style="width: 260px; height: 28px; border-radius: 4px; background: var(--bg4)"></span>
+                <span style="width: 200px; height: 14px; border-radius: 3px; background: var(--bg4)"></span>
+                <div style="padding: 16px; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; display: flex; flex-direction: column; gap: 14px">
+                  <sc-for list="{{tableSkeleton}}" as="s" hint-placeholder-count="6"><span style="{{s}}"></span></sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{showDetails}}" hint-placeholder-val="{{true}}">
+              <div style="display: flex; flex-direction: column; gap: 16px; min-height: 0">
+                <div style="display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; position: relative">
+                  <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+                      <svg width="24" height="24" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--fg2)"><path d="{{sel.icon}}"></path></svg>
+                      <h2 id="type-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">{{sel.name}}</h2>
+                      <span style="{{sel.badgeStyle}}"><sc-if value="{{sel.builtIn}}" hint-placeholder-val="{{true}}"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5.5 9V6.5a4.5 4.5 0 0 1 9 0V9M4 9h12v8H4z"></path></svg></sc-if>{{sel.badge}}</span>
+                      <sc-if value="{{sel.hidden}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 3l14 14M8.5 5.2A8 8 0 0 1 18 10a9.4 9.4 0 0 1-2.3 2.9M5.4 6.4A9.2 9.2 0 0 0 2 10a8.3 8.3 0 0 0 11 4.4M8.2 8.3a2.5 2.5 0 0 0 3.5 3.5"></path></svg>Hidden</span></sc-if>
+                    </div>
+                    <span style="color: var(--fg3)">{{sel.group}} · <sc-if value="{{sel.hasCis}}" hint-placeholder-val="{{true}}"><a href="#" style="color: var(--blink)">{{sel.countText}}</a></sc-if><sc-if value="{{sel.noCis}}" hint-placeholder-val="{{false}}"><span>No CIs</span></sc-if></span>
+                  </div>
+                  <sc-if value="{{sel.custom}}" hint-placeholder-val="{{false}}">
+                    <button type="button" aria-label="More actions for {{sel.name}}" aria-haspopup="menu" aria-expanded="{{menuExpanded}}" style="{{menuButtonStyle}}"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M5 10h.01M10 10h.01M15 10h.01"></path></svg></button>
+                  </sc-if>
+                  <sc-if value="{{showMenu}}" hint-placeholder-val="{{false}}">
+                    <div role="menu" aria-label="More actions for {{sel.name}}" style="position: absolute; right: 0; top: 40px; width: 320px; box-sizing: border-box; padding: 4px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh16); z-index: 4">
+                      <div role="menuitem" style="height: 32px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 4px; background: var(--sub); color: var(--fg1)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="{{hideIcon}}"></path></svg><span>{{hideLabel}}</span></div>
+                      <div role="menuitem" aria-disabled="{{menuDisabled}}" style="{{menuItemStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M4 6h12M8 6V4h4v2M5.5 6l1 11h7l1-11"></path></svg><span>Delete type…</span></div>
+                      <sc-if value="{{menuReason}}" hint-placeholder-val="{{false}}">
+                        <p style="margin: 0; padding: 4px 8px 8px 32px; font-size: 12px; line-height: 16px; color: var(--fg3)">{{menuReasonText}}</p>
+                      </sc-if>
+                    </div>
+                  </sc-if>
+                </div>
+
+                <sc-if value="{{sel.hidden}}" hint-placeholder-val="{{false}}">
+                  <div role="status" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.6v.2"></path></svg><span style="flex: 1; min-width: 240px"><b>Hidden.</b> {{sel.name}} isn’t offered for new CIs or in Search’s type filter. {{sel.keepText}}</span><button type="button" style="height: 28px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Show again</button></div>
+                </sc-if>
+
+                <div style="display: flex; align-items: center; gap: 12px">
+                  <h3 style="margin: 0; flex: 1; font-size: 16px; line-height: 22px; font-weight: 600">Attributes</h3>
+                  <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>Add attribute</button>
+                </div>
+
+                <sc-if value="{{noAttributes}}" hint-placeholder-val="{{false}}">
+                  <div style="padding: 32px 24px; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+                    <span>This type has no attributes yet.</span>
+                    <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Add attribute</button>
+                  </div>
+                </sc-if>
+
+                <sc-if value="{{hasAttributes}}" hint-placeholder-val="{{true}}">
+                  <div style="position: relative; overflow-x: auto; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px">
+                    <table style="{{tableStyle}}">
+                      <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Attributes of {{sel.name}}</caption>
+                      <thead>
+                        <tr>
+                          <th scope="col" aria-sort="ascending" style="{{thFirst}}">Label <span aria-hidden="true">↑</span></th>
+                          <th scope="col" style="{{th}}">Name</th>
+                          <th scope="col" style="{{th}}">Kind</th>
+                          <th scope="col" style="{{th}}">Required</th>
+                          <th scope="col" style="{{th}}">Details</th>
+                          <th scope="col" style="{{thNum}}">CIs with a value</th>
+                          <th scope="col" style="{{th}}"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Source</span></th>
+                          <th scope="col" style="{{thActions}}"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <sc-for list="{{attributes}}" as="a" hint-placeholder-count="6">
+                          <tr>
+                            <td style="{{tdFirst}}"><span style="font-weight: 600">{{a.label}}</span></td>
+                            <td style="{{td}}"><code style="font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px">{{a.name}}</code></td>
+                            <td style="{{td}}">{{a.kind}}</td>
+                            <td style="{{td}}">{{a.required}}</td>
+                            <td style="{{tdDetails}}"><sc-if value="{{a.hasLink}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 4px"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--fg2)"><path d="{{a.linkIcon}}"></path></svg>{{a.details}}</span></sc-if><sc-if value="{{a.plainDetails}}" hint-placeholder-val="{{true}}"><span style="color: {{a.detailsColor}}">{{a.details}}</span></sc-if></td>
+                            <td style="{{tdNum}}">{{a.count}}</td>
+                            <td style="{{td}}"><span style="{{a.badgeStyle}}"><sc-if value="{{a.builtIn}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5.5 9V6.5a4.5 4.5 0 0 1 9 0V9M4 9h12v8H4z"></path></svg></sc-if>{{a.badge}}</span></td>
+                            <td style="{{tdActions}}">
+                              <div style="position: relative; display: flex; gap: 2px; justify-content: flex-end">
+                                <button type="button" aria-label="Edit {{a.label}}" aria-disabled="{{a.locked}}" title="{{a.reason}}" style="{{a.actionStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"></path></svg></button>
+                                <button type="button" aria-label="Delete {{a.label}}" aria-disabled="{{a.locked}}" title="{{a.reason}}" style="{{a.actionStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l1 11h7l1-11"></path></svg></button>
+                                <sc-if value="{{a.showTip}}" hint-placeholder-val="{{false}}">
+                                  <div role="tooltip" style="position: absolute; right: 0; top: 36px; width: 300px; box-sizing: border-box; padding: 8px 10px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); font-size: 12px; line-height: 16px; text-align: left; white-space: normal; z-index: 2">Built-in attributes can’t be changed: Goldmark and its collectors rely on them.</div>
+                                </sc-if>
+                              </div>
+                            </td>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </section>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showRelsTab}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 12px; min-height: 0">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+            <p style="margin: 0; flex: 1; min-width: 320px; color: var(--fg2)">The direction is always dependent → dependency: “A runs_on B” means A depends on B. Impact passes from B to A only when the type’s impact is Down.</p>
+            <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>New relationship type</button>
+          </div>
+          <div style="overflow-x: auto; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px">
+            <table style="{{relTableStyle}}">
+              <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Relationship types</caption>
+              <thead>
+                <tr>
+                  <th scope="col" style="{{thFirst}}">Name</th>
+                  <th scope="col" style="{{th}}">From</th>
+                  <th scope="col" style="{{th}}">To</th>
+                  <th scope="col" style="{{th}}"><span title="Down: when the CI it points to is down, this CI is impacted. None: no impact passes along this relationship.">Impact</span></th>
+                  <th scope="col" style="{{th}}">Description</th>
+                  <th scope="col" style="{{th}}"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Source</span></th>
+                  <th scope="col" style="{{thActions}}"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <sc-for list="{{rels}}" as="r" hint-placeholder-count="18">
+                  <tr>
+                    <td style="{{relTdFirst}}"><code style="font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 600">{{r.name}}</code></td>
+                    <td style="{{relTd}}"><span style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--fg2)"><path d="{{r.fromIcon}}"></path></svg>{{r.from}}</span></td>
+                    <td style="{{relTd}}"><span style="display: inline-flex; align-items: center; gap: 4px; white-space: nowrap"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="color: var(--fg2)"><path d="{{r.toIcon}}"></path></svg>{{r.to}}</span></td>
+                    <td style="{{relTd}}"><span style="{{r.impactStyle}}">{{r.impact}}</span></td>
+                    <td style="{{relTdDesc}}">{{r.description}}</td>
+                    <td style="{{relTd}}"><span style="{{r.badgeStyle}}"><sc-if value="{{r.builtIn}}" hint-placeholder-val="{{true}}"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M5.5 9V6.5a4.5 4.5 0 0 1 9 0V9M4 9h12v8H4z"></path></svg></sc-if>{{r.badge}}</span></td>
+                    <td style="{{relTdActions}}">
+                      <div style="display: flex; gap: 2px; justify-content: flex-end">
+                        <button type="button" aria-label="Edit {{r.name}}" aria-disabled="{{r.locked}}" title="{{r.reason}}" style="{{r.actionStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"></path></svg></button>
+                        <button type="button" aria-label="Delete {{r.name}}" aria-disabled="{{r.locked}}" title="{{r.reason}}" style="{{r.actionStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l1 11h7l1-11"></path></svg></button>
+                      </div>
+                    </td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+
+    <sc-if value="{{showPanel}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <aside role="dialog" aria-modal="true" aria-labelledby="panel-title" style="position: absolute; top: 0; right: 0; bottom: 0; width: 480px; box-sizing: border-box; background: var(--bg1); box-shadow: var(--sh64); display: flex; flex-direction: column">
+        <dc-import name="TypePanel" mode="{{panel}}" dark="{{dark}}" height="{{bodyHeight}}" hint-size="480px,{{bodyHeight}}px"></dc-import>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{dialog.show}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="cd-title" aria-describedby="cd-body" style="position: absolute; left: 50%; top: 140px; width: 480px; margin-left: -240px; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="cd-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">{{dialog.title}}</h2>
+        <p id="cd-body" style="margin: 0">{{dialog.body}}</p>
+        <sc-if value="{{dialog.typed}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <label for="cd-confirm" style="font-weight: 600">Type <code style="font-family: Consolas, 'Cascadia Mono', monospace">costCentre</code> to confirm</label>
+            <input id="cd-confirm" value="costCentre" style="height: 32px; box-sizing: border-box; padding: 0 8px; background: var(--bg1); border: 1px solid var(--st1); border-bottom: 2px solid var(--cbrand); border-radius: 4px; color: var(--fg1); font-family: Consolas, 'Cascadia Mono', monospace; font-size: 14px; outline: none">
+          </div>
+        </sc-if>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap">
+          <button type="button" style="{{dialog.secondaryStyle}}">{{dialog.secondary}}</button>
+          <button type="button" style="{{dialog.primaryStyle}}">{{dialog.primary}}</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{toast.show}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="position: absolute; right: 24px; bottom: 24px; width: 320px; box-sizing: border-box; padding: 12px 16px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh8); display: flex; align-items: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--gnfg)" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><span style="flex: 1; font-weight: 600">{{toast.text}}</span></div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"tab":{"editor":"enum","options":["types","relationships"],"default":"types"},"type":{"editor":"enum","options":["VirtualMachine","Server","Printer","PrinterUsed","Prnter","Datastore"],"default":"VirtualMachine"},"view":{"editor":"enum","options":["default","loading","error","nomatch"],"default":"default"},"panel":{"editor":"enum","options":["none","newtype","newtypeerror","addchoices","addlink","adderrors","editchoice","newrel"],"default":"none"},"dialog":{"editor":"enum","options":["none","deleteunused","deletetyped","deletetype","hidetype","deleterel","conflict"],"default":"none"},"menu":{"editor":"boolean","default":false},"tip":{"editor":"boolean","default":false},"toast":{"editor":"text","default":""},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--gnfg:#0e700e;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--dgbg:#c50f1f;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--gnfg:#54b054;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--dgbg:#c50f1f;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const p = this.props;
+    const dark = p.dark ?? false;
+    const width = p.width ?? 1440;
+    const height = p.height ?? 900;
+    const tab = p.tab ?? 'types';
+    const chosen = p.type ?? 'VirtualMachine';
+    const view = p.view ?? 'default';
+    const panel = p.panel ?? 'none';
+    const dialogKey = p.dialog ?? 'none';
+    const menu = p.menu ?? false;
+    const tip = p.tip ?? false;
+    const toastText = p.toast ?? '';
+    const wide = width >= 1100;
+    const bodyHeight = height - 48;
+    const used = chosen === 'PrinterUsed';
+    const selName = used ? 'Printer' : chosen;
+
+    const ICON = {
+      Location: 'M10 17s-5-4.6-5-8.5a5 5 0 0 1 10 0C15 12.4 10 17 10 17zM10 10.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z',
+      Team: 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5',
+      Person: 'M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 17c0-3.3 2.7-5 6-5s6 1.7 6 5',
+      HypervisorManager: 'M4 3h12v8H4zM10 11v3M5 17h10M7 14h6',
+      HypervisorCluster: 'M2 5h7v5H2zM11 5h7v5h-7zM6.5 13h7v5h-7z',
+      HypervisorHost: 'M3 4h14v12H3zM3 8h14M3 12h14',
+      Chassis: 'M3 3h14v14H3zM6 6v8M9 6v8M12 6v8',
+      VirtualMachine: 'M3 4h14v9H3zM7 16h6M10 13v3',
+      Server: 'M4 3h12v5H4zM4 11h12v5H4zM7 5.5h1M7 13.5h1',
+      Appliance: 'M3 7l7-4 7 4v6l-7 4-7-4zM3 7l7 4 7-4M10 11v6',
+      NetworkDevice: 'M3 8h14v5H3zM6 10.5h.5M9 10.5h.5M12 5l2 3M8 5l-2 3',
+      Printer: 'M10 2.5l7 4v7l-7 4-7-4v-7zM3 6.5l7 4 7-4M10 10.5v7',
+      Prnter: 'M10 2.5l7 4v7l-7 4-7-4v-7zM3 6.5l7 4 7-4M10 10.5v7',
+      Datastore: 'M4 4h12v4H4zM4 8h12v4H4zM4 12h12v4H4z',
+      StorageGroup: 'M3 6h6v8H3zM11 6h6v8h-6zM9 10h2',
+      StorageArray: 'M3 4h14v12H3zM3 8h14M3 12h14M6 6h.5M6 10h.5M6 14h.5',
+      WindowsCluster: 'M3 3h6v6H3zM11 3h6v6h-6zM3 11h6v6H3zM11 11h6v6h-6z',
+      ClusterNetworkName: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM2.5 10h15M10 2.5c2 2.2 3 4.7 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.7-3-7.5s1-5.3 3-7.5z',
+      SqlInstance: 'M4 5c0-1.4 2.7-2.5 6-2.5s6 1.1 6 2.5-2.7 2.5-6 2.5S4 6.4 4 5zM4 5v10c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V5',
+      SqlAvailabilityGroup: 'M3 6c0-1.1 1.8-2 4-2s4 .9 4 2-1.8 2-4 2-4-.9-4-2zM3 6v7c0 1.1 1.8 2 4 2s4-.9 4-2V6M9 9c0-1.1 1.8-2 4-2s4 .9 4 2v7c0 1.1-1.8 2-4 2',
+      SqlDatabase: 'M5 6c0-1.1 2.2-2 5-2s5 .9 5 2-2.2 2-5 2-5-.9-5-2zM5 6v8c0 1.1 2.2 2 5 2s5-.9 5-2V6M5 10c0 1.1 2.2 2 5 2s5-.9 5-2',
+      BusinessService: 'M3 7h14v9H3zM7 7V4.5h6V7',
+      Any: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM7 10h6'
+    };
+    const TYPES = [
+      ['Location & ownership', [['Location', 27], ['Person', 12], ['Team', 8]]],
+      ['Compute', [['Appliance', 6], ['Chassis', 4], ['HypervisorCluster', 6], ['HypervisorHost', 48], ['HypervisorManager', 2], ['Server', 962], ['VirtualMachine', 1204]]],
+      ['Network', [['NetworkDevice', 36], ['Printer', used ? 3 : 0, true]]],
+      ['Storage', [['Datastore', 64], ['StorageArray', 5], ['StorageGroup', 9]]],
+      ['Clustering & SQL', [['ClusterNetworkName', 14], ['SqlAvailabilityGroup', 6], ['SqlDatabase', 240], ['SqlInstance', 31], ['WindowsCluster', 7]]],
+      ['Business', [['BusinessService', 18]]],
+      ['Hidden', [['Prnter', 1, true, 'Network']]]
+    ];
+    const fmt = (n) => n.toLocaleString('en-US');
+    let selGroup = '';
+    let selCount = 0;
+    let selCustom = false;
+    let selHidden = false;
+    const groups = TYPES.map(([name, items]) => ({
+      name,
+      items: items.map(([t, count, custom, realGroup]) => {
+        const selected = t === selName;
+        if (selected) { selGroup = realGroup ?? name; selCount = count; selCustom = !!custom; selHidden = !!realGroup; }
+        return {
+          name: t, icon: ICON[t], count: fmt(count), custom: !!custom, selected: selected ? 'true' : 'false',
+          style: 'position: relative; height: 30px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 4px; ' + (selected ? 'background: var(--bbg2); font-weight: 600; color: var(--fg1)' : 'color: var(--fg1)'),
+          bar: selected ? 'position: absolute; left: 0; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--bfg1)' : 'display: none'
+        };
+      })
+    }));
+
+    const badge = (builtIn) => builtIn
+      ? 'display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600; white-space: nowrap'
+      : 'display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; background: var(--bbg2); color: var(--bfg1); font-size: 12px; font-weight: 600; white-space: nowrap';
+    const action = (locked) => 'width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; ' + (locked ? 'color: var(--fgdis); cursor: not-allowed' : 'color: var(--fg2)');
+
+    const ATTRS = {
+      VirtualMachine: [
+        ['Backup tier', 'backupTier', 'List of choices', 'No', 'Gold, Silver, Bronze', null, '330'],
+        ['Cost centre', 'costCentre', 'Text', 'Yes', '', null, '812'],
+        ['Monitored', 'monitored', 'Yes/no', 'No', '', null, '1,150'],
+        ['Patch window starts', 'patchWindowStarts', 'Date', 'No', '', null, '402'],
+        ['Supports service', 'supportsService', 'Link to a CI', 'No', 'BusinessService', 'BusinessService', '288'],
+        ['vCPUs reserved', 'vcpusReserved', 'Number', 'No', '', null, '640']
+      ],
+      Server: [['Platform', 'platform', 'List of choices', 'No', 'physical, vmware, hyperv, xen, cloud, other', null, '962', true]],
+      Printer: [
+        ['Location code', 'locationCode', 'Text', 'No', '', null, used ? '3' : '0'],
+        ['Toner level', 'tonerLevel', 'Number', 'No', '', null, used ? '2' : '0']
+      ],
+      Datastore: [],
+      Prnter: []
+    };
+    const attributes = (ATTRS[selName] ?? []).map(([label, name, kind, required, details, link, count, builtIn], i) => ({
+      label, name, kind, required, count,
+      details: details || 'None',
+      detailsColor: details ? 'var(--fg1)' : 'var(--fg3)',
+      hasLink: !!link, plainDetails: !link, linkIcon: link ? ICON[link] : '',
+      builtIn: !!builtIn, badge: builtIn ? 'Built in' : 'Custom', badgeStyle: badge(!!builtIn),
+      locked: builtIn ? 'true' : 'false',
+      reason: builtIn ? 'Built-in attributes can’t be changed: Goldmark and its collectors rely on them.' : '',
+      actionStyle: action(!!builtIn),
+      showTip: tip && i === 0 && !!builtIn
+    }));
+
+    const relIcon = (t) => ICON[t] ?? ICON.Any;
+    const REL = [
+      ['backed_by', 'Datastore', 'StorageGroup', 'Down', 'A datastore is backed by an FC storage group (found automatically).'],
+      ['cluster_node_of', 'WindowsCluster', 'Server', 'Down', 'A Windows cluster’s node. Grouped by cluster: the cluster is down only if all its nodes are down.'],
+      ['database_of', 'SqlDatabase', 'SqlInstance', 'Down', 'A database outside an availability group, on its instance.'],
+      ['depends_on', 'Any type', 'Any type', 'Down', 'A general dependency, set by hand.'],
+      ['hosted_on', 'SqlInstance', 'Server', 'Down', 'A SQL Server instance runs on a server.'],
+      ['housed_in', 'HypervisorHost', 'Chassis', 'Down', 'A blade host sits in a chassis.'],
+      ['in_ag', 'SqlDatabase', 'SqlAvailabilityGroup', 'Down', 'A database in an availability group.'],
+      ['listener_for', 'ClusterNetworkName', 'SqlAvailabilityGroup', 'Down', 'An availability group’s listener name.'],
+      ['member_of_cluster', 'HypervisorHost', 'HypervisorCluster', 'None', 'A host is a member of a cluster. Carries no impact.'],
+      ['os_of', 'Server', 'VirtualMachine', 'Down', 'The operating system running in a VM.'],
+      ['owned_by', 'Any type', 'Team or Person', 'None', 'Who owns the CI: a team or a person. Carries no impact.'],
+      ['part_of_array', 'StorageGroup', 'StorageArray', 'Down', 'A storage group belongs to a storage array (mapped by hand).'],
+      ['replica_on', 'SqlAvailabilityGroup', 'SqlInstance', 'Down', 'An availability group has a replica on this SQL instance. Grouped by availability group: the group is down only if all its replicas are down.'],
+      ['runs_on', 'VirtualMachine', 'HypervisorHost', 'Down', 'A VM runs on a hypervisor host.'],
+      ['uplinks_to', 'HypervisorHost', 'NetworkDevice', 'Down', 'A host’s uplink to a switch. Grouped by virtual switch: the host loses the network only if all its uplinks are down.'],
+      ['uses_datastore', 'VirtualMachine', 'Datastore', 'Down', 'A VM keeps its disks on a datastore.'],
+      ['virtualizes', 'StorageArray', 'StorageArray', 'Down', 'A virtualizing array (SVC) presents a back-end array’s storage.']
+    ];
+    const rels = REL.map((r) => [...r, true]).concat([['replicates_to', 'StorageArray', 'StorageArray', 'Down', 'Array-based replication to a second array.', false]]).map(([name, from, to, impact, description, builtIn]) => ({
+      name, from, to, impact, description,
+      fromIcon: relIcon(from), toIcon: to === 'Team or Person' ? ICON.Team : relIcon(to),
+      impactStyle: impact === 'Down'
+        ? 'display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; background: var(--bbg2); color: var(--bfg1); font-size: 12px; font-weight: 600'
+        : 'display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); color: var(--sbfg); font-size: 12px; font-weight: 600',
+      builtIn, badge: builtIn ? 'Built in' : 'Custom', badgeStyle: badge(builtIn),
+      locked: builtIn ? 'true' : 'false',
+      reason: builtIn ? 'Built-in relationship types can’t be changed: Goldmark and its collectors rely on them.' : '',
+      actionStyle: action(builtIn)
+    }));
+
+    const cell = 'padding: 0 12px; height: 44px; border-bottom: 1px solid var(--st2); text-align: left; vertical-align: middle; white-space: nowrap';
+    const head = 'padding: 0 12px; height: 36px; border-bottom: 1px solid var(--st2); text-align: left; font-weight: 600; color: var(--fg2); white-space: nowrap; position: relative';
+    const loading = view === 'loading';
+    const error = view === 'error';
+    const dialogs = {
+      deleteunused: { title: 'Delete Toner level?', body: 'No CI has a value for it.', secondary: 'Cancel', primary: 'Delete', danger: true },
+      deletetyped: { title: 'Delete Cost centre?', body: '812 CIs of type VirtualMachine have a value for Cost centre (retired ones included). Deleting it removes those values from the CIs; each CI’s history keeps them. Each of those CIs will show as changed by you. This can’t be undone.', secondary: 'Cancel', primary: 'Delete attribute', danger: true, typed: true },
+      deletetype: { title: 'Delete Printer?', body: 'No CIs have this type. Its 2 attributes are deleted with it.', secondary: 'Cancel', primary: 'Delete', danger: true },
+      hidetype: { title: 'Hide ' + selName + '?', body: 'It’s no longer offered for new CIs or in Search’s type filter. Its ' + fmt(selCount) + (selCount === 1 ? ' CI keeps' : ' CIs keep') + ' working, and you can show the type again.', secondary: 'Cancel', primary: 'Hide type', danger: false },
+      deleterel: { title: 'Delete replicates_to?', body: 'No relationships use it.', secondary: 'Cancel', primary: 'Delete', danger: true },
+      conflict: { title: 'This attribute changed while you were editing', body: 'Morgan Okafor changed Backup tier 2 minutes ago (Choices). Review their changes, or discard yours.', secondary: 'Discard mine', primary: 'Review their changes', danger: false }
+    };
+    const d = dialogs[dialogKey];
+    const secondaryStyle = 'height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600' + (d && d.danger ? '; outline: 2px solid var(--fo); outline-offset: 1px' : '');
+    const primaryStyle = 'height: 32px; padding: 0 16px; border: none; border-radius: 4px; color: #ffffff; font: inherit; font-weight: 600; background: ' + (d && d.danger ? 'var(--dgbg)' : 'var(--brand)') + (d && !d.danger ? '; outline: 2px solid var(--fo); outline-offset: 1px' : '');
+
+    return {
+      dark, width, bodyHeight, wide, narrow: !wide,
+      navWidth: wide ? 260 : 48,
+      search: wide ? 'box' : 'icon',
+      busy: loading ? 'true' : 'false',
+      rootStyle: (dark ? DARK : LIGHT) + 'width: ' + width + 'px; height: ' + height + 'px; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px; overflow: hidden',
+      mainStyle: 'flex: 1; min-width: 0; padding: ' + (wide ? 24 : 16) + 'px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow: hidden',
+      tabTypesSelected: tab === 'types' ? 'true' : 'false',
+      tabRelsSelected: tab === 'relationships' ? 'true' : 'false',
+      tabTypesStyle: 'height: 40px; padding: 0 12px; border: none; background: transparent; font: inherit; color: var(--fg1); ' + (tab === 'types' ? 'font-weight: 600; box-shadow: inset 0 -3px 0 var(--bfg1)' : 'color: var(--fg2)'),
+      tabRelsStyle: 'height: 40px; padding: 0 12px; border: none; background: transparent; font: inherit; color: var(--fg1); ' + (tab === 'relationships' ? 'font-weight: 600; box-shadow: inset 0 -3px 0 var(--bfg1)' : 'color: var(--fg2)'),
+      showError: error,
+      showTypesTab: tab === 'types' && !error,
+      showRelsTab: tab === 'relationships',
+      filterText: view === 'nomatch' ? 'prn' : '',
+      showListSkeleton: loading,
+      listSkeleton: Array.from({ length: 12 }, (_, i) => 'height: 14px; border-radius: 3px; background: var(--bg4); width: ' + [60, 190, 150, 170, 60, 200, 160, 180, 140, 60, 170, 150][i] + 'px'),
+      showNoMatch: view === 'nomatch',
+      showList: !loading && view !== 'nomatch',
+      groups,
+      showDetailSkeleton: loading,
+      tableSkeleton: Array.from({ length: 6 }, (_, i) => 'height: 14px; border-radius: 3px; background: var(--bg4); width: ' + [90, 80, 85, 70, 88, 76][i] + '%'),
+      showDetails: !loading,
+      sel: {
+        name: selName, icon: ICON[selName], group: selGroup,
+        builtIn: !selCustom, custom: selCustom, badge: selCustom ? 'Custom' : 'Built in', badgeStyle: badge(!selCustom),
+        hidden: selHidden,
+        keepText: 'Its ' + fmt(selCount) + (selCount === 1 ? ' CI keeps' : ' CIs keep') + ' working.',
+        hasCis: selCount > 0, noCis: selCount === 0, countText: fmt(selCount) + (selCount === 1 ? ' CI' : ' CIs')
+      },
+      showMenu: menu && selCustom,
+      menuExpanded: menu ? 'true' : 'false',
+      menuButtonStyle: 'width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid ' + (menu ? 'var(--st1)' : 'transparent') + '; border-radius: 4px; background: ' + (menu ? 'var(--sub)' : 'transparent') + '; color: var(--fg2)',
+      hideLabel: selHidden ? 'Show again' : 'Hide type…',
+      hideIcon: selHidden ? 'M2 10s3-6 8-6 8 6 8 6-3 6-8 6-8-6-8-6zM10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z' : 'M3 3l14 14M8.5 5.2A8 8 0 0 1 18 10a9.4 9.4 0 0 1-2.3 2.9M5.4 6.4A9.2 9.2 0 0 0 2 10a8.3 8.3 0 0 0 11 4.4M8.2 8.3a2.5 2.5 0 0 0 3.5 3.5',
+      menuDisabled: selCount > 0 ? 'true' : 'false',
+      menuReason: selCount > 0,
+      menuReasonText: selName + ' has ' + fmt(selCount) + (selCount === 1 ? ' CI' : ' CIs') + ' (retired ones included), so it can’t be deleted.' + (selHidden ? '' : ' Hide it instead to take it out of the pickers.'),
+      menuItemStyle: 'height: 32px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 4px; ' + (selCount > 0 ? 'color: var(--fgdis)' : 'color: var(--fg1)'),
+      noAttributes: attributes.length === 0,
+      hasAttributes: attributes.length > 0,
+      attributes,
+      tableStyle: 'width: 100%; min-width: ' + (wide ? 0 : 900) + 'px; border-collapse: collapse; font-size: 14px',
+      thFirst: head + '; padding-left: 16px',
+      th: head,
+      thNum: head + '; text-align: right',
+      thActions: head + '; width: 80px',
+      tdFirst: cell + '; padding-left: 16px',
+      td: cell,
+      tdDetails: cell + '; white-space: normal; max-width: 260px',
+      tdNum: cell + '; text-align: right; font-variant-numeric: tabular-nums',
+      tdActions: cell + '; padding: 0 8px',
+      rels,
+      relTableStyle: 'width: 100%; min-width: 1040px; border-collapse: collapse; font-size: 14px',
+      relTdFirst: cell + '; height: 48px; padding-left: 16px',
+      relTd: cell + '; height: 48px',
+      relTdDesc: cell + '; height: 48px; white-space: normal; min-width: 280px; padding-top: 6px; padding-bottom: 6px',
+      relTdActions: cell + '; height: 48px; padding: 0 8px',
+      showPanel: panel !== 'none',
+      panel,
+      dialog: d ? { show: true, title: d.title, body: d.body, typed: !!d.typed, secondary: d.secondary, primary: d.primary, secondaryStyle, primaryStyle } : { show: false },
+      toast: { show: toastText !== '', text: toastText }
+    };
+  }
+}
+</script>
+</body>
+</html>

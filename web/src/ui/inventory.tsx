@@ -26,12 +26,18 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react';
 import { api, ApiError, type SessionUser } from '../api';
 
 /**
- * CIs and their types in the web app (slice 5; screens 4 and 5; DEC-044): the API's shapes, the types
- * loaded once per page, the type icons and badges, and attribute values in words. The boards are
- * `docs/design/screens/slice-5/`.
+ * CIs and their types in the web app (slice 5; screens 4 and 5; DEC-044; screen 14 in slice 5b, DEC-045): the
+ * API's shapes, the types loaded once per page, the type icons and badges, and attribute values in words. The
+ * boards are `docs/design/screens/slice-5/` and `slice-5b/`.
  */
 
 export type AttributeKind = 'string' | 'number' | 'bool' | 'date' | 'enum' | 'ciRef';
+
+/** Who changed a definition or a CI last; the name is null when the account no longer exists. */
+export interface ChangedBy {
+  id: string | null;
+  displayName: string | null;
+}
 
 export interface AttributeDef {
   name: string;
@@ -41,6 +47,10 @@ export interface AttributeDef {
   choices: string[] | null;
   refType: string | null;
   builtIn: boolean;
+  /** Its version, for If-Match (slice 5b). */
+  eTag: string;
+  changedBy: ChangedBy | null;
+  changedAt: string | null;
 }
 
 export interface CiType {
@@ -49,8 +59,44 @@ export interface CiType {
   category: string | null;
   icon: string | null;
   builtIn: boolean;
+  /** Hidden custom types take no new CIs and leave the type pickers (DEC-045 item 5). */
+  hidden: boolean;
   attributes: AttributeDef[];
 }
+
+/** A relationship type (PRD §9.4), dependent → dependency; a null end is any type. */
+export interface RelationshipType {
+  id: number;
+  name: string;
+  from: string | null;
+  to: string | null;
+  impact: 'Down' | 'None';
+  builtIn: boolean;
+  description: string | null;
+  eTag: string;
+  changedBy: ChangedBy | null;
+  changedAt: string | null;
+}
+
+/** Screen 14's counts: CIs per type (retired ones included), values per attribute and choice. */
+export interface TypesUsage {
+  types: {
+    name: string;
+    cis: number;
+    attributes: { name: string; values: number; choices: Record<string, number> | null }[];
+  }[];
+  relationshipTypes: { name: string; relationships: number }[];
+}
+
+/** The attribute kinds in the boards' words. */
+export const kindLabels: Record<AttributeKind, string> = {
+  string: 'Text',
+  number: 'Number',
+  bool: 'Yes/no',
+  date: 'Date',
+  enum: 'List of choices',
+  ciRef: 'Link to a CI',
+};
 
 export interface CiSummary {
   id: string;
@@ -82,7 +128,7 @@ export interface CiDetail {
   attributes: Record<string, unknown>;
   references: Record<string, CiReference>;
   changedAt: string;
-  changedBy: { id: string | null; displayName: string | null } | null;
+  changedBy: ChangedBy | null;
   eTag: string;
 }
 
@@ -103,7 +149,7 @@ export function asApiError(error: unknown): ApiError {
   return error instanceof ApiError ? error : new ApiError(0, 'unexpected', 'Something went wrong on this page.');
 }
 
-/** The CI types with their attributes, read when a page opens (an Admin may add an attribute at any time). */
+/** The CI types with their attributes, read when a page opens (an Admin may change them at any time). */
 export function useCiTypes(): { types: CiType[] | null; failure: ApiError | null; reload: () => void } {
   const [types, setTypes] = useState<CiType[] | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
@@ -138,7 +184,38 @@ const icons: Record<string, ReactElement> = {
   'sql-availability-group': <DatabaseMultipleRegular />,
   'sql-database': <TableRegular />,
   'business-service': <BriefcaseRegular />,
+  generic: <CubeRegular />,
 };
+
+/** The icons a custom type can have (the API's list), with the names the icon picker gives them. */
+export const typeIcons: { key: string; name: string }[] = [
+  { key: 'generic', name: 'Generic' },
+  { key: 'location', name: 'Location' },
+  { key: 'team', name: 'Team' },
+  { key: 'person', name: 'Person' },
+  { key: 'hypervisor-manager', name: 'Hypervisor manager' },
+  { key: 'hypervisor-cluster', name: 'Hypervisor cluster' },
+  { key: 'hypervisor-host', name: 'Hypervisor host' },
+  { key: 'chassis', name: 'Chassis' },
+  { key: 'virtual-machine', name: 'Virtual machine' },
+  { key: 'server', name: 'Server' },
+  { key: 'appliance', name: 'Appliance' },
+  { key: 'network-device', name: 'Network device' },
+  { key: 'datastore', name: 'Datastore' },
+  { key: 'storage-group', name: 'Storage group' },
+  { key: 'storage-array', name: 'Storage array' },
+  { key: 'windows-cluster', name: 'Windows cluster' },
+  { key: 'cluster-network-name', name: 'Cluster network name' },
+  { key: 'sql-instance', name: 'SQL instance' },
+  { key: 'sql-availability-group', name: 'SQL availability group' },
+  { key: 'sql-database', name: 'SQL database' },
+  { key: 'business-service', name: 'Business service' },
+];
+
+/** An icon by its key, for the icon picker. */
+export function IconByKey({ icon }: { icon: string }) {
+  return <span aria-hidden="true">{icons[icon] ?? <CubeRegular />}</span>;
+}
 
 /** A type's icon, by its key or, before the types have loaded, by the built-in type's name. */
 export function TypeIcon({ type, types }: { type: string; types: CiType[] | null }) {
@@ -215,6 +292,8 @@ export function fieldMessage(code: string, attribute: AttributeDef | null): stri
       return `Choose a ${attribute?.refType ?? 'CI'}.`;
     case 'UnknownAttribute':
       return 'This attribute was removed from the type. Reload the page.';
+    case 'HiddenType':
+      return 'This type is hidden, so it takes no new CIs. Choose another type.';
     default:
       return 'This value isn’t valid.';
   }

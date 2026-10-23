@@ -38,6 +38,7 @@ import {
   NavigationRegular,
   PeopleRegular,
   SearchRegular,
+  ShapesRegular,
   ShieldCheckmarkRegular,
   SignOutRegular,
   WeatherMoonRegular,
@@ -234,6 +235,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     { value: 'search', label: 'Search', group: 'Inventory', path: '/search', icon: <SearchRegular /> },
     ...(isAdmin(user)
       ? [
+          // Slice 5b (screen 14): first in the group, Admin only.
+          {
+            value: 'types',
+            label: 'Types & attributes',
+            group: 'Administration',
+            path: '/types',
+            icon: <ShapesRegular />,
+          },
           {
             value: 'users',
             label: 'Users & roles',
