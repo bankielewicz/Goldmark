@@ -50,15 +50,6 @@ internal static class RotateCredentialsCommand
         EXEC sys.sp_executesql @sql, N'@action nvarchar(64), @logins nvarchar(max)', @action = @action, @logins = @logins;
         """;
 
-    // One rotation at a time (Codex on #39): two interleaved runs could leave a file and its login with different
-    // passwords. Session-owned, in master: released when the connection closes. A second run doesn't wait.
-    private const string LockSql = """
-        DECLARE @result int;
-        EXEC @result = sys.sp_getapplock @Resource = N'goldmark:rotate-db-credentials', @LockMode = N'Exclusive',
-            @LockOwner = N'Session', @LockTimeout = 0;
-        SELECT @result;
-        """;
-
     private sealed record Target(string Purpose, string Setting, string File, string Login, string? Marker);
 
     public static async Task<int> RunAsync(IConfiguration configuration, TextWriter output, TextWriter error)
@@ -70,6 +61,7 @@ internal static class RotateCredentialsCommand
         var service = configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>() ?? new ServiceOptions();
         var targets = new List<Target>();
         LoginCredential? generatedAdmin = null;
+        var fingerprint = "";
         if (errors.Count == 0)
         {
             // The modes decide which logins are Goldmark's to rotate (Codex on #39).
@@ -89,6 +81,7 @@ internal static class RotateCredentialsCommand
             }
 
             await FinishStagedAdministratorAsync(db, bootstrap.AdminCredentialFile, bootstrap.WaitSeconds, output, Name);
+            fingerprint = CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile);
             if (!string.IsNullOrWhiteSpace(bootstrap.AdminCredentialFile) && CredentialFile.Exists(bootstrap.AdminCredentialFile))
             {
                 if (CredentialFile.TryRead(bootstrap.AdminCredentialFile, out var admin, out var problem))
@@ -135,9 +128,15 @@ internal static class RotateCredentialsCommand
                 return await RefuseAsync(error, "the administrator needs CONTROL SERVER (for example sysadmin). Nothing was changed.");
             }
 
-            if (int.Parse(await ScalarAsync(connection, LockSql) ?? "-1", System.Globalization.CultureInfo.InvariantCulture) < 0)
+            // One writer of the credentials at a time, bootstrap-db included (CredentialLock).
+            if (int.Parse(await ScalarAsync(connection, CredentialLock.Sql) ?? "-1", System.Globalization.CultureInfo.InvariantCulture) < 0)
             {
-                return await RefuseAsync(error, "another rotate-db-credentials run is in progress; run this again when it has finished. Nothing was changed.");
+                return await RefuseAsync(error, CredentialLock.Held);
+            }
+
+            if (CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile) != fingerprint)
+            {
+                return await RefuseAsync(error, CredentialLock.Changed);
             }
 
             // 1. Read-only: every login must be one Goldmark manages, before anything changes.

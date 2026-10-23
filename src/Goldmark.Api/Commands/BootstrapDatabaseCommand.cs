@@ -326,6 +326,7 @@ internal static class BootstrapDatabaseCommand
         var service = new ServiceOptions();
         var sources = (Runtime: CredentialSource.Settings, Migration: CredentialSource.Settings);
         LoginCredential? generatedAdmin = null;
+        var fingerprint = "";
         if (errors.Count == 0)
         {
             db = configuration.GetSection(DatabaseOptions.SectionName).Get<DatabaseOptions>() ?? db;
@@ -334,6 +335,7 @@ internal static class BootstrapDatabaseCommand
             service = configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>() ?? service;
             var audit = configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>() ?? new AuditOptions();
             await RotateCredentialsCommand.FinishStagedAdministratorAsync(db, bootstrap.AdminCredentialFile, bootstrap.WaitSeconds, output, Name);
+            fingerprint = CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile);
             errors = PlanCredentials(db, migration, bootstrap, out sources, out generatedAdmin);
             if (errors.Count == 0)
             {
@@ -401,6 +403,18 @@ internal static class BootstrapDatabaseCommand
                 return await RefuseAsync(error,
                     $"the administrator login '{adminName}' needs CONTROL SERVER (for example sysadmin) to audit and provision " +
                     "Goldmark's logins. Nothing was changed.");
+            }
+
+            // One writer of the credentials at a time, rotate-db-credentials included, and the files still those
+            // planned above, which were read before this connection could be opened (CredentialLock).
+            if (await ScalarAsync(connection, CredentialLock.Sql, db) < 0)
+            {
+                return await RefuseAsync(error, CredentialLock.Held);
+            }
+
+            if (CredentialLock.Fingerprint(db.CredentialFile, migration.CredentialFile, bootstrap.AdminCredentialFile) != fingerprint)
+            {
+                return await RefuseAsync(error, CredentialLock.Changed);
             }
 
             if (await ScalarAsync(connection, ServerVersionSql, db) is var major and < MinimumMajorVersion)

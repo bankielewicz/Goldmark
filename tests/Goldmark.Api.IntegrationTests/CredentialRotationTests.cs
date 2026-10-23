@@ -39,7 +39,7 @@ public sealed class CredentialRotationTests(SqlServerFixture sql)
         sql.AdminScalarAsync<int>("master", $"SELECT PWDCOMPARE(N'{password}', password_hash) FROM sys.sql_logins WHERE name = N'{login}';");
 
     [Fact]
-    public async Task A_second_rotation_while_one_runs_is_refused_with_nothing_changed()
+    public async Task A_rotation_while_another_credential_writer_runs_is_refused_with_nothing_changed()
     {
         // Codex on #39: two interleaved runs could leave a file and its login with different passwords.
         var installation = sql.NewInstallation();
@@ -47,19 +47,39 @@ public sealed class CredentialRotationTests(SqlServerFixture sql)
         var provisioned = await sql.RunAsync(installation, ["bootstrap-db", "migrate"], FromFiles(files));
         Assert.True(provisioned.Code == 0, provisioned.ToString());
         var before = (Read(files.Runtime), Read(files.Migration));
-        await using var running = await sql.OpenAsync(SqlServerFixture.AdminUser, sql.AdminPassword, "master");
-        await using (var take = running.CreateCommand())
-        {
-            take.CommandText = "EXEC sys.sp_getapplock @Resource = N'goldmark:rotate-db-credentials', @LockMode = N'Exclusive', @LockOwner = N'Session';";
-            await take.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
-        }
+        await using var running = await HoldCredentialLockAsync();
 
         var refused = await sql.RunAsync(installation, ["rotate-db-credentials"], FromFiles(files));
 
         Assert.Equal(3, refused.Code);
-        Assert.Contains("another rotate-db-credentials run is in progress", refused.Error, StringComparison.Ordinal);
+        Assert.Contains("another bootstrap-db or rotate-db-credentials run is changing Goldmark's logins", refused.Error, StringComparison.Ordinal);
         Assert.Equal(before, (Read(files.Runtime), Read(files.Migration)));
         Assert.Equal(1, await PasswordMatchesAsync(before.Item1.User, before.Item1.Password));
+    }
+
+    [Fact]
+    public async Task Bootstrap_db_while_another_credential_writer_runs_is_refused_before_creating_anything()
+    {
+        // Codex on #39 (round 2): bootstrap-db writes the same files and logins, so it takes the same lock.
+        var installation = sql.NewInstallation();
+        await using var running = await HoldCredentialLockAsync();
+
+        var refused = await sql.RunAsync(installation, ["bootstrap-db"], FromFiles(NewFiles()));
+
+        Assert.Equal(3, refused.Code);
+        Assert.Contains("another bootstrap-db or rotate-db-credentials run is changing Goldmark's logins", refused.Error, StringComparison.Ordinal);
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master", $"SELECT COUNT(*) FROM sys.databases WHERE name = N'{installation.Database}';"));
+        Assert.Equal(0, await sql.AdminScalarAsync<int>("master", $"SELECT COUNT(*) FROM sys.server_principals WHERE name = N'{installation.RuntimeUser}';"));
+    }
+
+    /// <summary>The lock both commands take, held by another session until disposed.</summary>
+    private async Task<Microsoft.Data.SqlClient.SqlConnection> HoldCredentialLockAsync()
+    {
+        var running = await sql.OpenAsync(SqlServerFixture.AdminUser, sql.AdminPassword, "master");
+        await using var take = running.CreateCommand();
+        take.CommandText = "EXEC sys.sp_getapplock @Resource = N'goldmark:credentials', @LockMode = N'Exclusive', @LockOwner = N'Session';";
+        await take.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        return running;
     }
 
     [Fact]
