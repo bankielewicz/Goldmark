@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slice 5 screens: components, decisions and notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1800px; box-sizing: border-box; padding: 48px; background: #ffffff; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 28px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Slice 5 screens · components, decisions and notes</h1>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Fluent v9 components</h2>
+    <dl style="margin: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 8px 24px">
+      <sc-for list="{{components}}" as="c" hint-placeholder-count="12">
+        <dt style="font-weight: 600">{{c.k}}</dt>
+        <dd style="margin: 0; color: #424242">{{c.v}}</dd>
+      </sc-for>
+    </dl>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the design system</h2>
+    <p style="margin: 0; color: #424242">None. Every colour, type step, radius and shadow is a token from the approved system (DEC-039), and the shell, table, form, dialog and badge patterns are its own. The type icons on the boards are stand-ins: the build picks one Fluent UI icon per built-in type.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Decided by the owner (2026-10-23, DEC-044)</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{decided}}" as="d" hint-placeholder-count="7"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Settled on these boards (approved with them)</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{settled}}" as="d" hint-placeholder-count="10"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">In the handoff, not drawn</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{notDrawn}}" as="d" hint-placeholder-count="5"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Build notes</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{build}}" as="d" hint-placeholder-count="7"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1800}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const kv = (k, v) => ({ k, v });
+    return {
+      components: [
+        kv('Navigation', 'NavDrawer with NavSectionHeader and NavItem; the new Inventory group holds Search. Icon rail below 1100 px, as built.'),
+        kv('Top-bar search', 'SearchBox (aria-label "Search CIs"); below 1100 px a Button with the search icon opening a Popover with the same SearchBox. Not shown on /search.'),
+        kv('Search page', 'SearchBox (large), Toolbar with Switch "Show retired" and Button (primary) "New CI", Checkbox per type with its count, DataGrid with sortable headers, Link per name, Badge (tint) for lifecycle, Button "Load more".'),
+        kv('Filters below 1100 px', 'OverlayDrawer (position start, 320 px) opened by Button "Filters (2)".'),
+        kv('New CI / Edit CI', 'OverlayDrawer (position end, 480 px) with Field + Input (text; number with inputMode numeric; type="date"), Combobox (type; link to another CI, searching names), RadioGroup (yes / no / not set), Dropdown (list of choices), MessageBar (summary, review).'),
+        kv('Dialogs', 'Dialog with alertdialog role: Retire, Discard your changes, the 412 conflict.'),
+        kv('CI detail', 'Breadcrumb, Badge (type, subtle with icon; lifecycle), Toolbar with Edit and Retire… (Restore when retired), TabList with one Tab, a two-column property grid (dl), Link to a linked CI, Button to copy the ID.'),
+        kv('CI detail below 1100 px', 'Menu behind Button "More actions" with Edit and Retire…; the grid in one column; on a phone the labels above the values.'),
+        kv('Feedback', 'MessageBar (error with Retry and Reference ID; info for retired), Toast (bottom end) "app-erp-db01 retired", Skeleton for loading.'),
+        kv('Not found', 'In the shell: heading, text, SearchBox, Link to the dashboard.'),
+        kv('Audit log', 'Unchanged layout; the CI actions in the Action list; the Affected column shows a CI with its type icon and a link.')
+      ],
+      decided: [
+        'Search matches part of a CI’s Name, any case ("Search by name"); identifiers join with slice 10.',
+        'Saved filters (#45), the column chooser (#46) and CSV export (#47) come in slice 20: the toolbar leaves room, no placeholders.',
+        'Retire (confirmed) and Restore (no confirmation); retired CIs hidden unless Show retired is on; Planned and Retiring come in slice 20.',
+        'Only the attributes the PRD names are built in (Server Platform, Appliance Kind, HypervisorHost Virtual, NetworkDevice Role, StorageArray Kind and Family).',
+        'Admins add custom attributes through the API (add only); every attribute kind appears in the CI form; screen 14 comes in slice 5b.',
+        'Names need not be unique; a CI’s type can’t change; Edit isn’t offered while retired.',
+        '"CI changed" in the audit log lists the fields changed, not their values.',
+        'A type with no attributes shows only "This type has no attributes yet.", for Admins too: the API alone needs a browser session until API tokens (slice 8), so the board doesn’t point to it; slice 5b links Types & attributes.'
+      ],
+      settled: [
+        'The 412 dialog uses the design system’s approved wording, "This CI changed while you were editing", with Discard mine and Review their changes (the handoff said "Someone else changed this CI").',
+        'The not-found heading is the design system’s "We can’t find that CI" (the handoff said "CI not found"); the text and actions follow the handoff.',
+        'Reviewing their changes: each changed field shows their value with a Changed badge, "Yours: …" beneath and a Use mine button.',
+        'The CI panel is a modal overlay drawer at every width (480 px), so the page underneath can’t change while editing; the filters drawer opens from the start side.',
+        'Panel footer: the primary button first, then Cancel (Fluent DrawerFooter order).',
+        'A retired CI offers Restore twice: in the header and in its MessageBar.',
+        'The type badge is subtle with the type’s icon; lifecycle Active is success, Retired is subtle (badge vocabulary).',
+        '"Show N more types" counts the built-in types (20) with no CIs in the current search.',
+        'Screen 16: the "Person affected" column becomes "Affected" (a person, or a CI with its type); the Person affected filter still filters people.',
+        'On a phone the top bar keeps the search icon; the navigation is behind the menu button.'
+      ],
+      notDrawn: [
+        'The Changed column’s Tooltip with the exact UTC time.',
+        'Load more failing (an inline MessageBar with Retry under the list).',
+        'The Toasts "app-erp-db01 created", "app-erp-db01 restored" and "Changes saved".',
+        'Edit while the CI was retired meanwhile ("This CI was retired while you were editing. Restore it to make changes.").',
+        'The 403 page: every signed-in role can read CIs, so these screens have none.'
+      ],
+      build: [
+        'The page address holds the whole search: q, type (repeated), retired, sort. /search with nothing lists every CI that isn’t retired, by name.',
+        'The list’s columns are a data-driven array (id, label, sortable, render) and one query record serves the list, so #45–#47 add to them later.',
+        'Dates use Fluent Input type="date": no DatePicker package.',
+        'The 412 comes from ETag / If-Match on the CI (PRD §5.7).',
+        'The CI-link Combobox searches names through the list API, limited to the attribute’s type when it names one, and offers only CIs that aren’t retired.',
+        'Action codes on the boards (ci.changed, type.attribute.added) are samples; the backend names them.',
+        'Sample data is fictional (*.corp.example).'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

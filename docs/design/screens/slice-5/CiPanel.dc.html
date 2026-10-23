@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark New CI and Edit CI panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px">
+    <h2 id="panel-title" style="margin: 0; flex: 1; font-size: 20px; line-height: 28px; font-weight: 600">{{title}}</h2>
+    <button type="button" aria-label="Close" style="width: 32px; height: 32px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 16px">✕</button>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+    <sc-if value="{{showSummary}}" hint-placeholder-val="{{false}}">
+      <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span><b>The CI isn’t created yet.</b> Fix the 4 fields marked below.</span></div>
+    </sc-if>
+    <sc-if value="{{showReview}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span><b>Sam Rivera saved changes at 14:02 UTC.</b> The fields marked Changed now show Sam’s values, with yours beneath. Save keeps what the fields show.</span></div>
+    </sc-if>
+
+    <sc-for list="{{fields}}" as="f" hint-placeholder-count="8">
+      <div style="position: relative; display: flex; flex-direction: column; gap: 4px">
+        <sc-if value="{{f.isHeading}}" hint-placeholder-val="{{false}}">
+          <div style="display: flex; flex-direction: column; gap: 2px; padding-top: 8px; border-top: 1px solid var(--st2)">
+            <h3 style="margin: 8px 0 0; font-size: 16px; line-height: 22px; font-weight: 600">{{f.label}}</h3>
+            <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{f.helper}}</span>
+          </div>
+        </sc-if>
+        <sc-if value="{{f.hasLabel}}" hint-placeholder-val="{{true}}">
+          <label for="{{f.id}}" style="display: flex; align-items: center; gap: 6px; font-weight: 600">{{f.label}}<sc-if value="{{f.required}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: var(--rdfg)">*</span></sc-if><sc-if value="{{f.changed}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--orbd); background: var(--orbg); color: var(--orfg); font-size: 12px; font-weight: 600">Changed</span></sc-if></label>
+        </sc-if>
+
+        <sc-if value="{{f.isInput}}" hint-placeholder-val="{{true}}">
+          <input id="{{f.id}}" type="{{f.inputType}}" inputmode="{{f.inputMode}}" value="{{f.value}}" aria-required="{{f.ariaRequired}}" aria-invalid="{{f.ariaInvalid}}" style="{{f.controlStyle}}">
+        </sc-if>
+        <sc-if value="{{f.isType}}" hint-placeholder-val="{{false}}">
+          <span style="{{f.controlStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M3 4h14v9H3zM7 16h6M10 13v3"></path></svg><input id="{{f.id}}" role="combobox" aria-expanded="false" aria-required="true" value="VirtualMachine" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+        </sc-if>
+        <sc-if value="{{f.isTypeRO}}" hint-placeholder-val="{{false}}">
+          <span style="height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px; color: var(--fg1)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M3 4h14v9H3zM7 16h6M10 13v3"></path></svg><input id="{{f.id}}" readonly value="VirtualMachine" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></span>
+        </sc-if>
+        <sc-if value="{{f.isBool}}" hint-placeholder-val="{{false}}">
+          <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 4px">
+            <legend style="padding: 0; margin-bottom: 4px; font-weight: 600">{{f.label}}</legend>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap">
+              <sc-for list="{{f.options}}" as="o" hint-placeholder-count="3">
+                <label style="display: inline-flex; align-items: center; gap: 6px; min-height: 32px"><input type="radio" name="{{f.id}}" checked="{{o.checked}}" style="width: 16px; height: 16px; margin: 0; accent-color: var(--cbrand)">{{o.label}}</label>
+              </sc-for>
+            </div>
+          </fieldset>
+        </sc-if>
+        <sc-if value="{{f.isEnum}}" hint-placeholder-val="{{false}}">
+          <button id="{{f.id}}" type="button" aria-haspopup="listbox" style="{{f.controlStyle}}"><span style="flex: 1; text-align: left">{{f.value}}</span><span aria-hidden="true" style="color: var(--fg2)">⌄</span></button>
+        </sc-if>
+        <sc-if value="{{f.isRef}}" hint-placeholder-val="{{false}}">
+          <span style="{{f.controlStyle}}"><sc-if value="{{f.refChosen}}" hint-placeholder-val="{{true}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M3 7h14v9H3zM7 7V4.5h6V7"></path></svg></sc-if><input id="{{f.id}}" role="combobox" aria-expanded="{{f.ariaExpanded}}" aria-controls="ref-list" aria-invalid="{{f.ariaInvalid}}" aria-autocomplete="list" value="{{f.value}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><sc-if value="{{f.refChosen}}" hint-placeholder-val="{{true}}"><button type="button" aria-label="Clear Supports service" style="width: 24px; height: 24px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 12px">✕</button></sc-if><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+        </sc-if>
+
+        <sc-if value="{{f.hasHelper}}" hint-placeholder-val="{{false}}">
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{f.helper}}</span>
+        </sc-if>
+        <sc-if value="{{f.hasError}}" hint-placeholder-val="{{false}}">
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>{{f.error}}</span>
+        </sc-if>
+        <sc-if value="{{f.hasYours}}" hint-placeholder-val="{{false}}">
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; line-height: 16px; color: var(--fg2)">Yours: <b>{{f.yours}}</b><button type="button" style="height: 24px; padding: 0 6px; border: none; border-radius: 4px; background: transparent; color: var(--blink); font: inherit; font-size: 12px; font-weight: 600">Use mine</button></span>
+        </sc-if>
+        <sc-if value="{{f.listOpen}}" hint-placeholder-val="{{false}}">
+          <div id="ref-list" role="listbox" aria-label="BusinessService CIs" style="position: absolute; left: 0; right: 0; top: 60px; z-index: 2; padding: 4px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+            <div role="presentation" style="padding: 6px 8px 2px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">BusinessService CIs matching ‘er’</div>
+            <sc-for list="{{refOptions}}" as="o" hint-placeholder-count="3">
+              <div role="option" aria-selected="{{o.selected}}" style="{{o.style}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M3 7h14v9H3zM7 7V4.5h6V7"></path></svg><span style="flex: 1">{{o.name}}</span><span style="font-size: 12px; color: var(--fg3)">{{o.note}}</span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 16px; border-top: 1px solid var(--st2)">
+    <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">{{primary}}</button>
+    <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"height":{"editor":"int","default":852},"mode":{"editor":"enum","options":["new","newErrors","newLink","edit","editReview"],"default":"new"},"$preview":{"width":480,"height":852}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--sub:#f5f5f5;--brand:#8a5a00;--blink:#7d5200;--cbrand:#8a5a00;--rdfg:#bc2f32;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--fo:#000000;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--sub:#383838;--brand:#7d5200;--blink:#c28a2a;--cbrand:#c28a2a;--rdfg:#e37d80;--orfg:#e9835e;--orbg:#411200;--orbd:#da3b01;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--fo:#ffffff;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    const height = this.props.height ?? 852;
+    const mode = this.props.mode ?? 'new';
+    const isNew = mode === 'new' || mode === 'newErrors' || mode === 'newLink';
+    const errors = mode === 'newErrors';
+    const review = mode === 'editReview';
+    const control = (state) => 'height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; ' + (state === 'error' ? 'border-bottom: 2px solid var(--rdfg)' : state === 'focus' ? 'border-bottom: 2px solid var(--cbrand)' : 'border-bottom-color: var(--stacc)');
+    const base = { isHeading: false, hasLabel: true, required: false, changed: false, isInput: false, isType: false, isTypeRO: false, isBool: false, isEnum: false, isRef: false, hasHelper: false, helper: '', hasError: false, error: '', hasYours: false, yours: '', listOpen: false, inputType: 'text', inputMode: 'text', ariaRequired: 'false', ariaInvalid: 'false', ariaExpanded: 'false', refChosen: true, value: '', options: [] };
+    const f = (o) => {
+      const r = Object.assign({}, base, o);
+      r.controlStyle = control(r.hasError ? 'error' : r.focus ? 'focus' : '');
+      r.ariaInvalid = r.hasError ? 'true' : 'false';
+      r.ariaRequired = r.required ? 'true' : 'false';
+      return r;
+    };
+    const fields = [
+      isNew
+        ? f({ id: 'ci-type', label: 'Type', required: true, isType: true })
+        : f({ id: 'ci-type', label: 'Type', isTypeRO: true, hasHelper: true, helper: 'A CI’s type can’t change.' }),
+      f({ id: 'ci-name', label: 'Name', required: true, isInput: true, value: errors ? '' : 'app-erp-db01', hasHelper: !errors, helper: 'Up to 400 characters. Names don’t need to be unique.', hasError: errors, error: 'Enter a name.' }),
+      f({ id: 'h-custom', isHeading: true, hasLabel: false, label: 'Custom attributes', helper: 'Added to VirtualMachine by an Admin.' }),
+      f({ id: 'ci-cost', label: 'Cost centre', required: true, isInput: true, value: errors ? '' : review ? 'CC-4420' : 'CC-4410', hasError: errors, error: 'Enter a cost centre.', changed: review, hasYours: review, yours: 'CC-4410' }),
+      f({ id: 'ci-vcpu', label: 'vCPUs reserved', isInput: true, inputMode: 'numeric', value: errors ? 'eight' : '8', hasError: errors, error: 'Enter a number.' }),
+      f({ id: 'ci-mon', label: 'Monitored', hasLabel: false, isBool: true, options: [{ label: 'Yes', checked: true }, { label: 'No', checked: false }, { label: 'Not set', checked: false }] }),
+      f({ id: 'ci-patch', label: 'Patch window starts', isInput: true, inputType: 'date', value: '2026-11-07' }),
+      f({ id: 'ci-tier', label: 'Backup tier', isEnum: true, value: review ? 'Bronze' : 'Gold', changed: review, hasYours: review, yours: 'Gold' }),
+      f({ id: 'ci-svc', label: 'Supports service', isRef: true, value: mode === 'newLink' ? 'er' : errors ? 'ERP Legacy' : 'ERP', refChosen: mode !== 'newLink', ariaExpanded: mode === 'newLink' ? 'true' : 'false', focus: mode === 'newLink', listOpen: mode === 'newLink', hasHelper: !errors, helper: 'A BusinessService CI.', hasError: errors, error: 'Choose a CI that isn’t retired. ERP Legacy was retired on 2026-10-02.' })
+    ];
+    const opt = (name, note, selected) => ({ name, note, selected: selected ? 'true' : 'false', style: 'display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 4px; ' + (selected ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : '') });
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: 480px; height: ' + height + 'px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg1); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      title: isNew ? 'New CI' : 'Edit app-erp-db01',
+      primary: isNew ? 'Create' : 'Save',
+      showSummary: errors,
+      showReview: review,
+      fields,
+      refOptions: [opt('ERP', 'Active', true), opt('ERP Reporting', 'Active', false), opt('ERP Web shop', 'Active', false)]
+    };
+  }
+}
+</script>
+</body>
+</html>

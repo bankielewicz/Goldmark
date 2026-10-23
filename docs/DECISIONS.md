@@ -1880,3 +1880,59 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 | 10 | `docs/ops/windows-service.md`; the installer's prompts as a text spec; rule 7; rule 8 both ways | **Met** | The ops guide (parameters and prompts table); `database.credentials.rotated` in the audit catalog; `DefaultPaths`, Windows APIs behind `OperatingSystem.IsWindows()` |
 | 11 | Rule 7 / M6: new endpoints | **Not applicable** | The slice adds no endpoint |
 | 12 | CI green | **Not executed** | Runs on the PR |
+
+## DEC-044 Slice 5: CIs, their types and attributes, search and detail
+
+- **Decision (owner, 2026-10-23, asked in the HANDOFF rule-6 format; each answer quoted).** Slice 5
+  was approved to start ("approved"). Its choices, left open by the slice plan (DEC-021) and the PRD:
+  1. **Search toolbar later: "option 1 but document somehow whether github incident for enhancement or
+     specification document that captures the roadmap, etc... consult with /advisor to ensure we don't
+     incur any technical debt with any approach".** Option 1 was "All three later": screen 4's saved
+     filters, column chooser and CSV export are not in slice 5. They go to slice 20, which next changes
+     the search filters, as issues #45, #46 and #47 (label `enhancement`), placed in HANDOFF's slice 20
+     row and §4 as #36 and #37 were. There is no separate roadmap document: HANDOFF §1 is the approved
+     plan (DEC-021), and a second one would drift from it. Slice 5 leaves room for them without stubs:
+     the search state lives in the page address, one query record serves the list (as `AuditQuery`
+     serves the audit list and its export), and the list's columns are data-driven. Rejected: B, CSV
+     export now; C, all three now.
+  2. **Lifecycle: "A. Retire, Restore, hide (Recommended)".** New CIs are Active. Retire… (confirmed)
+     and Restore; search hides retired CIs unless "Show retired" is on. Planned and Retiring, and the
+     lifecycle filter, stay in slice 20 (US-12). Rejected: B, retire only, as the plan's row reads; C,
+     the full lifecycle now.
+  3. **Built-in attributes: "A. Only the PRD's ones (Recommended)".** The seed holds PRD §9.3's CI types
+     and §9.4's relationship types, with only the attributes the PRD names (Server `platform`,
+     Appliance `kind`, HypervisorHost `virtual`, NetworkDevice `role`, StorageArray `kind` and
+     `family`). Each collector slice adds its own attributes by migration. Rejected: B, a starter set
+     proposed now.
+  4. **Custom attributes: "A. API in slice 5 (Recommended)".** An Admin adds a custom attribute (text,
+     number, yes/no, date, a list of choices, a link to another CI) to a type through `/api/v1/types`,
+     audited, and the CI form handles every data type. The screen is slice 5b's (screen 14). Rejected:
+     B, all of it in slice 5b.
+  5. **Open issues placed (the same day, before the approval).** "A. Keep as placed (Recommended)":
+     #35 in slice 8; #5, #12's link check, #31 and #33 in slice 24; #36 in 25b; #37 in 25c; #27 when
+     typescript-eslint supports TypeScript 7 (8.72.0 still requires TypeScript below 6.1); #20 waits for
+     availability-group support, still unplaced (DEC-030). #40: "A. Slice 24 (Recommended)". #41's
+     service-account change: "A. With post-MVP settings (Recommended)", the P1 settings slice, with the
+     database-authentication change the owner placed there on 2026-10-22.
+  6. **Search: "A. Names only (Recommended)".** The search box matches part of a CI's Name, any case,
+     after the owner asked "when searching by name - what is the name of?" (each CI's Name field: a VM's
+     name in vCenter, a server's computer name, an instance name, a team's name). Identifiers join
+     search with slice 10. Rejected: B, names and text attribute values (reads every CI's JSON; the
+     NFR-PERF-2 budget at risk).
+  7. **The p95 proof: "A. On-demand CI job (Recommended)".** A generator seeds 25k synthetic CIs into
+     SQL Server 2025 Express and a test measures the p95 of list, search and detail against NFR-PERF-2,
+     failing over budget, in a job run on request (workflow_dispatch), not on every PR: the start of
+     NFR-PERF-5's suite. Rejected: B, on every PR; C, measured once and recorded.
+  8. **Custom attributes: "A. Add only (Recommended)".** Slice 5's API adds attributes; changing a
+     label, the required flag or the choices, and removing one, come with screen 14 in slice 5b.
+     Rejected: B, add and change; C, add, change and remove.
+  9. **Defaults on the boards: "A. Keep all five (Recommended)".** Names need not be unique; a CI's
+     type can't change; Edit isn't offered while a CI is retired; Restore needs no confirmation (Retire
+     does); the "CI changed" audit entry lists the fields changed, not their values (slice 7's history
+     shows them).
+  10. **Screens approved: "approved".** The slice-5 canvas https://claude.ai/artifact/6juyvAr2JX1FtmkQZpyiz1
+      (version 47, `1792759579-3d94`), copied to `docs/design/screens/slice-5/` with the details settled on the
+      boards (its README). Then, after a side agent noted that the custom-attribute API needs a browser session
+      until API tokens (slice 8): "A. Drop the Admin sentence (Recommended)": a type with no attributes shows
+      only "This type has no attributes yet." (version 48, `1792760074-a7ec`, the copy kept). Rejected: B, point
+      to the coming screen; C, keep the sentence. Slice 5b already follows slice 5 in the plan.

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark CI not found page</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="flex: none; position: relative; z-index: 3">
+    <dc-import name="TopBar" dark="{{dark}}" width="{{width}}" search="box" hint-size="{{width}}px,48px"></dc-import>
+  </div>
+  <div style="flex: 1; min-height: 0; display: flex">
+    <div style="flex: none">
+      <dc-import name="Nav" dark="{{dark}}" width="{{width}}" height="{{bodyHeight}}" current="none" role="editor" hint-size="{{navWidth}}px,{{bodyHeight}}px"></dc-import>
+    </div>
+    <main style="flex: 1; min-width: 0; padding: {{pad}}px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span aria-current="page" style="color: var(--fg2)">Inventory</span></nav>
+      <h1 style="margin: 0; font-size: 24px; line-height: 32px; font-weight: 600">We can’t find that CI</h1>
+      <section style="max-width: 720px; box-sizing: border-box; padding: 24px; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; display: flex; flex-direction: column; gap: 16px">
+        <sc-if value="{{unknown}}" hint-placeholder-val="{{true}}">
+          <p style="margin: 0">There’s no CI with the ID <span style="font-family: Consolas, 'Courier New', monospace; font-size: 13px; overflow-wrap: anywhere">0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f99</span>. The link may be out of date, or the ID mistyped.</p>
+        </sc-if>
+        <sc-if value="{{malformed}}" hint-placeholder-val="{{false}}">
+          <p style="margin: 0">That isn’t a CI ID. A CI ID looks like <span style="font-family: Consolas, 'Courier New', monospace; font-size: 13px">0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f20</span>.</p>
+        </sc-if>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="nf-search" style="font-weight: 600">Search CIs by name</label>
+          <div role="search" style="max-width: 480px; height: 32px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input id="nf-search" type="search" placeholder="Name contains…" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></div>
+        </div>
+        <a href="#" style="align-self: flex-start; color: var(--blink); font-weight: 600">Go to the dashboard</a>
+      </section>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"malformed":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg3:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--blink:#7d5200;';
+    const DARK = '--bg1:#292929;--bg3:#141414;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--blink:#c28a2a;';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 900;
+    const malformed = this.props.malformed ?? false;
+    const wide = width >= 1100;
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      dark, width,
+      bodyHeight: height - 48,
+      navWidth: wide ? 260 : 48,
+      pad: width >= 1280 ? 32 : 24,
+      unknown: !malformed,
+      malformed
+    };
+  }
+}
+</script>
+</body>
+</html>
