@@ -157,7 +157,12 @@ Slice **5b** (`slice/05b-types-admin`, approved 2026-10-23, DEC-045) is **merged
   inside its transaction (`CiTypeCatalog.LockForSaveAsync`), before the CI's own row; an Admin's change takes
   it with `XLOCK, HOLDLOCK, ROWLOCK` first (`LockForChangeAsync`). New writers of CIs (slice 10's ingest,
   slice 21's import) take the shared lock the same way, by the type's ID (a lookup by name locks only the name
-  index's entry). Reads that join the row wait while an Admin's change runs. Retire and restore take it too
+  index's entry). While an Admin's change holds the row, every search, CI page and new CI waits, whatever its
+  type: each reads the whole type list, which scans `cmdb.CiType`. Measured on 25,000 synthetic CIs (10,000
+  VMs; `PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it`, 2026-10-24, local, two
+  runs): deleting an attribute 4,000 or 10,000 VMs hold took 95 to 142 ms, a Server's page waited up to that
+  long, and the rewrite escalated to a table lock on `cmdb.Ci` at both sizes, so a save of any CI must wait too. A
+  wait past the 30 s command timeout would answer 500. Retire and restore take it too
   (after PR #54's Codex review: holding the CI's row while reading the type deadlocked with an attribute delete).
   A save's link check still reads a linked CI's type after locking that CI; a deadlock there is retried once on
   both sides, then answered 412.
