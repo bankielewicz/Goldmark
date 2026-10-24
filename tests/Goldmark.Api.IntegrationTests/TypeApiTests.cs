@@ -335,6 +335,54 @@ public sealed class TypeApiTests(SqlServerFixture sql)
         }
     }
 
+    [Fact]
+    public async Task A_retire_during_an_Admins_change_to_its_type_waits_and_never_deadlocks()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var team = await CreateAsync(editor, new { type = "Team", name = "ERP Platform" });
+        var ci = $"'{team.Value("id")}'";
+        var token = TestContext.Current.CancellationToken;
+
+        // One session holds the CI's row, so the retire waits inside its transaction for it (PR #54 review).
+        await using var holder = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
+        await using var held = (SqlTransaction)await holder.BeginTransactionAsync(token);
+        var holderSession = await ExecuteAsync<short>(holder, held, $"SELECT @@SPID; SELECT Id FROM cmdb.Ci WITH (UPDLOCK, HOLDLOCK) WHERE Id = {ci};");
+        var retire = editor.SendAsync(HttpMethod.Post, $"/api/v1/cis/{team.Value("id")}/retire", new { }, ifMatch: Quoted(team));
+        await WaitUntilBlockedAsync(scenario, holderSession);
+
+        // Another does what deleting a Team attribute does, with the higher deadlock priority: Team's row (type 2)
+        // exclusively, then the CI's row. A retire that took the CI's row before reading its type would hold it while
+        // waiting for the type: a deadlock it loses. One that takes the type first keeps the Admin's change waiting.
+        await using var changer = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
+        await using var change = (SqlTransaction)await changer.BeginTransactionAsync(token);
+        var changerSession = await ExecuteAsync<short>(changer, change, "SET DEADLOCK_PRIORITY HIGH; SELECT @@SPID;");
+        var typeAndCi = ExecuteAsync<object>(changer, change,
+            $"SELECT Id FROM cmdb.CiType WITH (XLOCK, HOLDLOCK, ROWLOCK) WHERE Id = 2; SELECT Id FROM cmdb.Ci WITH (XLOCK, HOLDLOCK, ROWLOCK) WHERE Id = {ci};");
+        for (var wait = 0; await scenario.Sql.AdminScalarAsync<int>(scenario.Installation.Database,
+            $"SELECT COUNT(*) FROM sys.dm_exec_requests WHERE session_id = {changerSession} AND blocking_session_id <> 0;") == 0; wait++)
+        {
+            Assert.True(wait < 300, "The Admin's change never waited.");
+            await Task.Delay(100, token);
+        }
+
+        await held.CommitAsync(token);
+        var retired = await retire;
+        await typeAndCi;
+        await change.CommitAsync(token);
+
+        Assert.True(retired.Status == HttpStatusCode.OK, retired.ToString());
+        Assert.Equal("Retired", retired.Body.Value("lifecycleState"));
+        Assert.Single(await scenario.AuditAsync("ci.retired"));
+
+        static async Task<T?> ExecuteAsync<T>(SqlConnection connection, SqlTransaction transaction, string text)
+        {
+            await using var command = new SqlCommand(text, connection, transaction);
+            return (T?)await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+        }
+    }
+
     private static async Task WaitUntilBlockedAsync(AuthScenario scenario, short session)
     {
         for (var wait = 0; await scenario.Sql.AdminScalarAsync<int>(scenario.Installation.Database,

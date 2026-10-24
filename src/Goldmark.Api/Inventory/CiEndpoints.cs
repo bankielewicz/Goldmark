@@ -181,13 +181,15 @@ internal static class CiEndpoints
         var store = services.GetRequiredService<CiStore>();
         var db = services.GetRequiredService<DbSession>();
         var audit = services.GetRequiredService<AuditTrail>();
-        var types = await catalog.ListAsync();
         var editor = context.User.UserId()!.Value;
         try
         {
-            return await db.InTransactionAsync(async () =>
+            return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
             {
-                if (await store.FindForUpdateAsync(id) is not { } row)
+                // The type's lock before the CI's, as a save takes them: an Admin's change to the type holds the type, then
+                // needs its CIs, so a retire holding the CI while waiting for the type would deadlock with it (PR #54 review).
+                if (await store.FindAsync(id) is not { } unlocked || await catalog.LockForSaveAsync(unlocked.CiTypeId) is not { } type
+                    || await store.FindForUpdateAsync(id) is not { } row)
                 {
                     return NotFound();
                 }
@@ -205,11 +207,10 @@ internal static class CiEndpoints
                         : ApiProblems.Problem(StatusCodes.Status409Conflict, "not-retired", "This CI isn't retired.");
                 }
 
-                var type = TypeOf(types, row);
                 await store.SetLifecycleAsync(id, state, editor);
                 await audit.WriteAsync(retiring ? AuditActions.CiRetired : AuditActions.CiRestored, CiTarget, id, new { type = type.Name, name = row.Name });
                 return Detail(context, await store.DetailAsync((await store.FindAsync(id))!, type));
-            });
+            }));
         }
         catch (SqlException e) when (e.Number == SystemVersioningTimeConflict)
         {
