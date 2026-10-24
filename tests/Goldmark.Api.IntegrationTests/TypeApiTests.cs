@@ -345,7 +345,7 @@ public sealed class TypeApiTests(SqlServerFixture sql)
         var ci = $"'{team.Value("id")}'";
         var token = TestContext.Current.CancellationToken;
 
-        // One session holds the CI's row, so the retire waits inside its transaction for it (PR #54 review).
+        // One session holds the CI's row, so the retire waits inside its transaction for it.
         await using var holder = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
         await using var held = (SqlTransaction)await holder.BeginTransactionAsync(token);
         var holderSession = await ExecuteAsync<short>(holder, held, $"SELECT @@SPID; SELECT Id FROM cmdb.Ci WITH (UPDLOCK, HOLDLOCK) WHERE Id = {ci};");
@@ -367,9 +367,10 @@ public sealed class TypeApiTests(SqlServerFixture sql)
             await Task.Delay(100, token);
         }
 
+        // Bounded: if the type stops coming first, the retire and the Admin's change wait on each other's locks.
         await held.CommitAsync(token);
-        var retired = await retire;
-        await typeAndCi;
+        var retired = await retire.WaitAsync(TimeSpan.FromSeconds(60), token);
+        await typeAndCi.WaitAsync(TimeSpan.FromSeconds(60), token);
         await change.CommitAsync(token);
 
         Assert.True(retired.Status == HttpStatusCode.OK, retired.ToString());
