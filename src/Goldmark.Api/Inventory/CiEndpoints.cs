@@ -121,13 +121,12 @@ internal static class CiEndpoints
         {
             return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
             {
-                // The type's lock comes before the CI's, in the order an Admin's change to the type takes them (a CI's
-                // type never changes, so reading it unlocked is safe).
-                if (await store.FindAsync(id) is not { } unlocked || await catalog.LockForSaveAsync(unlocked.CiTypeId) is not { } type
-                    || await store.FindForUpdateAsync(id) is not { } row)
+                if (await LockTypeThenCiAsync(id, catalog, store) is not { } locked)
                 {
                     return NotFound();
                 }
+
+                var (type, row) = locked;
 
                 // Before the version: a CI retired meanwhile says so rather than "changed" (screen 5's panel).
                 if (row.LifecycleState == LifecycleStates.Retired)
@@ -181,16 +180,17 @@ internal static class CiEndpoints
         var store = services.GetRequiredService<CiStore>();
         var db = services.GetRequiredService<DbSession>();
         var audit = services.GetRequiredService<AuditTrail>();
-        var types = await catalog.ListAsync();
         var editor = context.User.UserId()!.Value;
         try
         {
-            return await db.InTransactionAsync(async () =>
+            return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
             {
-                if (await store.FindForUpdateAsync(id) is not { } row)
+                if (await LockTypeThenCiAsync(id, catalog, store) is not { } locked)
                 {
                     return NotFound();
                 }
+
+                var (type, row) = locked;
 
                 if (etag != CiStore.Stamp(row.ValidFrom))
                 {
@@ -205,11 +205,10 @@ internal static class CiEndpoints
                         : ApiProblems.Problem(StatusCodes.Status409Conflict, "not-retired", "This CI isn't retired.");
                 }
 
-                var type = TypeOf(types, row);
                 await store.SetLifecycleAsync(id, state, editor);
                 await audit.WriteAsync(retiring ? AuditActions.CiRetired : AuditActions.CiRestored, CiTarget, id, new { type = type.Name, name = row.Name });
                 return Detail(context, await store.DetailAsync((await store.FindAsync(id))!, type));
-            });
+            }));
         }
         catch (SqlException e) when (e.Number == SystemVersioningTimeConflict)
         {
@@ -265,9 +264,21 @@ internal static class CiEndpoints
     internal const int Deadlock = 1205;
 
     /// <summary>
-    /// A save SQL Server chose as a deadlock victim runs once more (two saves that each newly link to the
-    /// other's CI hold the link check's shared lock, DEC-044 item 13); the other has committed by then. A
-    /// second loss answers 412, as a change meanwhile does, and the screen reloads.
+    /// The CI and its type, locked for a change (call inside a transaction): the type's row first (shared), then the
+    /// CI's. That is the order an Admin's change to the type takes them (<see cref="CiTypeCatalog.LockForChangeAsync"/>
+    /// holds the type, then rewrites its CIs), so the two wait for each other; a change holding the CI while waiting
+    /// for its type would deadlock with it. Null when there's no such CI.
+    /// </summary>
+    private static async Task<(CiTypeInfo Type, CiStore.CiRow Row)?> LockTypeThenCiAsync(Guid id, CiTypeCatalog catalog, CiStore store) =>
+        await store.TypeIdAsync(id) is { } typeId && await catalog.LockForSaveAsync(typeId) is { } type && await store.FindForUpdateAsync(id) is { } row
+            ? (type, row)
+            : null;
+
+    /// <summary>
+    /// A change to a CI that SQL Server chose as a deadlock victim runs once more; the other transaction has committed
+    /// by then. Two saves that each newly link to the other's CI hold the link check's shared locks (DEC-044 item 13),
+    /// and a save's link check reads a linked CI's type after locking that CI, which can meet an Admin's change to that
+    /// type. A second loss answers 412, as a change meanwhile does, and the screen reloads.
     /// </summary>
     internal static async Task<IResult> RetryOnDeadlockAsync(Func<Task<IResult>> save)
     {

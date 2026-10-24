@@ -6,7 +6,7 @@ Goldmark CMDB has a working baseline through slice 4b: a .NET 10 HTTPS API, heal
 
 Start slice work with `docs/HANDOFF.md` (status, working rules, next slice and gotchas), `docs/DECISIONS.md` (approved decisions), and the relevant requirements in `docs/PRD.md`. The PRD remains DRAFT v0.2; decisions override conflicting PRD text. DEC-021 and the handoff supersede PRD §11's build plan. Preserve requirement and decision IDs. `docs/specs/PRD-draft.md` is a local draft copy, not the current authority entry point.
 
-As of 2026-10-23, slices 1, 2, 2b, 2c, 3, 4, 4a, 4b and 5 are merged (PRs #1, #14, #17, #22, #24, #32, #38, #39 and #49); DEC-044 records slice 5's scope and approved screens. Slice 5b (Types & attributes administration, screen 14; approved 2026-10-23, DEC-045) is built on `slice/05b-types-admin`. Reconcile status with the handoff's §1 table and §3 notes and current GitHub history; this snapshot does not authorize the next slice. Licensing and DCO remain pending; no license has been granted.
+As of 2026-10-23, slices 1, 2, 2b, 2c, 3, 4, 4a, 4b, 5 and 5b are merged (PRs #1, #14, #17, #22, #24, #32, #38, #39, #49 and #54); DEC-044 and DEC-045 record slice 5's and 5b's scope and approved screens. Slice 6 (relationships) is next and still needs the owner's go-ahead. Reconcile status with the handoff's §1 table and §3 notes and current GitHub history; this snapshot does not authorize the next slice. Licensing and DCO remain pending; no license has been granted.
 
 ## Project Structure
 

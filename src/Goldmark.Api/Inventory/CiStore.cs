@@ -267,6 +267,9 @@ internal sealed class CiStore(DbSession db)
         WHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
         """;
 
+    // A CI's type never changes, so it is read without a lock, before its type's lock is taken.
+    private const string TypeIdSql = "SELECT CiTypeId FROM cmdb.Ci WHERE Id = @id AND TenantId = @tenant;";
+
     private const string InsertSql = """
         INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
         VALUES (@id, @tenant, @typeId, @name, 'Active', @attributes, @changedBy);
@@ -325,6 +328,9 @@ internal sealed class CiStore(DbSession db)
     }
 
     public Task<CiRow?> FindAsync(Guid id) => db.QuerySingleOrDefaultAsync<CiRow>(DetailSql, new { id, tenant = Tenants.Default });
+
+    /// <summary>The CI's type, or null when there's no such CI.</summary>
+    public Task<int?> TypeIdAsync(Guid id) => db.ExecuteScalarAsync<int?>(TypeIdSql, new { id, tenant = Tenants.Default });
 
     /// <summary>The CI, locked until the transaction ends (call inside one).</summary>
     public Task<CiRow?> FindForUpdateAsync(Guid id) => db.QuerySingleOrDefaultAsync<CiRow>(LockedDetailSql, new { id, tenant = Tenants.Default });
