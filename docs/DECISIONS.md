@@ -2146,8 +2146,20 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      filters, row count) in the details. Then "Relationships (4 actions)" reads added, changed, deleted, exported,
      and #47's cis.exported will sit the same way under its CI group." Rejected: B, a "Graph" group ("a group of
      one for a screen, not an object"); C, beside "Audit log exported" ("'Audit log' is about the log itself").
-     The audit board's "Relationships (3 actions)" reads 4. Built (2026-10-25): the read and the export stop
-     before a hop that would pass 5,000 relationships (`truncated`), so a truncated graph's export is refused.
+     The audit board's "Relationships (3 actions)" reads 4. The read's limit (owner, 2026-10-25, AskUserQuestion):
+     "A. Raise to 25,000." The read and the export stop before a hop that would pass 25,000 relationships (group
+     members included, so grouping can't get under it) and say `truncated`; a truncated graph's export is refused.
+     The reason the owner gave: at 5,000 "a Team that 6,000 CIs are owned_by" gets "no drawing, an empty table (no
+     hop is complete) and no CSV. That is worse than the field, which caps the picture (ServiceNow and BMC at 1,000
+     nodes) but never the list, because their lists page on the server. Our table is the accessible equivalent, so
+     it must not be the thing refused. 25,000 is the design target's CI count, and no single CI can have more direct
+     relationships of one type than there are CIs, so under the target the limit is never reached and the board's
+     wording keeps its numbers." Past the limit the page reads "More than 25,000 relationships within N hops is too
+     many to draw.", the table view lists the complete hops and its caption says where it stopped, Export CSV… is
+     disabled with that reason, and "Set depth to N" is offered when a depth fits. Rejected: keeping 5,000 with that
+     wording, and counting past the limit ("they make the honest number cheaper to show but keep the dead end"). "If
+     an estate ever outgrows 25,000, the fix is a server-paged table view (keyset cursor like Search), not a bigger
+     number"; the Notes board says so.
   8. **A phrase per direction for relationship types: "B. Later, next slice touching screen 14"**, as #57.
   9. **Keyboard selection on the graph canvas: "A. Not in slice 6, reason on Notes"**: none of the 11 products
      documents it, and the table view is the accessible equivalent (NFR-A11Y-2); #58, for an accessibility pass.

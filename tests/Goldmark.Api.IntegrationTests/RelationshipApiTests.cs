@@ -355,7 +355,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         var (admin, _) = await scenario.SetUpAsync();
         var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
         var host = await CiAsync(editor, "HypervisorHost", "esx-big");
-        await SeedVmsOnAsync(scenario, host, "vm-", 5_001);
+        await SeedVmsOnAsync(scenario, host, "vm-", 25_001);
 
         var graph = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&group=false")).Body;
         Assert.True(graph.GetProperty("truncated").GetBoolean());
@@ -367,7 +367,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
 
         var refused = await editor.PostAsync($"/api/v1/graph/export?ci={host}&group=false");
         Assert.Equal((HttpStatusCode.UnprocessableEntity, "export-too-large"), (refused.Status, refused.Code));
-        Assert.Equal(5000, refused.Body.GetProperty("limit").GetInt32());
+        Assert.Equal(25_000, refused.Body.GetProperty("limit").GetInt32());
         Assert.Empty(await scenario.AuditAsync("relationship.exported"));
     }
 

@@ -144,8 +144,12 @@ internal sealed record GraphQuery(Guid Ci, int Depth, string Direction, IReadOnl
 /// </summary>
 internal sealed class GraphStore(DbSession db)
 {
-    /// <summary>The most relationships one read returns (and an export holds): a hub never makes the walk unbounded.</summary>
-    public const int MaxRelationships = 5_000;
+    /// <summary>
+    /// The most relationships one read returns (and an export holds), so a hub never makes the walk unbounded: the design
+    /// target's CI count (NFR-PERF-1), which a CI's relationships of one type can't pass there (owner, 2026-10-25). An
+    /// estate past it needs a server-paged table view, not a larger number.
+    /// </summary>
+    public const int MaxRelationships = 25_000;
 
     private const string HopColumns = """
         SELECT TOP (@take) r.Id, r.FromCiId, r.ToCiId, r.RelationshipTypeId, r.RedundancyGroup, c.CiTypeId AS FarTypeId
