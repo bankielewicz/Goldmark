@@ -92,8 +92,11 @@ internal sealed class CiTypeCatalog(DbSession db)
     private const string TypeForSaveSql = TypeColumns + " WITH (HOLDLOCK) WHERE Id = @typeId;";
 
     // Exclusive until the transaction ends: waits for the saves in progress and holds back new ones. A SELECT,
-    // not a dummy UPDATE, so the type's history gets no version that changes nothing. Reads that join the row
-    // (a CI's page, the search) wait as well, for the few milliseconds an Admin's change takes.
+    // not a dummy UPDATE, so the type's history gets no version that changes nothing. Reads wait as well: every
+    // search, CI page and new CI reads the whole type list (ListAsync scans this table), so every inventory page
+    // of every type waits until the change commits. An attribute delete rewrites the type's CIs inside it, and the
+    // rewrite can escalate to a table lock on cmdb.Ci, so saves of any CI wait as well. HANDOFF §3 has the measured
+    // times; PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it measures them.
     private const string TypeForChangeSql = TypeColumns + " WITH (XLOCK, HOLDLOCK, ROWLOCK) WHERE Id = @typeId;";
 
     private const string AttributeColumns = """

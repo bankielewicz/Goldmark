@@ -157,8 +157,21 @@ Slice **5b** (`slice/05b-types-admin`, approved 2026-10-23, DEC-045) is **merged
   inside its transaction (`CiTypeCatalog.LockForSaveAsync`), before the CI's own row; an Admin's change takes
   it with `XLOCK, HOLDLOCK, ROWLOCK` first (`LockForChangeAsync`). New writers of CIs (slice 10's ingest,
   slice 21's import) take the shared lock the same way, by the type's ID (a lookup by name locks only the name
-  index's entry). Reads that join the row wait while an Admin's change runs. Retire and restore take it too
-  (after PR #54's Codex review: holding the CI's row while reading the type deadlocked with an attribute delete).
+  index's entry). While an Admin's change holds the row, every search, CI page and new CI waits, whatever its
+  type: each reads the whole type list, which scans `cmdb.CiType`. Measured with
+  `PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it` (deleting an attribute that 4,000,
+  then 10,000 of 25,000 synthetic CIs hold; 2026-10-24, two runs). The result, whatever the hardware: the
+  rewrite escalated to a table lock on `cmdb.Ci` at both sizes (`index_lock_promotion_count`, asserted by the
+  test), and every inventory page waits while the change runs. The times are an order of magnitude on a fast
+  desktop, not a bound: the delete request (with its anti-forgery token's round trip) took 103 to 135 ms; a
+  Server's page waited up to 96 ms against at most 23 alone; a save of a Server waited in three of the four
+  measurements, up to 112 ms against 42 alone (in the fourth its longest save fell outside the lock). Host: an AMD Ryzen 9 9900X
+  with 20 logical CPUs and about 70 GiB RAM seen by WSL2, SQL Server 2025 Express in Docker under WSL2, warm
+  cache, one read loop and one save loop at a time. Estimates, not measured: a small shop's VM (PRD G6) is likely
+  2 to 5 times slower, and real CIs with 30 to 50 attributes make the per-row `JSON_MODIFY` dearer. The
+  Performance workflow's runner (4 vCPU, shared) gives slower numbers; those are the ones CI reproduces.
+  Inferred, not exercised: a wait past SqlClient's default 30 s command timeout would answer 500.
+  Retire and restore take it too (after PR #54's Codex review: holding the CI's row while reading the type deadlocked with an attribute delete).
   A save's link check still reads a linked CI's type after locking that CI; a deadlock there is retried once on
   both sides, then answered 412.
 - Slice 6: deleting a relationship type counts its relationships first and the foreign key refuses it if one

@@ -314,8 +314,8 @@ public sealed class TypeApiTests(SqlServerFixture sql)
             Assert.Equal(1, AuthScenario.Ok(await delete).Body.GetProperty("valuesRemoved").GetInt32());
         }
 
-        // And the other way: while an Admin's change holds the type, a save of one of its CIs waits (reads that join
-        // the type's row wait too, for as long as the change takes).
+        // And the other way: while an Admin's change holds the type, a save of one of its CIs waits (so does every
+        // search, CI page and new CI, of any type: each reads the whole type list).
         var current = AuthScenario.Ok(await editor.GetAsync($"/api/v1/cis/{team.Value("id")}"));
         await using (var transaction = (SqlTransaction)await other.BeginTransactionAsync(TestContext.Current.CancellationToken))
         {
