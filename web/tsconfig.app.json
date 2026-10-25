@@ -19,5 +19,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["src", "e2e/fluent-check/app"]
+  "include": ["src", "e2e/fluent-check/app", "e2e/cytoscape-check/app"]
 }

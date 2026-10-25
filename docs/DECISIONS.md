@@ -2097,7 +2097,13 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      changes. (iii), an upstream nonce option, is an errand for later, asked before anything is posted upstream.
      Rejected: (ii), accepting the violation; B, an in-repo SVG drawing with a fixed layout. Only the built-in
      layouts (`breadthfirst`, `concentric`, `cose`); no extensions (GLPI's `cytoscape-dagre` is not
-     allow-listed). Verified under the served CSP and Trusted Types before the graph is built on it.
+     allow-listed). Verified under the served CSP and Trusted Types before the graph is built on it: on
+     2026-10-25 `web/e2e/cytoscape.spec.ts` (in the Compose smoke, Chrome) showed the stylesheet pre-created by
+     `web/src/graph/cytoscapeStylesheet.ts` with the page's nonce, a second graph adding none, the container rule
+     applied, type icons loading as same-origin files (`img-src 'self'`; Vite never inlines assets), the three
+     layouts, a PNG from an untainted canvas and `blob:` downloads, with no violation but the check's two
+     positive controls (a `<style>` without the nonce, a `data:` image). `web/tests/cytoscape-stylesheet.test.mjs`
+     fails if an update changes Cytoscape's id, class, rule or check.
 - **The board review (2026-10-25).** A second Claude session compared the canvas with the earlier mockups and 11
   products (`tmp/slice6-review-findings.md`, its reports in `tmp/slice6-research/`, both git-ignored). The owner
   answered rounds 1 and 3 in AskUserQuestion (round 3's reasons, the field evidence below, are that session's) and
