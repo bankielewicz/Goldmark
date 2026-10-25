@@ -15,9 +15,12 @@ The canvas was reviewed against the early mockups (`../05-CIDetail.dc.html`, `..
 as published on the Claude Design canvas https://claude.ai/artifact/LoG2K8RMUfYCK5sHPMeWAV (version
 `1792943153-8870`). The same day the owner amended the export (DEC-046 item 7: "A. CSV on the server, audited",
 as DEC-041 item 3 requires), which version `1792944707-7e7e` shows: "Export CSV…" and its confirmation, the board
-`GraphExport.dc.html`. The UI code must match these boards.
+`GraphExport.dc.html`. Building the backend, the owner settled two details on 2026-10-25 (DEC-046 item 7): the
+export's audit action is `relationship.exported`, "Relationships exported", in the Relationships group, so the audit
+board's filter reads "Relationships (4 actions)"; and the graph read stops at 25,000 relationships, which the Notes
+board's build notes describe. Version `1792959081-5191` shows both. The UI code must match these boards.
 
-These files are version `1792944707-7e7e`'s files, unchanged: 39 files, checked against the canvas's SHA-256 of each. Like the
+These files are version `1792959081-5191`'s files, unchanged: 39 files, checked against the canvas's SHA-256 of each. Like the
 other mockups they need the Claude Design runtime and render unstyled when opened directly; review them on the
 canvas. `canvas.json` is the canvas index (board positions and titles). Every board is a small wrapper that sets the
 properties of a page component:
