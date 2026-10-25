@@ -67,9 +67,10 @@ public sealed class PerformanceTests(SqlServerFixture sql)
     /// <summary>
     /// What waits while an Admin deletes an attribute that many CIs hold (DEC-045 items 2 and 6): the delete takes
     /// the type's row exclusively, then rewrites every CI holding a value in one statement. Measured, not budgeted:
-    /// at two sizes, the delete itself and the longest read and save of a CI of another type (Servers) issued in a
+    /// at two sizes, the delete request and the longest read and save of a CI of another type (Servers) issued in a
     /// loop while it runs, with SQL Server's lock-escalation count on <c>cmdb.Ci</c> (a statement past about 5,000
-    /// locks may take the whole table). Runs with the p95 test, on request only.
+    /// locks may take the whole table). The escalation is asserted, as HANDOFF §3 relies on it; the times are only
+    /// reported. Runs with the p95 test, on request only.
     /// </summary>
     [Fact]
     public async Task Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it()
@@ -104,49 +105,72 @@ public sealed class PerformanceTests(SqlServerFixture sql)
             var savesAlone = new List<double>();
             for (var i = 0; i < 5; i++)
             {
-                readsAlone.Add((await TimeAsync(() => admin.GetAsync($"/api/v1/cis/{servers[next]}"))).Ms);
-                savesAlone.Add(await SaveAsync(admin, servers[next++]));
+                readsAlone.Add(await TimeAsync(() => admin.GetAsync($"/api/v1/cis/{servers[next]}")));
+                var server = await admin.GetAsync($"/api/v1/cis/{servers[next++]}");
+                savesAlone.Add(await TimeAsync(() => SaveAsync(admin, server)));
             }
 
-            // During the delete: one loop of reads and one of saves (each on a Server not yet saved), until it ends.
-            var escalationsBefore = await EscalationsAsync(watcher);
-            var watch = Stopwatch.StartNew();
-            var delete = admin.SendAsync(HttpMethod.Delete, $"/api/v1/types/VirtualMachine/attributes/{name}", ifMatch: added.ETag);
+            // The Servers the save loop renames, read before the delete: a read while it runs would wait itself, and
+            // the save behind it would be timed only after the delete had ended.
+            var toSave = new List<Response>();
+            for (var i = 0; i < 60; i++)
+            {
+                toSave.Add(await admin.GetAsync($"/api/v1/cis/{servers[next++]}"));
+            }
+
+            // One loop of reads and one of saves; the delete goes once each has sent its first request, so neither can
+            // miss it, and both run until it has answered. A request sent before the delete takes its lock just
+            // doesn't wait.
             var readsDuring = new List<double>();
             var savesDuring = new List<double>();
+            var readsStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var savesStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            using var stop = new CancellationTokenSource();
             var reads = Task.Run(async () =>
             {
-                for (var i = 0; !delete.IsCompleted; i++)
+                for (var i = 0; !stop.IsCancellationRequested; i++)
                 {
-                    readsDuring.Add((await TimeAsync(() => admin.GetAsync($"/api/v1/cis/{servers[i % 20]}"))).Ms);
+                    var read = TimeAsync(() => admin.GetAsync($"/api/v1/cis/{servers[i % 20]}"));
+                    readsStarted.TrySetResult();
+                    readsDuring.Add(await read);
                 }
             }, TestContext.Current.CancellationToken);
-            var saveFrom = next;
-            next += 60;
             var saves = Task.Run(async () =>
             {
-                for (var i = saveFrom; !delete.IsCompleted && i < saveFrom + 60; i++)
+                for (var i = 0; !stop.IsCancellationRequested && i < toSave.Count; i++)
                 {
-                    savesDuring.Add(await SaveAsync(admin, servers[i]));
+                    var save = TimeAsync(() => SaveAsync(admin, toSave[i]));
+                    savesStarted.TrySetResult();
+                    savesDuring.Add(await save);
                 }
             }, TestContext.Current.CancellationToken);
-            var deleted = await delete;
+            await Task.WhenAll(readsStarted.Task, savesStarted.Task);
+
+            var escalationsBefore = await EscalationsAsync(watcher);
+            var watch = Stopwatch.StartNew();
+            var deleted = await admin.SendAsync(HttpMethod.Delete, $"/api/v1/types/VirtualMachine/attributes/{name}", ifMatch: added.ETag);
             var deleteMs = watch.Elapsed.TotalMilliseconds;
+            await stop.CancelAsync();
             await Task.WhenAll(reads, saves);
             Assert.True(deleted.Status == HttpStatusCode.OK, deleted.ToString());
             Assert.Equal(size, deleted.Body.GetProperty("valuesRemoved").GetInt32());
+
+            // Observed on SQL Server 2025 at both sizes, and what HANDOFF §3 relies on: a change to SQL Server's escalation
+            // or a LOCK_ESCALATION setting on cmdb.Ci fails this, and the docs change with it. (The counter resets if the
+            // table's metadata leaves the cache, which a busy test instance doesn't do between these two reads.)
             var escalations = await EscalationsAsync(watcher) - escalationsBefore;
+            Assert.True(escalations >= 1, $"No lock escalation on cmdb.Ci while {size:N0} values were removed.");
 
             rows.Add(string.Create(CultureInfo.InvariantCulture,
-                $"| {size:N0} | {deleteMs:F0} ms | {readsDuring.Max():F0} ms of {readsDuring.Count} ({readsAlone.Max():F0}) | {savesDuring.Max():F0} ms of {savesDuring.Count} ({savesAlone.Max():F0}) | {escalations} |"));
+                $"| {size:N0} | {deleteMs:F0} ms | {Longest(readsDuring)} of {readsDuring.Count} ({readsAlone.Max():F0}) | {Longest(savesDuring)} of {savesDuring.Count} ({savesAlone.Max():F0}) | {escalations} |"));
         }
 
         var sqlServer = await scenario.Sql.AdminScalarAsync<string>(database,
             "SELECT CONCAT('SQL Server ', CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)), ' ', CAST(SERVERPROPERTY('Edition') AS nvarchar(64)));");
         var summary = new StringBuilder("### Deleting an attribute many VMs hold (DEC-045 items 2 and 6)\n\n")
-            .AppendLine(CultureInfo.InvariantCulture, $"{SyntheticInventory.Count:N0} synthetic CIs, 10,000 of them VMs. Reads and saves of Servers in a loop while the delete runs: the longest, of how many (the longest of five alone in brackets).\n")
+            .AppendLine(CultureInfo.InvariantCulture, $"{SyntheticInventory.Count:N0} synthetic CIs, 10,000 of them VMs. The delete request includes its anti-forgery token's round trip. Reads and saves of Servers in a loop while it runs: the longest, of how many (the longest of five alone in brackets).\n")
             .AppendLine(CultureInfo.InvariantCulture, $"Host: {Hardware()}; {sqlServer} in Docker; warm cache (seeded, then read before measuring); one read loop and one save loop at a time. The times are an order of magnitude on this host, not a bound; the escalation count and which requests wait don't depend on it.\n")
-            .AppendLine("| Values | Delete | Longest read of a Server | Longest save of a Server | Lock escalations on cmdb.Ci |")
+            .AppendLine("| Values | Delete request | Longest read of a Server | Longest save of a Server | Lock escalations on cmdb.Ci |")
             .AppendLine("|---:|---:|---:|---:|---:|");
         rows.ForEach(r => summary.AppendLine(r));
         TestContext.Current.TestOutputHelper?.WriteLine(summary.ToString());
@@ -155,23 +179,21 @@ public sealed class PerformanceTests(SqlServerFixture sql)
             await File.AppendAllTextAsync(file, summary.ToString(), TestContext.Current.CancellationToken);
         }
 
-        static async Task<(double Ms, Response Response)> TimeAsync(Func<Task<Response>> call)
+        static async Task<double> TimeAsync(Func<Task<Response>> call)
         {
             var watch = Stopwatch.StartNew();
             var response = await call();
             Assert.True(response.Status == HttpStatusCode.OK, response.ToString());
-            return (watch.Elapsed.TotalMilliseconds, response);
+            return watch.Elapsed.TotalMilliseconds;
         }
 
-        // A Server read, then renamed, so the save writes (and takes the CI row's exclusive lock) as a real edit does;
-        // only the save is timed.
-        static async Task<double> SaveAsync(ApiClient client, string id)
-        {
-            var read = await client.GetAsync($"/api/v1/cis/{id}");
-            Assert.True(read.Status == HttpStatusCode.OK, read.ToString());
-            var attributes = read.Body.GetProperty("attributes").Deserialize<Dictionary<string, object?>>();
-            return (await TimeAsync(() => client.PutAsync($"/api/v1/cis/{id}", new { name = read.Value("name") + ".", attributes }, read.ETag))).Ms;
-        }
+        static string Longest(List<double> times) =>
+            times.Count == 0 ? "none" : string.Create(CultureInfo.InvariantCulture, $"{times.Max():F0} ms");
+
+        // A Server as read, renamed, so the save writes (and takes the CI row's exclusive lock) as a real edit does.
+        static Task<Response> SaveAsync(ApiClient client, Response read) =>
+            client.PutAsync($"/api/v1/cis/{read.Value("id")}",
+                new { name = read.Value("name") + ".", attributes = read.Body.GetProperty("attributes").Deserialize<Dictionary<string, object?>>() }, read.ETag);
 
         // The CPU model and memory the test sees, and the kernel (WSL2 shows in it), for reading the times.
         static string Hardware()
