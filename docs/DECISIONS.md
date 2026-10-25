@@ -2180,6 +2180,23 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   14. **The graph's selected-CI card drops Owner: "A."** It shows type, lifecycle and hops; "Owned by" shows only
       when an `owned_by` relationship exists. A per-type list of card attributes, as iTop and ServiceNow have, is a
       later feature if wanted.
+  15. **The graph's filters stop the walk: "A. Filters stop the walk, with the one-line note."** (owner,
+      2026-10-25, AskUserQuestion, during the build; a side agent noticed the boards didn't settle it.) The walk
+      never passes through a CI or a relationship that the CI types or relationship types filters leave out, so a CI
+      beyond a hidden one isn't reached; while a filter is on the page says "Filters also stop the walk: CIs beyond
+      a hidden one aren't reached." The owner's reasons: "every drawn line, table row and CSV row stays a real
+      relationship, which "Relationships exported" (the audit entry) and the table's a11y role require", and "A is
+      also the rule slice 19's impact walk uses (a relationship type with Impact None stops propagation the same
+      way)". Rejected: B, walking through and joining the shown CIs with "via 1 hidden CI" lines ("rows that aren't
+      relationships"); C, relationship types stopping the walk and CI types only hiding ("two rules for two filters
+      that look alike"). The later option, if people trip on the empty state, is a "Dim instead of hide" switch: the
+      unfiltered walk, filtered-out CIs dimmed rather than hidden, no synthetic lines and no table change. The field, as
+      a Claude research session read vendor documentation (relayed by the owner, 2026-10-25): ServiceNow's Unified Map
+      filters by CI class and relationship type and can keep filtered-out nodes visible but dimmed; Lansweeper's
+      diagram filters mark assets "Hidden" or "Reduced"; GLPI has no type filter (its depth only hides nodes of a graph
+      loaded whole). Not verified: whether those products keep walking through a hidden node; that research session is
+      checking ServiceNow, iTop, BMC and Lansweeper. The Notes board records the follow-up; today's way out is the
+      empty state's Clear filters.
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.

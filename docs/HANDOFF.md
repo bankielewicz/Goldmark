@@ -131,6 +131,48 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
+Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in progress**, with its approved screens in
+`docs/design/screens/slice-6/` (canvas version `1792962402-d51d`). The decisions are DEC-046 items 1 to 15, with the
+owner's words.
+
+**What it adds:**
+- **Migration 0008:** a nullable `CreatedAt` on `cmdb.Relationship` (default `SYSUTCDATETIME()`), filled from each
+  relationship's earliest version, current and history rows alike, without versioning them (DEC-046 item 13).
+- **API** (`Inventory/RelationshipEndpoints.cs`, `RelationshipStore.cs`; reads for everyone signed in, changes
+  `CiEditor`): `GET /cis/{id}/relationships` (the tab's two sections, 50 then up to 200 a page after an opaque
+  cursor, each with its total), `GET /cis/{id}/redundancy-groups` (the panel's suggestions), `GET`, `POST`, `PUT`
+  (the redundancy group only) and `DELETE /relationships/{id}` with If-Match. The graph (`Inventory/GraphEndpoints.cs`,
+  `GraphStore.cs`): `GET /graph` and `POST /graph/export` (CSV, audited). Four audit actions in the group
+  "Relationships" (`relationship.added`, `.changed`, `.deleted`, `.exported`), a `Relationship` audit target and the
+  filter `target=relationship:{id}`.
+- **Web:** the CI page's Relationships tab (`?tab=relationships`, `web/src/ui/RelationshipsTab.tsx`) with its count,
+  the Add and Edit panel (`web/src/ui/RelationshipPanel.tsx`: several CIs at once, a partial add keeps the panel
+  open), the Delete dialog and View in graph; screen 6 at `/graph` (`web/src/pages/GraphPage.tsx`, the canvas in
+  `web/src/graph/GraphCanvas.tsx`, the address and words in `web/src/graph/graphData.ts`), Inventory › Graph explorer
+  in the nav; screen 16's relationship entries. The type icons the canvas draws are SVG files generated from the
+  installed Fluent icons (`web/scripts/graph-icons.mjs`; `web/tests/graph-icons.test.mjs` fails on drift).
+
+**For the slices that follow:**
+- A relationship add locks, in this order: the relationship type's row (shared), the two CIs' type rows by ID
+  (shared, as a CI save does), then both CI rows (shared, as a CI save's link check does). So an Admin's change to a
+  type is met at the type, a retire of either CI waits for the add or the add sees the CI retired, and a relationship
+  type's delete waits or the add finds the type gone. Slice 10's collectors and slice 21's import add relationships
+  the same way. A change or delete locks the relationship's row only; a relationship with a retired CI can still be
+  changed and deleted.
+- Redundancy group texts are matched in .NET by `Inventory/RedundancyGroups` (trimmed, ordinal ignoring case, never
+  otherwise normalised; DEC-046 item 2), never by a SQL collation; slice 19's impact engine uses it too.
+- The graph walks hop by hop: two one-way walks, each with its own visited set, more than 10 like neighbours of a CI
+  grouped before the next hop and never expanded, redundancy-group members after the dependents walk at one hop
+  past their dependent. It stops before a hop that would pass 25,000 relationships (`GraphStore.MaxRelationships`,
+  the design target's CI count; owner, DEC-046 item 7) and says `truncated`; a truncated graph's export is refused.
+  An estate past 25,000 needs a server-paged table view (a keyset cursor, as Search has), not a larger number.
+  The CI types and relationship types filters stop the walk as Show retired does (DEC-046 item 15), so every line,
+  row and CSV row is a real relationship; slice 19's impact walk follows the same rule.
+- Deleting a relationship copies its last version to the history with the last writer's `ChangedBy`; who ended it is
+  the `relationship.deleted` entry's actor (DEC-046 item 1). Slice 7's history view reads it from the audit log.
+- Cytoscape.js needs `ensureCytoscapeStylesheet()` before its first `cytoscape()` (DEC-046 item 3); its node icons are
+  images, so a new type icon key needs `node web/scripts/graph-icons.mjs`.
+
 Slice **5b** (`slice/05b-types-admin`, approved 2026-10-23, DEC-045) is **merged** (PR #54, `7e9077a`), with its approved screens in
 `docs/design/screens/slice-5b/` (DEC-045 item 7). The decisions are DEC-045, with the owner's words.
 
