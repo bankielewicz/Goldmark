@@ -158,11 +158,17 @@ Slice **5b** (`slice/05b-types-admin`, approved 2026-10-23, DEC-045) is **merged
   it with `XLOCK, HOLDLOCK, ROWLOCK` first (`LockForChangeAsync`). New writers of CIs (slice 10's ingest,
   slice 21's import) take the shared lock the same way, by the type's ID (a lookup by name locks only the name
   index's entry). While an Admin's change holds the row, every search, CI page and new CI waits, whatever its
-  type: each reads the whole type list, which scans `cmdb.CiType`. Measured on 25,000 synthetic CIs (10,000
-  VMs; `PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it`, 2026-10-24, local, two
-  runs): deleting an attribute 4,000 or 10,000 VMs hold took 95 to 142 ms, a Server's page waited up to that
-  long, and the rewrite escalated to a table lock on `cmdb.Ci` at both sizes, so a save of any CI must wait too. A
-  wait past the 30 s command timeout would answer 500. Retire and restore take it too
+  type: each reads the whole type list, which scans `cmdb.CiType`. Measured with
+  `PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it` (deleting an attribute that 4,000,
+  then 10,000 of 25,000 synthetic CIs hold; 2026-10-24, two runs). The result, whatever the hardware: the
+  rewrite escalated to a table lock on `cmdb.Ci` at both sizes (`index_lock_promotion_count`), so a save of any
+  CI waits too, and every inventory page waits while the change runs. The times are an order of magnitude on a
+  fast desktop, not a bound: the delete took 95 to 142 ms and a Server's page waited up to as long, on an AMD
+  Ryzen 9 9900X with 20 logical CPUs and about 70 GiB RAM seen by WSL2, SQL Server 2025 Express in Docker under WSL2,
+  warm cache, one read loop and one save loop at a time. A small shop's VM (PRD G6) is likely 2 to 5 times
+  slower, and real CIs with 30 to 50 attributes make the per-row `JSON_MODIFY` dearer. The Performance
+  workflow's runner (4 vCPU, shared) gives slower numbers; those are the ones CI reproduces. A wait past the 30 s
+  command timeout would answer 500. Retire and restore take it too
   (after PR #54's Codex review: holding the CI's row while reading the type deadlocked with an attribute delete).
   A save's link check still reads a linked CI's type after locking that CI; a deadlock there is retried once on
   both sides, then answered 412.

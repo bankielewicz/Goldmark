@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using Goldmark.Api.IntegrationTests.Infrastructure;
@@ -140,8 +141,11 @@ public sealed class PerformanceTests(SqlServerFixture sql)
                 $"| {size:N0} | {deleteMs:F0} ms | {readsDuring.Max():F0} ms of {readsDuring.Count} ({readsAlone.Max():F0}) | {savesDuring.Max():F0} ms of {savesDuring.Count} ({savesAlone.Max():F0}) | {escalations} |"));
         }
 
+        var sqlServer = await scenario.Sql.AdminScalarAsync<string>(database,
+            "SELECT CONCAT('SQL Server ', CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(32)), ' ', CAST(SERVERPROPERTY('Edition') AS nvarchar(64)));");
         var summary = new StringBuilder("### Deleting an attribute many VMs hold (DEC-045 items 2 and 6)\n\n")
             .AppendLine(CultureInfo.InvariantCulture, $"{SyntheticInventory.Count:N0} synthetic CIs, 10,000 of them VMs. Reads and saves of Servers in a loop while the delete runs: the longest, of how many (the longest of five alone in brackets).\n")
+            .AppendLine(CultureInfo.InvariantCulture, $"Host: {Hardware()}; {sqlServer} in Docker; warm cache (seeded, then read before measuring); one read loop and one save loop at a time. The times are an order of magnitude on this host, not a bound; the escalation count and which requests wait don't depend on it.\n")
             .AppendLine("| Values | Delete | Longest read of a Server | Longest save of a Server | Lock escalations on cmdb.Ci |")
             .AppendLine("|---:|---:|---:|---:|---:|");
         rows.ForEach(r => summary.AppendLine(r));
@@ -167,6 +171,18 @@ public sealed class PerformanceTests(SqlServerFixture sql)
             Assert.True(read.Status == HttpStatusCode.OK, read.ToString());
             var attributes = read.Body.GetProperty("attributes").Deserialize<Dictionary<string, object?>>();
             return (await TimeAsync(() => client.PutAsync($"/api/v1/cis/{id}", new { name = read.Value("name") + ".", attributes }, read.ETag))).Ms;
+        }
+
+        // The CPU model and memory the test sees, and the kernel (WSL2 shows in it), for reading the times.
+        static string Hardware()
+        {
+            var cpu = File.Exists("/proc/cpuinfo")
+                ? File.ReadLines("/proc/cpuinfo").FirstOrDefault(l => l.StartsWith("model name", StringComparison.Ordinal))?.Split(':', 2)[1].Trim()
+                : Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER");
+            var gib = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (1024.0 * 1024 * 1024);
+            var kernel = File.Exists("/proc/sys/kernel/osrelease") ? $" (kernel {File.ReadAllText("/proc/sys/kernel/osrelease").Trim()})" : "";
+            return string.Create(CultureInfo.InvariantCulture,
+                $"{cpu ?? "unknown CPU"}, {Environment.ProcessorCount} logical CPUs and {gib:F0} GiB RAM seen, {RuntimeInformation.OSDescription}{kernel}");
         }
 
         static async Task<long> EscalationsAsync(SqlConnection connection)
