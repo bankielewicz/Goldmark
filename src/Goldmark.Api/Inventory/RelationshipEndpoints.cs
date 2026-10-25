@@ -326,7 +326,7 @@ internal static class RelationshipEndpoints
 
         if (!Guid.TryParseExact(value, "D", out var id))
         {
-            errors[field] = ["CiNotFound"];
+            errors[field] = ["InvalidId"];
             return null;
         }
 

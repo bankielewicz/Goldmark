@@ -94,7 +94,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         Assert.Equal("UnknownRelationshipType", Field(await editor.PostAsync("/api/v1/relationships", new { type = "hosts", from = vm, to = host }), "type"));
         Assert.Equal("Required", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", to = host }), "from"));
         Assert.Equal("CiNotFound", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", from = Guid.NewGuid().ToString("D"), to = host }), "from"));
-        Assert.Equal("CiNotFound", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", from = vm, to = "esx-mx-014" }), "to"));
+        Assert.Equal("InvalidId", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", from = vm, to = "esx-mx-014" }), "to"));
         Assert.Equal("Self", Field(await editor.PostAsync("/api/v1/relationships", new { type = "depends_on", from = vm, to = vm }), "to"));
         Assert.Equal("WrongType", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", from = server, to = host }), "from"));
         Assert.Equal("WrongType", Field(await editor.PostAsync("/api/v1/relationships", new { type = "runs_on", from = vm, to = server }), "to"));
@@ -200,8 +200,9 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         var vm = await CiAsync(editor, "VirtualMachine", "app-erp-db01");
         var host = await CiAsync(editor, "HypervisorHost", "esx-mx-014");
 
-        // Another session retires the host and hasn't committed; the add waits for it at the host's row, after the
-        // relationship type's and both CI types' locks, and then finds the host retired.
+        // Another session retires the host and hasn't committed; the add waits for it at the host's row (its first read
+        // of the host, holding only the relationship type's shared lock, which a retire never needs), and then finds the
+        // host retired.
         await using var other = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
         await using var transaction = (SqlTransaction)await other.BeginTransactionAsync(TestContext.Current.CancellationToken);
         var session = await ExecuteAsync<short>(other, transaction, "SELECT @@SPID;");
