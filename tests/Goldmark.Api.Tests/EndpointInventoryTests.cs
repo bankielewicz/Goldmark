@@ -96,6 +96,15 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["Relationship types: add"] = ("POST", "/api/v1/relationship-types", AccessPolicy.Admin),
             ["Relationship types: change"] = ("PUT", "/api/v1/relationship-types/{name}", AccessPolicy.Admin),
             ["Relationship types: delete"] = ("DELETE", "/api/v1/relationship-types/{name}", AccessPolicy.Admin),
+
+            ["Relationships: a CI's"] = ("GET", "/api/v1/cis/{id:guid}/relationships", AccessPolicy.SignedIn),
+            ["Relationships: a CI's redundancy groups"] = ("GET", "/api/v1/cis/{id:guid}/redundancy-groups", AccessPolicy.SignedIn),
+            ["Relationships: get"] = ("GET", "/api/v1/relationships/{id:guid}", AccessPolicy.SignedIn),
+            ["Relationships: add"] = ("POST", "/api/v1/relationships", AccessPolicy.CiEditor),
+            ["Relationships: change"] = ("PUT", "/api/v1/relationships/{id:guid}", AccessPolicy.CiEditor),
+            ["Relationships: delete"] = ("DELETE", "/api/v1/relationships/{id:guid}", AccessPolicy.CiEditor),
+            ["Graph: read"] = ("GET", "/api/v1/graph", AccessPolicy.SignedIn),
+            ["Graph: export CSV"] = ("POST", "/api/v1/graph/export", AccessPolicy.SignedIn),
         };
 
     [Fact]

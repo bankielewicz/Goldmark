@@ -2085,7 +2085,9 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      (Recommended)": "AG-ERP" and "ag-erp" are one group, the stored text keeps what was typed) and are never
      otherwise normalised (no whitespace folding, no accent folding). The panel offers the group texts already used
      on the dependent CI's relationships, so a typo
-     doesn't split a group. Rejected: B, the field with slice 19.
+     doesn't split a group. Rejected: B, the field with slice 19. Built (2026-10-25): the rule is
+     `Inventory/RedundancyGroups` (`Parse`, `Comparer`), and every reader matches texts there, in .NET, never by
+     a SQL collation (`Latin1_General_100_CI_AS` would also fold full-width letters); slice 19 uses it too.
   3. **The graph explorer: "A, Cytoscape.js."** The PRD's library, pre-approved in `web/dependency-allowlist.json`;
      version 3.34.4 (published 2026-10-15, no install scripts). The research session verified the 3.34.4 bundle and source:
      it injects one `<style id="__________cytoscape_stylesheet">` as the first child of `<head>` (one rule: its
@@ -2132,13 +2134,20 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      audited, reads are not"; a side agent noticed the first wording broke it): **"A. CSV on the server,
      audited."** `POST /api/v1/graph/export` takes the graph read's parameters and returns every relationship the
      table view lists (group members included) as CSV through `Security/Csv.cs`, under the audit export's rule
-     (a row limit, refused rather than cut short, the count in `X-Goldmark-Entries`), and writes `graph.exported`
+     (a row limit, refused rather than cut short, the count in `X-Goldmark-Entries`), and writes an audit entry
      (focus CI, depth, direction, filters, row count) in the same transaction; an access policy, the endpoint
      inventory test and `docs/security/endpoint-access.md`. The button reads "Export CSV…" and opens screen 16's
      confirmation ("The export is recorded in the audit log."). PNG stays in the browser (`cy.png`, downloaded
      from a `blob:` URL), unaudited: it is the pixels on screen, as a screenshot is. Rejected: B, both in the
      browser and unaudited (contradicts DEC-041 for no gain, the pattern exists); C, no CSV (the useful half of
-     the export). No CSP change expected; confirmed in item 3's check.
+     the export). No CSP change expected; confirmed in item 3's check. The entry's name and group (owner,
+     2026-10-25, AskUserQuestion): "A. Relationships, with one amendment: name the action relationship.exported
+     ("Relationships exported"), not graph.exported, with the graph's parameters (focus CI, depth, direction,
+     filters, row count) in the details. Then "Relationships (4 actions)" reads added, changed, deleted, exported,
+     and #47's cis.exported will sit the same way under its CI group." Rejected: B, a "Graph" group ("a group of
+     one for a screen, not an object"); C, beside "Audit log exported" ("'Audit log' is about the log itself").
+     The audit board's "Relationships (3 actions)" reads 4. Built (2026-10-25): the read and the export stop
+     before a hop that would pass 5,000 relationships (`truncated`), so a truncated graph's export is refused.
   8. **A phrase per direction for relationship types: "B. Later, next slice touching screen 14"**, as #57.
   9. **Keyboard selection on the graph canvas: "A. Not in slice 6, reason on Notes"**: none of the 11 products
      documents it, and the table view is the accessible equivalent (NFR-A11Y-2); #58, for an accessibility pass.
@@ -2152,7 +2161,10 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       slice 10's collectors fill it as "first seen". Not A (the earliest history version per read):
       `cmdb.RelationshipHistory` has only the clustered index on the period columns, so the join would scan the
       history on every tab read, against NFR-PERF-1's 250k relationships with five years of history. ServiceNow,
-      BMC, Freshservice, NetBox and i-doit keep a creation date that survives edits.
+      BMC, Freshservice, NetBox and i-doit keep a creation date that survives edits. Built (2026-10-25): an UPDATE
+      of the versioned table would write a history version for every row, and with versioning off but the period
+      kept SQL Server 2025 still moves each `ValidFrom` (measured), so 0008 turns versioning off and drops the
+      period, fills current and history rows, and puts both back; `MigrationTests` checks that no version moved.
   14. **The graph's selected-CI card drops Owner: "A."** It shows type, lifecycle and hops; "Owned by" shows only
       when an `owned_by` relationship exists. A per-type list of card attributes, as iTop and ServiceNow have, is a
       later feature if wanted.

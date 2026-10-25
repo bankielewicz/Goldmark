@@ -63,7 +63,7 @@ internal sealed record AuditActor(string Type, Guid? Id)
     public static AuditActor User(Guid id) => new(AuditActorTypes.User, id);
 }
 
-/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041), slice 4a (DEC-042), 4b (DEC-043) and 5 (DEC-044); <see cref="AuditCatalog"/> labels each one.</summary>
+/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041), slice 4a (DEC-042), 4b (DEC-043), 5 (DEC-044), 5b (DEC-045) and 6 (DEC-046); <see cref="AuditCatalog"/> labels each one.</summary>
 internal static class AuditActions
 {
     public const string SetupCompleted = "setup.completed";
@@ -131,4 +131,11 @@ internal static class AuditActions
     public const string RelationshipTypeAdded = "relationship-type.added";
     public const string RelationshipTypeChanged = "relationship-type.changed";
     public const string RelationshipTypeDeleted = "relationship-type.deleted";
+
+    // Slice 6 (DEC-046): relationships, and the graph's CSV export (item 7; exports are audited, DEC-041 item 3; owner, 2026-10-25: named for
+    // what it holds, so #47's CI export sits the same way under CIs).
+    public const string RelationshipAdded = "relationship.added";
+    public const string RelationshipChanged = "relationship.changed";
+    public const string RelationshipDeleted = "relationship.deleted";
+    public const string RelationshipsExported = "relationship.exported";
 }
