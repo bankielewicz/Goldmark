@@ -265,6 +265,27 @@ test.describe('slice 6 screens', () => {
     await page.goto('/audit?action=relationship.exported');
     await expect(page.getByRole('cell', { name: 'Relationships exported' }).first()).toBeVisible();
 
+    // Show retired: Payroll comes back, marked; and a host's 12 VMs drawn as one counted group.
+    await page.goto(`/graph?ci=${ids['app-erp-db01']}&retired=true`);
+    await expect(
+      page.getByText('15 CIs · 14 relationships · up to 3 hops from app-erp-db01, plus redundancy groups'),
+    ).toBeVisible();
+    await shot(page, 'graph-retired');
+    const host = await post(page, '/api/v1/cis', { type: 'HypervisorHost', name: 'esx-mx-020' });
+    for (let i = 1; i <= 12; i++) {
+      const vm = await post(page, '/api/v1/cis', {
+        type: 'VirtualMachine',
+        name: `vdi-mx-${String(i).padStart(2, '0')}`,
+      });
+      await post(page, '/api/v1/relationships', { type: 'runs_on', from: vm, to: host });
+    }
+    await page.goto(`/graph?ci=${host}`);
+    await expect(
+      page.getByText('13 CIs (12 in 1 group) · 12 relationships · up to 3 hops from esx-mx-020'),
+    ).toBeVisible();
+    await expectAccessible(page, 'graph with a group');
+    await shot(page, 'graph-groups');
+
     // No focus, and a CI that doesn't exist.
     await page.goto('/graph');
     await expect(page.getByRole('heading', { level: 2, name: 'Choose a CI to explore' })).toBeVisible();
