@@ -2122,10 +2122,17 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   6. **Adding several CIs at once: "A. Several at once."** The CI picker takes several CIs of the allowed type,
      with the same relationship type and redundancy group for all; the panel sends one audited request per CI,
      lists any that failed and stays open. No batch endpoint.
-  7. **Export: "A. PNG and CSV now."** The graph as PNG (`cy.png`) and the table view's rows as CSV, both made in
-     the browser from what is on screen and downloaded from a `blob:` URL; no server call and no audit row (unlike
-     the audit log's export, DEC-041, this is data the person already sees). No CSP change expected; confirmed in
-     item 3's check.
+  7. **Export: "A. PNG and CSV now"**, amended the same day so the CSV follows DEC-041 item 3 ("exports are
+     audited, reads are not"; a side agent noticed the first wording broke it): **"A. CSV on the server,
+     audited."** `POST /api/v1/graph/export` takes the graph read's parameters and returns every relationship the
+     table view lists (group members included) as CSV through `Security/Csv.cs`, under the audit export's rule
+     (a row limit, refused rather than cut short, the count in `X-Goldmark-Entries`), and writes `graph.exported`
+     (focus CI, depth, direction, filters, row count) in the same transaction; an access policy, the endpoint
+     inventory test and `docs/security/endpoint-access.md`. The button reads "Export CSV…" and opens screen 16's
+     confirmation ("The export is recorded in the audit log."). PNG stays in the browser (`cy.png`, downloaded
+     from a `blob:` URL), unaudited: it is the pixels on screen, as a screenshot is. Rejected: B, both in the
+     browser and unaudited (contradicts DEC-041 for no gain, the pattern exists); C, no CSV (the useful half of
+     the export). No CSP change expected; confirmed in item 3's check.
   8. **A phrase per direction for relationship types: "B. Later, next slice touching screen 14"**, as #57.
   9. **Keyboard selection on the graph canvas: "A. Not in slice 6, reason on Notes"**: none of the 11 products
      documents it, and the table view is the accessible equivalent (NFR-A11Y-2); #58, for an accessibility pass.

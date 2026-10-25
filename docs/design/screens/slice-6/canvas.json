@@ -35,6 +35,7 @@
     "GraphError.dc.html": { "x": 1520, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · error" },
     "GraphNotFound.dc.html": { "x": 3040, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · the focus CI doesn't exist (an old link)" },
     "Graph1024.dc.html": { "x": 4560, "y": 3920, "w": 1024, "h": 1000, "title": "6 · Graph explorer · 1024 · light · Filters drawer open" },
+    "GraphExport.dc.html": { "x": 7184, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · Export CSV… confirmation (recorded in the audit log)" },
     "GraphGroups.dc.html": { "x": 5664, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · CL-PROD-02 with Group many neighbours on, a group selected" },
     "DeleteRel.dc.html": { "x": 0, "y": 5480, "w": 1440, "h": 900, "title": "Delete relationship · light" },
     "DeleteRelDark.dc.html": { "x": 1520, "y": 5480, "w": 1440, "h": 900, "title": "Delete relationship · dark" },
@@ -53,7 +54,7 @@
     "RelsDark.dc.html", "RelsViewer.dc.html", "RelsEmpty.dc.html", "RelsLoading.dc.html", "RelsError.dc.html", "Rels1024.dc.html", "RelsMany.dc.html",
     "AddRel.dc.html", "AddRelDark.dc.html", "AddRelGroups.dc.html", "AddRelErrors.dc.html", "EditRel.dc.html", "EditRelConflict.dc.html", "AddRelPartial.dc.html",
     "Graph.dc.html", "GraphDark.dc.html", "GraphTable.dc.html", "GraphNoFocus.dc.html", "GraphLoading.dc.html", "GraphTooLarge.dc.html",
-    "GraphEmpty.dc.html", "GraphError.dc.html", "GraphNotFound.dc.html", "Graph1024.dc.html", "GraphGroups.dc.html",
+    "GraphEmpty.dc.html", "GraphError.dc.html", "GraphNotFound.dc.html", "Graph1024.dc.html", "GraphGroups.dc.html", "GraphExport.dc.html",
     "DeleteRel.dc.html", "DeleteRelDark.dc.html", "AuditRel.dc.html", "NavRail.dc.html", "Notes.dc.html"
   ],
   "notes": {

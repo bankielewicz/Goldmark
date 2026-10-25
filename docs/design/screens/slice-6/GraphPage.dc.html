@@ -69,7 +69,7 @@ body{margin:0}
         <sc-if value="{{showExport}}" hint-placeholder-val="{{true}}">
           <div role="group" aria-label="Export" style="display: flex; gap: 8px">
             <sc-if value="{{showPng}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 15h12"></path></svg>Export PNG</button></sc-if>
-            <button type="button" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 15h12"></path></svg>Export CSV</button>
+            <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 8.5L10 12l3.5-3.5M4 15h12"></path></svg>Export CSV…</button>
           </div>
         </sc-if>
         <sc-if value="{{narrow}}" hint-placeholder-val="{{false}}">
@@ -222,6 +222,23 @@ body{margin:0}
       </sc-if>
     </main>
 
+    <sc-if value="{{showExportDialog}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div role="dialog" aria-modal="true" aria-labelledby="ex-title" style="position: absolute; left: 50%; top: 120px; width: 520px; margin-left: -260px; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="ex-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Export 13 relationships?</h2>
+        <dl style="margin: 0; display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 6px 12px">
+          <dt style="color: var(--fg3); font-weight: 600">Graph</dt>
+          <dd style="margin: 0">3 hops from app-erp-db01 · Both · plus redundancy groups · retired CIs left out</dd>
+          <dt style="color: var(--fg3); font-weight: 600">Columns</dt>
+          <dd style="margin: 0">From, From type, Relationship, To, To type, Redundancy group, Hops</dd>
+        </dl>
+        <div style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.6v.2"></path></svg><span>The export is recorded in the audit log.</span></div>
+        <div style="display: flex; justify-content: flex-end; gap: 8px">
+          <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button>
+          <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600; outline: 2px solid var(--fo); outline-offset: 1px">Export</button>
+        </div>
+      </div>
+    </sc-if>
     <sc-if value="{{showDrawer}}" hint-placeholder-val="{{false}}">
       <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
       <aside role="dialog" aria-modal="true" aria-labelledby="fd-title" style="position: absolute; top: 0; left: 0; bottom: 0; width: 320px; box-sizing: border-box; background: var(--bg1); box-shadow: var(--sh64); display: flex; flex-direction: column">
@@ -257,11 +274,11 @@ body{margin:0}
   </div>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":1000},"role":{"editor":"enum","options":["editor","viewer","admin","auditor"],"default":"editor"},"view":{"editor":"enum","options":["graph","table"],"default":"graph"},"state":{"editor":"enum","options":["default","groups","nofocus","loading","toolarge","empty","error","notfound"],"default":"default"},"drawer":{"editor":"boolean","default":false},"$preview":{"width":1440,"height":1000}}'>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":1000},"role":{"editor":"enum","options":["editor","viewer","admin","auditor"],"default":"editor"},"view":{"editor":"enum","options":["graph","table"],"default":"graph"},"state":{"editor":"enum","options":["default","groups","nofocus","loading","toolarge","empty","error","notfound"],"default":"default"},"drawer":{"editor":"boolean","default":false},"dialog":{"editor":"enum","options":["none","export"],"default":"none"},"$preview":{"width":1440,"height":1000}}'>
 class Component extends DCLogic {
   renderVals() {
-    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--edge:#616161;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--rdfg:#bc2f32;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
-    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--edge:#adadad;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--rdfg:#e37d80;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--edge:#616161;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--rdfg:#bc2f32;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--edge:#adadad;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--rdfg:#e37d80;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
     const p = this.props;
     const dark = p.dark ?? false;
     const width = p.width ?? 1440;
@@ -270,6 +287,7 @@ class Component extends DCLogic {
     const view = p.view ?? 'graph';
     const state = p.state ?? 'default';
     const drawer = p.drawer ?? false;
+    const dialog = p.dialog ?? 'none';
     const wide = width >= 1100;
     const ICON = {
       VirtualMachine: 'M3 4h14v9H3zM7 16h6M10 13v3',
@@ -470,7 +488,8 @@ class Component extends DCLogic {
       showLoading: state === 'loading',
       skeleton: skel,
       showSample: showGraph || state === 'toolarge' || state === 'empty',
-      showDrawer: drawer && !wide
+      showDrawer: drawer && !wide,
+      showExportDialog: dialog === 'export' && state === 'default'
     };
   }
 }

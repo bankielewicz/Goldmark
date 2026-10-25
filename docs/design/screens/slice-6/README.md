@@ -13,9 +13,11 @@ The canvas was reviewed against the early mockups (`../05-CIDetail.dc.html`, `..
 `../ST3-GraphImpact.dc.html`) and 11 other CMDBs, by a second Claude session. The owner decided the findings
 (DEC-046 items 4 to 14), and the boards were revised to match. The owner approved them on 2026-10-25 ("approved")
 as published on the Claude Design canvas https://claude.ai/artifact/LoG2K8RMUfYCK5sHPMeWAV (version
-`1792943153-8870`). The UI code must match these boards.
+`1792943153-8870`). The same day the owner amended the export (DEC-046 item 7: "A. CSV on the server, audited",
+as DEC-041 item 3 requires), which version `1792944707-7e7e` shows: "Export CSV…" and its confirmation, the board
+`GraphExport.dc.html`. The UI code must match these boards.
 
-These files are that version's files, unchanged: 38 files, checked against the canvas's SHA-256 of each. Like the
+These files are version `1792944707-7e7e`'s files, unchanged: 39 files, checked against the canvas's SHA-256 of each. Like the
 other mockups they need the Claude Design runtime and render unstyled when opened directly; review them on the
 canvas. `canvas.json` is the canvas index (board positions and titles). Every board is a small wrapper that sets the
 properties of a page component:
@@ -28,7 +30,7 @@ properties of a page component:
 | 5 Relationships tab | `Main.dc.html` (app-erp-db01 as an Editor), `RelsDark.dc.html`, `RelsViewer.dc.html` (a type's description Tooltip), `RelsEmpty.dc.html` (hcx-ma-01), `RelsLoading.dc.html`, `RelsError.dc.html`, `Rels1024.dc.html` (More actions open), `RelsMany.dc.html` (esx-mx-014's 124 dependents, "Show 74 more") | `CiPage.dc.html` |
 | Add and Edit relationship | `AddRel*.dc.html` (runs_on, light and dark), `AddRelGroups.dc.html` (two CIs at once, the redundancy group's suggestions), `AddRelErrors.dc.html`, `AddRelPartial.dc.html` (one of two already existed; the panel stays open), `EditRel.dc.html`, `EditRelConflict.dc.html` (412) | `CiPage.dc.html`, `RelPanel.dc.html` |
 | Deleting a relationship | `DeleteRel.dc.html`, `DeleteRelDark.dc.html` | `CiPage.dc.html` |
-| 6 Graph explorer | `Graph.dc.html` (3 hops from app-erp-db01 plus redundancy groups, ERP selected), `GraphDark.dc.html`, `GraphTable.dc.html`, `GraphGroups.dc.html` (CL-PROD-02 with Group many neighbours on, a group selected), `GraphNoFocus.dc.html`, `GraphLoading.dc.html`, `GraphTooLarge.dc.html` (grouping off), `GraphEmpty.dc.html`, `GraphError.dc.html`, `GraphNotFound.dc.html`, `Graph1024.dc.html` (Filters drawer) | `GraphPage.dc.html` |
+| 6 Graph explorer | `Graph.dc.html` (3 hops from app-erp-db01 plus redundancy groups, ERP selected), `GraphDark.dc.html`, `GraphTable.dc.html`, `GraphGroups.dc.html` (CL-PROD-02 with Group many neighbours on, a group selected), `GraphNoFocus.dc.html`, `GraphLoading.dc.html`, `GraphTooLarge.dc.html` (grouping off), `GraphEmpty.dc.html`, `GraphError.dc.html`, `GraphNotFound.dc.html`, `Graph1024.dc.html` (Filters drawer), `GraphExport.dc.html` (Export CSV…, recorded in the audit log) | `GraphPage.dc.html` |
 | Shell | `NavRail.dc.html` (the 1024 rail's Tooltip); every board (Inventory › Graph explorer, for everyone signed in) | `Nav.dc.html`, `TopBar.dc.html` |
 | 16 Audit log, new entries | `AuditRel.dc.html` ("Relationship deleted" expanded) | `AuditPage.dc.html` |
 | Notes | `Notes.dc.html`: the owner's decisions, the details settled on the boards with their reasons, what isn't drawn, build notes | |
@@ -43,7 +45,8 @@ The decisions are DEC-046 items 1 to 14 (2026-10-24 and 2026-10-25):
    reaches, each at its true hop.
 5. More than 10 neighbours of one type are grouped into one counted node, behind a "Group many neighbours" switch.
 6. Several CIs can be added at once.
-7. The graph exports as PNG and CSV.
+7. The graph exports as PNG (in the browser, not audited) and CSV (from the server, audited, after screen 16's
+   confirmation).
 8. A phrase per direction for relationship types waits (#57).
 9. No keyboard selection on the canvas in slice 6 (#58).
 10. The graph opens at depth 3.
