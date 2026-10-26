@@ -297,4 +297,45 @@ test.describe('slice 6 screens', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'We can’t find that CI' })).toBeVisible();
     await expectAccessible(page, 'graph, not found');
   });
+
+  test('each section of the tab pages on its own, so a second Show more never sends the same page twice', async ({
+    page,
+  }) => {
+    await signIn(page);
+    // A CI with 51 relationships each way: 50 a section, then "Show 1 more".
+    const pager = await post(page, '/api/v1/cis', { type: 'BusinessService', name: 'pager' });
+    for (let start = 1; start <= 51; start += 17) {
+      await Promise.all(
+        Array.from({ length: Math.min(17, 52 - start) }, async (_, i) => {
+          const n = String(start + i).padStart(2, '0');
+          const dependency = await post(page, '/api/v1/cis', { type: 'BusinessService', name: `pager-dep-${n}` });
+          const dependent = await post(page, '/api/v1/cis', { type: 'BusinessService', name: `pager-svc-${n}` });
+          await post(page, '/api/v1/relationships', { type: 'depends_on', from: pager, to: dependency });
+          await post(page, '/api/v1/relationships', { type: 'depends_on', from: dependent, to: pager });
+        }),
+      );
+    }
+    await page.goto(`/ci/${pager}?tab=relationships`);
+    const dependencies = page.getByRole('region', { name: 'Depends on (51)' });
+    const dependents = page.getByRole('region', { name: 'Depended on by (51)' });
+    await expect(dependencies.getByRole('row')).toHaveCount(51);
+
+    // The next pages answer slowly, so both are still on their way when the second button is pressed.
+    await page.route(/\/api\/v1\/cis\/[^/]+\/relationships\?.*cursor=/, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      await route.continue();
+    });
+    await dependencies.getByRole('button', { name: /Show 1 more/ }).click();
+    await dependents.getByRole('button', { name: /Show 1 more/ }).click();
+    await expect(dependencies.getByRole('button', { name: /Show 1 more/ })).toBeDisabled();
+    await expect(dependents.getByRole('button', { name: /Show 1 more/ })).toBeDisabled();
+
+    // Each section ends with its 51 rows (and its header row), every one once.
+    for (const section of [dependencies, dependents]) {
+      await expect(section.getByRole('row')).toHaveCount(52);
+      await expect(section.getByRole('button', { name: /more/ })).toHaveCount(0);
+      const names = await section.getByRole('link').allTextContents();
+      expect(new Set(names).size).toBe(51);
+    }
+  });
 });

@@ -63,13 +63,15 @@ export function useRelationships(ciId: string): {
   failure: ApiError | null;
   reload: () => Promise<void>;
   more: (direction: Direction) => Promise<void>;
-  moreBusy: Direction | null;
+  moreBusy: ReadonlySet<Direction>;
   moreFailure: { direction: Direction; error: ApiError } | null;
 } {
   const [data, setData] = useState<Relationships | null>(null);
   const [totals, setTotals] = useState<{ dependencies: number; dependents: number } | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
-  const [moreBusy, setMoreBusy] = useState<Direction | null>(null);
+  // Each section pages on its own; the ref keeps a second click from sending the same cursor again.
+  const [moreBusy, setMoreBusy] = useState<ReadonlySet<Direction>>(new Set());
+  const pending = useRef(new Set<Direction>());
   const [moreFailure, setMoreFailure] = useState<{ direction: Direction; error: ApiError } | null>(null);
   const request = useRef(0);
 
@@ -96,10 +98,11 @@ export function useRelationships(ciId: string): {
   const more = useCallback(
     async (direction: Direction) => {
       const section = data?.[direction];
-      if (!section?.next) return;
+      if (!section?.next || pending.current.has(direction)) return;
       const current = request.current;
-      setMoreBusy(direction);
-      setMoreFailure(null);
+      pending.current.add(direction);
+      setMoreBusy(new Set(pending.current));
+      setMoreFailure((f) => (f?.direction === direction ? null : f));
       try {
         const query = new URLSearchParams({ direction, limit: String(morePage), cursor: section.next });
         const { data: page } = await api<RelationshipSection>(
@@ -122,7 +125,8 @@ export function useRelationships(ciId: string): {
       } catch (error) {
         setMoreFailure({ direction, error: asApiError(error) });
       } finally {
-        setMoreBusy(null);
+        pending.current.delete(direction);
+        setMoreBusy(new Set(pending.current));
       }
     },
     [ciId, data],

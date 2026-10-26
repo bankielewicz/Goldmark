@@ -246,7 +246,7 @@ export function RelationshipsTab({
               canEdit={canEdit}
               types={types}
               description={description}
-              busy={moreBusy === direction}
+              busy={moreBusy.has(direction)}
               onMore={() => void more(direction)}
               onEdit={onEdit}
               onDelete={(relationship) => {

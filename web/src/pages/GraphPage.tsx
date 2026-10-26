@@ -67,6 +67,7 @@ import {
   relationshipLimit,
   statusLine,
   tableCaption,
+  isEmpty,
   tooLarge,
   type GraphResult,
   type GraphView,
@@ -386,7 +387,7 @@ export function GraphPage() {
         ? statusLine(result, focusName)
         : '';
   const filtered = view.types.length > 0 || view.relationshipTypes.length > 0;
-  const empty = result !== null && result.relationships.length === 0;
+  const empty = result !== null && isEmpty(result);
   const large = result !== null && tooLarge(result);
 
   const exportPng = () => {
@@ -815,16 +816,20 @@ function TooLarge({
   onUpdate: (patch: Partial<GraphView>) => void;
 }) {
   const fits = fittingDepth(result);
+  // Hop 1 alone passes the limit: it is read whole before it is grouped, so only a filter helps.
+  const firstHop = completeHops(result) === 0;
   const title = result.truncated
     ? `More than ${relationshipLimit.toLocaleString('en-US')} relationships within ${hopsText(view.depth)} is too many to draw.`
     : `${result.nodes.length.toLocaleString('en-US')} CIs within ${hopsText(view.depth)} is too many to draw.`;
   const table = result.truncated
     ? `The table view lists the ${hopsText(completeHops(result))} that fit.`
     : 'The table view lists every relationship.';
-  const text = `${view.group ? 'Lower the depth' : 'Turn on Group many neighbours, lower the depth'}, or filter by CI type or relationship type. ${table}`;
+  const text = firstHop
+    ? 'Filter by CI type or relationship type: hop 1 alone passes the limit.'
+    : `${view.group ? 'Lower the depth' : 'Turn on Group many neighbours, lower the depth'}, or filter by CI type or relationship type. ${table}`;
   return (
     <Message icon={<FlowchartRegular />} title={title} text={text}>
-      {view.group ? null : (
+      {view.group || firstHop ? null : (
         <Button appearance="primary" onClick={() => onUpdate({ group: true })}>
           Group many neighbours
         </Button>
@@ -834,9 +839,11 @@ function TooLarge({
           Set depth to {fits}
         </Link>
       ) : null}
-      <Link as="button" onClick={() => onUpdate({ view: 'table' })}>
-        Switch to table view
-      </Link>
+      {firstHop ? null : (
+        <Link as="button" onClick={() => onUpdate({ view: 'table' })}>
+          Switch to table view
+        </Link>
+      )}
     </Message>
   );
 }

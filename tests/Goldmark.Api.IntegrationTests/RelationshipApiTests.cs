@@ -371,6 +371,62 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         Assert.Empty(await scenario.AuditAsync("relationship.exported"));
     }
 
+    [Fact]
+    public async Task A_group_the_other_walk_reaches_a_hop_later_is_counted_at_its_own_hop()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // A cycle: the focus depends on a hub, the hub on eleven services, and each of those on the focus.
+        var focus = await CiAsync(editor, "BusinessService", "focus");
+        var hub = await CiAsync(editor, "BusinessService", "hub");
+        await RelateAsync(editor, "depends_on", focus, hub);
+        for (var i = 1; i <= 11; i++)
+        {
+            var service = await CiAsync(editor, "BusinessService", $"svc-{i:00}");
+            await RelateAsync(editor, "depends_on", hub, service);
+            await RelateAsync(editor, "depends_on", service, focus);
+        }
+
+        // The dependents walk groups the eleven at hop 1, the dependencies walk past the hub at hop 2; the CIs stay at 1.
+        var graph = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={focus}")).Body;
+        Assert.Equal([("dependents", 1), ("dependencies", 2)],
+            graph.GetProperty("groups").EnumerateArray().Select(g => (g.Value("direction"), g.GetProperty("hops").GetInt32())));
+        Assert.All(Hops(graph).Where(h => h.Key.StartsWith("svc-", StringComparison.Ordinal)), h => Assert.Equal(1, h.Value));
+        Assert.Equal([1, 2, 1], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        Assert.Equal("23", (await editor.PostAsync($"/api/v1/graph/export?ci={focus}")).Headers["X-Goldmark-Entries"]);
+    }
+
+    [Fact]
+    public async Task Relationships_already_in_the_graph_or_in_other_groups_never_count_toward_the_limit()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var host = await CiAsync(editor, "HypervisorHost", "esx-pool");
+        var other = await CiAsync(editor, "HypervisorHost", "esx-other");
+        var spare = await CiAsync(editor, "HypervisorHost", "esx-spare");
+        // 13,000 VMs run on the host in group "pool" and on another host in group "other"; one of them also runs on a
+        // spare host in "POOL", the one new member. The members read finds 26,001 relationships, in two pages.
+        await SeedVmsOnAsync(scenario, host, "vm-", 13_000, "pool");
+        await scenario.Sql.AsAdminAsync(scenario.Installation.Database, $$"""
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', v.Id, '{{other}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'runs_on'), N'other', 'test'
+            FROM cmdb.Ci AS v WHERE v.Name LIKE N'vm-%';
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', v.Id, '{{spare}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'runs_on'), N'POOL', 'test'
+            FROM cmdb.Ci AS v WHERE v.Name = N'vm-001';
+            """);
+
+        var graph = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&direction=dependents&group=false")).Body;
+        Assert.False(graph.GetProperty("truncated").GetBoolean());
+        Assert.Equal(13_001, graph.GetProperty("relationships").GetArrayLength());
+        var hops = Hops(graph);
+        Assert.Equal(2, hops["esx-spare"]);
+        Assert.DoesNotContain("esx-other", hops.Keys);
+        Assert.Equal("13001", (await editor.PostAsync($"/api/v1/graph/export?ci={host}&direction=dependents&group=false")).Headers["X-Goldmark-Entries"]);
+    }
+
     /// <summary>The boards' sample around app-erp-db01 (Graph.dc.html), by name.</summary>
     private static async Task<Dictionary<string, string>> SampleAsync(ApiClient editor)
     {
@@ -404,16 +460,17 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         return ids;
     }
 
-    /// <summary>Many VMs that run on a host, written in SQL (the API would take minutes).</summary>
-    private static Task SeedVmsOnAsync(AuthScenario scenario, string host, string prefix, int count) =>
+    /// <summary>Many VMs that run on a host, in a redundancy group if one is named, written in SQL (the API would take minutes).</summary>
+    private static Task SeedVmsOnAsync(AuthScenario scenario, string host, string prefix, int count, string? group = null) =>
         scenario.Sql.AsAdminAsync(scenario.Installation.Database, $$"""
             WITH n AS (SELECT TOP ({{count}}) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i FROM sys.all_objects AS a CROSS JOIN sys.all_objects AS b)
             INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
             SELECT NEWID(), '00000000-0000-0000-0000-000000000001', (SELECT Id FROM cmdb.CiType WHERE Name = N'VirtualMachine'),
                 CONCAT(N'{{prefix}}', FORMAT(i, '000')), 'Active', '{}', 'test'
             FROM n;
-            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, ChangedBy)
-            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', v.Id, '{{host}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'runs_on'), 'test'
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', v.Id, '{{host}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'runs_on'),
+                {{(group is null ? "NULL" : $"N'{group}'")}}, 'test'
             FROM cmdb.Ci AS v WHERE v.Name LIKE N'{{prefix}}%';
             """);
 

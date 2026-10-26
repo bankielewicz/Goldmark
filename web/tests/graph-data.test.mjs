@@ -11,6 +11,7 @@ import {
   fittingDepth,
   graphAddress,
   graphQuery,
+  isEmpty,
   layeredPositions,
   readGraphView,
   statusLine,
@@ -147,6 +148,20 @@ describe('graph words', () => {
     assert.equal(
       tableCaption(truncated, 'CL-PROD-02'),
       '13 relationships within 2 hops of CL-PROD-02; hop 3 would pass the 25,000-relationship limit',
+    );
+    assert.equal(isEmpty(truncated), false);
+  });
+
+  it('stopped before hop 1, is too large, not empty', () => {
+    const none = sample({ nodes: sample().nodes.slice(0, 1), relationships: [], countsByHop: [1] });
+    assert.equal(isEmpty(none), true);
+    const stopped = { ...none, truncated: true };
+    assert.equal(isEmpty(stopped), false);
+    assert.equal(tooLarge(stopped), true);
+    assert.equal(fittingDepth(stopped), null);
+    assert.equal(
+      tableCaption(stopped, 'esx-big'),
+      'No relationships: hop 1 from esx-big would pass the 25,000-relationship limit',
     );
   });
 });

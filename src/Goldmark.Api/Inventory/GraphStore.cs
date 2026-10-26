@@ -175,12 +175,19 @@ internal sealed class GraphStore(DbSession db)
         WHERE r.TenantId = @tenant AND r.ToCiId IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids))
         """ + HopFilters + ";";
 
+    /// <summary>The members read's page: the dependents' relationships in any redundancy group, after <c>@after</c>.</summary>
+    private const int MembersPage = MaxRelationships;
+
     private const string MembersSql = HopColumns + """
 
         JOIN cmdb.Ci AS c ON c.Id = r.ToCiId
         WHERE r.TenantId = @tenant AND r.RedundancyGroup IS NOT NULL
             AND r.FromCiId IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids))
-        """ + HopFilters + ";";
+            AND (@after IS NULL OR r.Id > @after)
+        """ + HopFilters + """
+
+        ORDER BY r.Id;
+        """;
 
     private const string NodesSql = """
         SELECT c.Id, c.Name, c.CiTypeId, c.LifecycleState
@@ -302,7 +309,8 @@ internal sealed class GraphStore(DbSession db)
             return null;
         }
 
-        var counts = new int[hops.Values.Max() + 1];
+        // A group can be one hop past every CI it holds: both walks reach them, the other walk first (a cycle).
+        var counts = new int[hops.Values.Concat(groups.Select(g => g.Hops)).Max() + 1];
         foreach (var (ci, hop) in hops)
         {
             if (drawn.Contains(ci))
@@ -329,7 +337,9 @@ internal sealed class GraphStore(DbSession db)
     /// <summary>
     /// DEC-046 item 4: for each relationship the dependents walk reached its dependent through (not into a group) that
     /// has a redundancy group, the dependent's other relationships in the same group, with their far ends at one hop
-    /// past the dependent. False when they would take the graph past the limit; nothing is added then.
+    /// past the dependent. False when they would take the graph past the limit; nothing is added then. The dependents'
+    /// relationships in any group are read page by page, so those already in the graph and those in other groups never
+    /// count toward the limit (the texts are matched here, not in SQL).
     /// </summary>
     private async Task<bool> AddRedundancyMembersAsync(Dictionary<Guid, Edge> edges, Dictionary<Guid, int> hops, HashSet<Guid> drawn, Filter filter)
     {
@@ -339,20 +349,25 @@ internal sealed class GraphStore(DbSession db)
             return true;
         }
 
-        var take = MaxRelationships - edges.Count + 1;
-        var rows = await MembersAsync(reachedThrough.Select(e => e.Row.FromCiId).Distinct(), filter, take);
-        if (rows.Count >= take)
+        var groupsOf = reachedThrough.ToLookup(e => e.Row.FromCiId, e => e.Row.RedundancyGroup);
+        var dependents = groupsOf.Select(g => g.Key).ToList();
+        var members = new List<HopRow>();
+        Guid? after = null;
+        while (true)
         {
-            return false;
-        }
+            var rows = await MembersAsync(dependents, filter, after);
+            members.AddRange(rows.Where(r => !edges.ContainsKey(r.Id) && groupsOf[r.FromCiId].Contains(r.RedundancyGroup, RedundancyGroups.Comparer)));
+            if (edges.Count + members.Count > MaxRelationships)
+            {
+                return false;
+            }
 
-        var members = rows
-            .Where(r => !edges.ContainsKey(r.Id)
-                && reachedThrough.Any(e => e.Row.FromCiId == r.FromCiId && RedundancyGroups.Comparer.Equals(e.Row.RedundancyGroup, r.RedundancyGroup)))
-            .ToList();
-        if (edges.Count + members.Count > MaxRelationships)
-        {
-            return false;
+            if (rows.Count < MembersPage)
+            {
+                break;
+            }
+
+            after = rows[^1].Id;
         }
 
         foreach (var row in members)
@@ -371,8 +386,17 @@ internal sealed class GraphStore(DbSession db)
         return forward ? await db.QueryAsync<HopRow>(DependenciesHopSql, parameters) : await db.QueryAsync<HopRow>(DependentsHopSql, parameters);
     }
 
-    private Task<IReadOnlyList<HopRow>> MembersAsync(IEnumerable<Guid> dependents, Filter filter, int take) =>
-        db.QueryAsync<HopRow>(MembersSql, Parameters([.. dependents], filter, take));
+    private Task<IReadOnlyList<HopRow>> MembersAsync(IReadOnlyList<Guid> dependents, Filter filter, Guid? after) =>
+        db.QueryAsync<HopRow>(MembersSql, new
+        {
+            take = MembersPage,
+            tenant = Tenants.Default,
+            ids = JsonSerializer.Serialize(dependents.Select(i => i.ToString("D"))),
+            types = filter.TypeIds,
+            relationshipTypes = filter.RelationshipTypeIds,
+            retired = filter.Retired,
+            after,
+        });
 
     private async Task<Dictionary<Guid, NodeRow>> NodesAsync(IEnumerable<Guid> ids) =>
         (await db.QueryAsync<NodeRow>(NodesSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(ids.Select(i => i.ToString("D"))) }))

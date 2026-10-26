@@ -173,6 +173,11 @@ export function fittingDepth(result: GraphResult): number | null {
   return fits;
 }
 
+/** Nothing to draw or list: no relationship within the filters. A read that stopped at the limit before hop 1 isn't empty. */
+export function isEmpty(result: GraphResult): boolean {
+  return result.relationships.length === 0 && !result.truncated;
+}
+
 /** The hops the read returned in full: all of them, unless it stopped at the limit. */
 export function completeHops(result: GraphResult): number {
   return result.truncated ? Math.max(0, result.countsByHop.length - 1) : result.depth;
@@ -209,6 +214,8 @@ export function tableCaption(result: GraphResult, focusName: string): string {
   const rows = count(result.relationships.length, 'relationship', 'relationships');
   if (result.truncated) {
     const complete = completeHops(result);
+    if (complete === 0)
+      return `No relationships: hop 1 from ${focusName} would pass the ${relationshipLimit.toLocaleString('en-US')}-relationship limit`;
     return `${rows} within ${hopsText(complete)} of ${focusName}; hop ${complete + 1} would pass the ${relationshipLimit.toLocaleString('en-US')}-relationship limit`;
   }
   return `${rows} within ${hopsText(result.depth)} of ${focusName}${hasGroupMembersPastDepth(result) ? ', plus redundancy groups' : ''}`;
