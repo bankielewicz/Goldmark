@@ -166,6 +166,9 @@ owner's words.
   past their dependent. It stops before a hop that would pass 25,000 relationships (`GraphStore.MaxRelationships`,
   the design target's CI count; owner, DEC-046 item 7) and says `truncated`; a truncated graph's export is refused.
   An estate past 25,000 needs a server-paged table view (a keyset cursor, as Search has), not a larger number.
+  Measured on the synthetic estate (25,000 CIs, 51,915 relationships; `PerformanceTests`, `GOLDMARK_PERF=1`): at
+  depth 6 the largest read is 4,373 relationships (a team owning 3,520 CIs, grouping off), 84 ms at most, never
+  truncated (DEC-046 item 7). `SyntheticInventory.SeedRelationshipsAsync` gives the estate its relationships.
   The CI types and relationship types filters stop the walk as Show retired does (DEC-046 item 15), so every line,
   row and CSV row is a real relationship; slice 19's impact walk follows the same rule.
 - Deleting a relationship copies its last version to the history with the last writer's `ChangedBy`; who ended it is

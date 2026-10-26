@@ -2160,6 +2160,14 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      wording, and counting past the limit ("they make the honest number cheaper to show but keep the dead end"). "If
      an estate ever outgrows 25,000, the fix is a server-paged table view (keyset cursor like Search), not a bigger
      number"; the Notes board says so.
+     Measured (owner, 2026-10-26, "A. Measure now (Recommended)", after a side agent noted that the limit counts
+     every hop while its reason covered one CI's links): `PerformanceTests.The_graph_read_at_depth_6_on_the_synthetic_estate`
+     on 25,000 CIs and 51,915 relationships in §1.4's shape (`SyntheticInventory.SeedRelationshipsAsync`), depth 6,
+     both ways: at most 4,373 relationships (the largest team, 3,520 CIs owned_by it, grouping off), never truncated,
+     the slowest read 84 ms; a cluster 230 relationships grouped, 509 not (510 CIs, past the 500 the graph draws); a
+     storage array 48 and 1,155; a VM 50. NFR-PERF-1's 250,000 relationships are five times denser than this estate,
+     so a denser hub (more owned_by, slice 10's discovered links) is where the limit could come back; the test
+     measures it again then.
   8. **A phrase per direction for relationship types: "B. Later, next slice touching screen 14"**, as #57.
   9. **Keyboard selection on the graph canvas: "A. Not in slice 6, reason on Notes"**: none of the 11 products
      documents it, and the table view is the accessible equivalent (NFR-A11Y-2); #58, for an accessibility pass.
