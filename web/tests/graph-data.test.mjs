@@ -183,4 +183,15 @@ describe('the Hierarchical layout', () => {
     const row = (y) => [...positions].filter(([, p]) => p.y === y).map(([, p]) => p.x);
     assert.equal(new Set(row(20)).size, 4, 'no two CIs in a row share a place');
   });
+
+  it('wraps a wide row onto more lines, below the focus for dependencies and above it for dependents', () => {
+    const vms = Array.from({ length: 12 }, (_, i) => `vm${i}`);
+    const edges = [...vms.map((vm) => [vm, 'host']), ['host', 'cluster']];
+    const positions = layeredPositions([...vms, 'host', 'cluster'], edges, 'host', { x: 100, y: 10 });
+    const lines = [...new Set(vms.map((vm) => positions.get(vm).y))].sort((a, b) => a - b);
+    assert.deepEqual(lines, [-20, -10]);
+    assert.equal(vms.filter((vm) => positions.get(vm).y === -10).length, 8, 'the nearest line holds eight');
+    assert.equal(positions.get('host').y, 0);
+    assert.equal(positions.get('cluster').y, 10);
+  });
 });

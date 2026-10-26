@@ -285,6 +285,10 @@ test.describe('slice 6 screens', () => {
     ).toBeVisible();
     await expectAccessible(page, 'graph with a group');
     await shot(page, 'graph-groups');
+    // Grouping off: the 12 VMs drawn one by one in Hierarchical's row under their host.
+    await page.goto(`/graph?ci=${host}&group=false`);
+    await expect(page.getByText('13 CIs · 12 relationships · up to 3 hops from esx-mx-020')).toBeVisible();
+    await shot(page, 'graph-flat');
 
     // No focus, and a CI that doesn't exist.
     await page.goto('/graph');

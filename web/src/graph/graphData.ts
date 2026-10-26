@@ -247,14 +247,17 @@ export function exportFileName(focusName: string, depth: number, extension: 'png
  * read top-down). Each CI's row: 0 for the focus, +n for a CI n relationships down its dependencies, -n for one n up
  * its dependents, and a CI reached neither way (a redundancy group's other member) one row below the CI that depends
  * on it. In a row, CIs are ordered by where their neighbours already stand, nearest rows first, then centred.
- * Computed here and drawn with Cytoscape's `preset` layout: its `breadthfirst` layout throws with `maximal: true`
- * in 3.34.4 (measured), and without it a CI that depends on the focus can sit below it.
+ * Computed here and drawn with Cytoscape's built-in `preset` layout (DEC-046 item 16): `breadthfirst` grows one way
+ * from its roots, so it can't put dependents above the focus and dependencies below in one run; and its `maximal`
+ * option, which would keep arrows downward, fails on the boards' sample in 3.34.4 (a TypeError in
+ * `getWeightedPercent`, reproduced headless in Node).
  */
 export function layeredPositions(
   ids: string[],
   edges: [string, string][],
   focus: string,
-  spacing: { x: number; y: number } = { x: 180, y: 110 },
+  spacing: { x: number; y: number } = { x: 200, y: 110 },
+  perLine = 8,
 ): Map<string, { x: number; y: number }> {
   const out = new Map<string, string[]>(ids.map((id) => [id, []]));
   const back = new Map<string, string[]>(ids.map((id) => [id, []]));
@@ -292,7 +295,14 @@ export function layeredPositions(
 
   const rows = new Map<number, string[]>();
   for (const [id, r] of row) rows.set(r, [...(rows.get(r) ?? []), id]);
-  const order = [...rows.keys()].sort((a, b) => Math.abs(a) - Math.abs(b) || b - a);
+  // A layer wider than `perLine` CIs wraps onto more lines, so a host's VMs with grouping off stay readable; the
+  // layers further out move away from the focus to make room.
+  const lines = (r: number) => Math.max(1, Math.ceil((rows.get(r)?.length ?? 0) / perLine));
+  const keys = [...rows.keys()];
+  const top = new Map<number, number>([[0, 0]]);
+  for (let r = 1; r <= Math.max(0, ...keys); r++) top.set(r, (top.get(r - 1) ?? 0) + lines(r - 1) * spacing.y);
+  for (let r = -1; r >= Math.min(0, ...keys); r--) top.set(r, (top.get(r + 1) ?? 0) - lines(r) * spacing.y);
+  const order = keys.sort((a, b) => Math.abs(a) - Math.abs(b) || b - a);
   const positions = new Map<string, { x: number; y: number }>();
   for (const r of order) {
     const members = rows.get(r) ?? [];
@@ -306,7 +316,12 @@ export function layeredPositions(
     const sorted = members
       .map((id) => ({ id, x: placed(id) }))
       .sort((a, b) => a.x - b.x || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    sorted.forEach((m, i) => positions.set(m.id, { x: (i - (sorted.length - 1) / 2) * spacing.x, y: r * spacing.y }));
+    for (let line = 0; line * perLine < sorted.length; line++) {
+      const chunk = sorted.slice(line * perLine, (line + 1) * perLine);
+      // Above the focus the last line is the nearest one, so lines stack upward from it.
+      const y = (top.get(r) ?? 0) + (r < 0 ? lines(r) - 1 - line : line) * spacing.y;
+      chunk.forEach((m, i) => positions.set(m.id, { x: (i - (chunk.length - 1) / 2) * spacing.x, y }));
+    }
   }
   return positions;
 }

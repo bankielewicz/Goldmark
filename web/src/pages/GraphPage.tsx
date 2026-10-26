@@ -179,8 +179,10 @@ const useStyles = makeStyles({
     width: '18px',
     height: '12px',
     boxSizing: 'border-box',
-    border: `3px double ${tokens.colorNeutralStroke1}`,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke1}`,
     borderRadius: tokens.borderRadiusSmall,
+    backgroundColor: tokens.colorNeutralBackground1,
+    boxShadow: `3px 3px 0 -1px ${tokens.colorNeutralBackground1}, 3px 3px 0 0 ${tokens.colorNeutralStroke1}`,
   },
   card: {
     boxSizing: 'border-box',

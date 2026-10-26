@@ -132,7 +132,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 ## 3. Next slice: notes
 
 Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in progress**, with its approved screens in
-`docs/design/screens/slice-6/` (canvas version `1792962402-d51d`). The decisions are DEC-046 items 1 to 15, with the
+`docs/design/screens/slice-6/` (canvas version `1792972526-db8a`). The decisions are DEC-046 items 1 to 16, with the
 owner's words.
 
 **What it adds:**

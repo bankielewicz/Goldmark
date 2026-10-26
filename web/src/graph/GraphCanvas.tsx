@@ -47,14 +47,14 @@ function stylesheet(theme: Theme): cytoscape.StylesheetJson {
       selector: 'node',
       style: {
         shape: 'round-rectangle',
-        width: 144,
+        width: 168,
         height: 52,
         'background-color': theme.colorNeutralBackground1,
         'border-width': 1,
         'border-color': theme.colorNeutralStroke1,
         label: 'data(label)',
         'text-wrap': 'wrap',
-        'text-max-width': '100px',
+        'text-max-width': '120px',
         'text-valign': 'center',
         'text-halign': 'center',
         'text-justification': 'left',
@@ -73,10 +73,13 @@ function stylesheet(theme: Theme): cytoscape.StylesheetJson {
       },
     },
     { selector: 'node.focus', style: { 'border-width': 3, 'border-color': theme.colorCompoundBrandStroke } },
-    { selector: 'node.retired', style: { color: theme.colorNeutralForeground3 } },
+    // A retired CI fades as a whole (DEC-046 item 16), its caption still saying "Retired", so it never relies on the
+    // fade alone; its text stays readable (about 5:1 in both themes at this opacity).
+    { selector: 'node.retired', style: { opacity: 0.65 } },
+    // A group is a stack: Cytoscape's ghost draws an offset copy of the box behind it (DEC-046 item 16).
     {
       selector: 'node.group',
-      style: { 'border-width': 3, 'border-style': 'double', 'border-color': theme.colorNeutralStroke1 },
+      style: { ghost: 'yes', 'ghost-offset-x': 3, 'ghost-offset-y': 3, 'ghost-opacity': 1 },
     },
     {
       selector: 'node.selected',
@@ -171,6 +174,13 @@ function elements(
 
 /** Lays the graph out; if Cytoscape throws, Concentric instead, so a layout bug never blanks the page. */
 function runLayout(cy: cytoscape.Core, layout: GraphLayout, focus: string): void {
+  // A small graph is shown at its own size, never blown up to fill the canvas.
+  cy.one('layoutstop', () => {
+    if (cy.zoom() > 1) {
+      cy.zoom(1);
+      cy.center();
+    }
+  });
   try {
     cy.layout(layoutOptions(layout, cy, focus)).run();
   } catch {

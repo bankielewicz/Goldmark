@@ -2191,12 +2191,31 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       relationships"); C, relationship types stopping the walk and CI types only hiding ("two rules for two filters
       that look alike"). The later option, if people trip on the empty state, is a "Dim instead of hide" switch: the
       unfiltered walk, filtered-out CIs dimmed rather than hidden, no synthetic lines and no table change. The field, as
-      a Claude research session read vendor documentation (relayed by the owner, 2026-10-25): ServiceNow's Unified Map
-      filters by CI class and relationship type and can keep filtered-out nodes visible but dimmed; Lansweeper's
-      diagram filters mark assets "Hidden" or "Reduced"; GLPI has no type filter (its depth only hides nodes of a graph
-      loaded whole). Not verified: whether those products keep walking through a hidden node; that research session is
-      checking ServiceNow, iTop, BMC and Lansweeper. The Notes board records the follow-up; today's way out is the
-      empty state's Clear filters.
+      a Claude research session read vendor documentation and source (relayed by the owner, 2026-10-25; its report is
+      `tmp/slice6-research/09-graph-filter-traversal.md`, git-ignored): ServiceNow's Dependency Views does A by
+      default (filtered items "will be removed from the graph along with any disconnected children"), with dimming as
+      an option; iTop does B in its code, bridging a hidden node with an edge from each predecessor to each successor,
+      a line that is no real relationship; Unified Map and BMC hide by default (Unified Map can show filtered CIs "as
+      dimmed view-only images") and don't document what lies beyond a hidden CI; Lansweeper's diagram isn't a walk,
+      and its "Reduced" is its dim; GLPI has no type filter. That session corrected its own earlier line that
+      ServiceNow "keeps the full walk and dims" by default. The later option is therefore worded as a "Show filtered
+      CIs dimmed" switch, like ServiceNow's option, with the unfiltered walk's cost and no synthetic lines; the Notes
+      board records it, and today's way out is the empty state's Clear filters.
+  16. **The graph's boxes: "C. Fix 2 and 3, accept 1."** (owner, 2026-10-25, during the build; a side agent noticed
+      the differences, and the owner's answer came relayed with a Claude session's reading of the Cytoscape source.)
+      Cytoscape draws a node's text as one label in one font. Accepted: (1) the name and type share one font ("the
+      icon, the card and the table carry the type in the boards' style"; the Notes board names the difference).
+      Fixed: (2) a group is a stack through Cytoscape's built-in ghost style ("ghost: yes, offsets 3 px ... not a
+      second node"); (3) a retired CI fades as a whole (node opacity), "· Retired" kept in its caption "so it never
+      relies on fading alone". Rejected: A, accepting all three; B, a bold name over a caption baked into each type's
+      icon image (breaks for custom types and theme changes). Layout, recorded with it ("correct the layout note"):
+      Hierarchical is Goldmark's rows (dependents above the focus, dependencies below, redundancy members one row
+      under their dependent; `web/src/graph/graphData.ts` `layeredPositions`) drawn with Cytoscape's built-in `preset`
+      layout, "because breadthfirst grows one way from its roots" and so can't place both directions in one run. Also
+      measured (2026-10-25, headless in Node): `breadthfirst`'s `maximal` option, which keeps arrows downward within
+      that one way, fails on the boards' sample with a TypeError in `getWeightedPercent` and blanked the page in the
+      browser; the relayed reading counted the source's one explicit error (an invalid `direction`), which is a
+      different failure. Item 3's "only the built-in layouts" holds: `preset` is built in, and no package was added.
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.
