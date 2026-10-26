@@ -125,6 +125,11 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     private const string RelationshipTypesSql = RelationshipColumns + " FROM cmdb.RelationshipType AS r" + RelationshipJoins + " ORDER BY r.Id;";
 
+    // Shared until the transaction ends (a relationship save, DEC-046): an Admin's delete of the type waits for it, or
+    // the save finds the type gone, rather than meeting the save's new row in its foreign key check.
+    private const string RelationshipTypeForSaveSql = RelationshipColumns + " FROM cmdb.RelationshipType AS r WITH (HOLDLOCK)"
+        + RelationshipJoins + " WHERE r.Id = @id;";
+
     private const string RelationshipTypeForChangeSql = RelationshipColumns + " FROM cmdb.RelationshipType AS r WITH (UPDLOCK, HOLDLOCK)"
         + RelationshipJoins + " WHERE r.Name = @name;";
 
@@ -251,6 +256,10 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     public async Task<IReadOnlyList<RelationshipTypeInfo>> RelationshipTypesAsync() =>
         [.. (await db.QueryAsync<RelationshipRow>(RelationshipTypesSql)).Select(RelationshipType)];
+
+    /// <summary>The relationship type as it is now, locked (shared) until the transaction ends; null if it was deleted. Call inside one, first.</summary>
+    public async Task<RelationshipTypeInfo?> LockRelationshipTypeForSaveAsync(int id) =>
+        await db.QuerySingleOrDefaultAsync<RelationshipRow>(RelationshipTypeForSaveSql, new { id }) is { } row ? RelationshipType(row) : null;
 
     /// <summary>The relationship type, locked until the transaction ends; null if there's none of that name.</summary>
     public async Task<RelationshipTypeInfo?> LockRelationshipTypeAsync(string name) =>

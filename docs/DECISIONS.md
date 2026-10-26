@@ -2049,3 +2049,189 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      affected"; removing the CI's button; building first and listing it in the PR.
 - **Design handoff:** `tmp/screen-handoff-slice5b.md` (screen 14, the Administration nav item, screen 16's
   new entries); the boards came back and were approved (item 7) before any UI code (rule 3).
+
+## DEC-046 Slice 6: relationships, the relationship tab and the graph explorer
+
+- **Status.** Approved by the owner on 2026-10-24 ("approved but run /precompact 1st"); branch
+  `slice/06-relationships` from `992387f` (after PR #56). HANDOFF row 6: "Relationships CRUD, relationship tab,
+  graph explorer", done when "US-11 for relationships; US-40" (screens 5's Relationships tab and 6; FR-CM-5,
+  FR-CM-6, NFR-A11Y-2). The "as of" control on screen 6 is slice 7's (HANDOFF row 7).
+  The boards were approved by the owner on 2026-10-25 ("approved") as canvas version `1792943153-8870`, after the
+  review below; they are `docs/design/screens/slice-6/`.
+- **The owner's answers (2026-10-24, AskUserQuestion).** The owner relayed a survey of other CMDBs and a check of
+  the Cytoscape.js source, both done by a Claude research session from vendor documentation and source (its
+  reports are kept outside the repository, in the git-ignored `tmp/slice6-research/`); the readings below are that
+  session's, the choices are the owner's.
+  1. **Removing a relationship: "A, delete; history keeps it."** The row is deleted and its history table keeps
+     every version, so slice 7's "as of" view shows it before the delete. The reading relayed with it: FR-IM-4 speaks of
+     "relationships ending before the as-of time", US-12's lifecycle belongs to CIs only, 0001 has no lifecycle
+     column but `UQ_Relationship (from, type, to)`, which a retired row would block re-linking under; A departs
+     only from US-11's word "retire". ServiceNow, iTop, NetBox and Device42 delete the link and rely on a log;
+     BMC Helix and CMDBuild soft-delete; GLPI soft-deletes only agent-inventoried links. Condition: a DELETE on
+     a system-versioned table copies the row to history as it was, so the history row's `ChangedBy` is the last
+     writer, not the person who ended it. The ending's actor lives in `cmdb.AuditLog`, and slice 7's history view
+     reads it from there (as slice 5b's deletes of attributes, types and relationship types already work). Never
+     UPDATE `ChangedBy` and then DELETE: that leaves a zero-length history row. Rejected: B, a retired state like
+     CIs. Slice 10 (discovery) decides how collectors end links (HANDOFF §3).
+  2. **Redundancy group: "A, optional field now, with two conditions."** An optional "Redundancy group" text on a
+     relationship (FR-CM-6), set when adding or editing it; editing a relationship means changing this text (its
+     type and ends never change). The impact engine (slice 19) reads it; collectors and the CSV import write the
+     same field. Conditions: (a) the form says impact analysis uses it later; (b) the grouping rule is written
+     now, so slice 19 never normalises what Editors typed. **The rule:** the members of one redundancy group are
+     the relationships that share their dependent CI (`FromCiId`) and their redundancy group text. The API trims
+     the text, stores an empty one as none (`NULL`), and refuses control characters and more than 200 characters
+     (the column is `nvarchar(200)`); texts are compared ignoring case (ordinal, as
+     `StringComparison.OrdinalIgnoreCase`, the way names match in any case; owner, 2026-10-25, "A. Ignore case
+     (Recommended)": "AG-ERP" and "ag-erp" are one group, the stored text keeps what was typed) and are never
+     otherwise normalised (no whitespace folding, no accent folding). The panel offers the group texts already used
+     on the dependent CI's relationships, so a typo
+     doesn't split a group. Rejected: B, the field with slice 19. Built (2026-10-25): the rule is
+     `Inventory/RedundancyGroups` (`Parse`, `Comparer`), and every reader matches texts there, in .NET, never by
+     a SQL collation (`Latin1_General_100_CI_AS` would also fold full-width letters); slice 19 uses it too.
+  3. **The graph explorer: "A, Cytoscape.js."** The PRD's library, pre-approved in `web/dependency-allowlist.json`;
+     version 3.34.4 (published 2026-10-15, no install scripts). The research session verified the 3.34.4 bundle and source:
+     it injects one `<style id="__________cytoscape_stylesheet">` as the first child of `<head>` (one rule: its
+     container class gets `position: relative`), with no nonce option, so the served CSP refuses it; everything
+     else is `element.style` (allowed), with no `innerHTML` or other HTML sink and no `eval`; and it skips the
+     injection when an element with that id already exists. Of the three options it set out for that element, the
+     owner took (i), the one it recommended: the web app creates `<style id="__________cytoscape_stylesheet">` with
+     the page's nonce (DEC-037) and that rule before the first `cytoscape()` call, and a test fails if the id
+     changes. (iii), an upstream nonce option, is an errand for later, asked before anything is posted upstream.
+     Rejected: (ii), accepting the violation; B, an in-repo SVG drawing with a fixed layout. Only the built-in
+     layouts (`breadthfirst`, `concentric`, `cose`); no extensions (GLPI's `cytoscape-dagre` is not
+     allow-listed). Verified under the served CSP and Trusted Types before the graph is built on it: on
+     2026-10-25 `web/e2e/cytoscape.spec.ts` (in the Compose smoke, Chrome) showed the stylesheet pre-created by
+     `web/src/graph/cytoscapeStylesheet.ts` with the page's nonce, a second graph adding none, the container rule
+     applied, type icons loading as same-origin files (`img-src 'self'`; Vite never inlines assets), the three
+     layouts, a PNG from an untainted canvas and `blob:` downloads, with no violation but the check's two
+     positive controls (a `<style>` without the nonce, a `data:` image). `web/tests/cytoscape-stylesheet.test.mjs`
+     fails if an update changes Cytoscape's id, class, rule or check.
+- **The board review (2026-10-25).** A second Claude session compared the canvas with the earlier mockups and 11
+  products (`tmp/slice6-review-findings.md`, its reports in `tmp/slice6-research/`, both git-ignored). The owner
+  answered rounds 1 and 3 in AskUserQuestion (round 3's reasons, the field evidence below, are that session's) and
+  relayed round 2 and the grouping amendment from that session's text.
+  4. **The graph's walk: "C. Two walks + group members."** The dependencies walk and the dependents walk each go
+     away from the focus CI and never turn round; when the dependents walk reaches a CI through a relationship
+     with a redundancy group, the other members of that group (same `FromCiId`, same text under item 2) and their
+     far ends are shown too. A member reached that way shows its true hop: "A. Its true hop, 4"; the status line
+     reads "up to 3 hops, plus redundancy groups". The boards' sample goes back to the earlier mockup's topology
+     (app-erp-db01 ← os_of APP-ERP-DB01 ← hosted_on SQLPRD01\ERP ← replica_on AG-ERP, which also has
+     SQLPRD02\ERP); the boards' `app-erp-db01 depends_on ERP-LSNR` goes. Rejected: A, the two walks alone (a group
+     drawn with one member); B, every relationship at every hop (a host's or cluster's graph is too large at depth
+     2 or 3).
+  5. **Grouping: "A. Now, in slice 6"**, with the owner's amendment. More than 10 neighbours of one CI that share
+     the direction, the relationship type and the CI type become one counted node ("124 VirtualMachines ·
+     runs_on"); the walk stops there, runs hop by hop, and a group counts as one CI toward the 500-CI limit; the
+     table view lists every member. Amendment: a Switch "Group many neighbours", on by default, beside Show
+     retired; off, the walk goes through the members and the limit applies as before (one address parameter,
+     `group=false`, one boolean on the graph read). The status line says when groups are present ("124 CIs in 1
+     group"); a group's card offers "Show these 124 in the table view" and "Explore from esx-mx-014". "What breaks
+     if this host fails?" is slice 19's question (US-41, screen 7), not screen 6's (US-40).
+  6. **Adding several CIs at once: "A. Several at once."** The CI picker takes several CIs of the allowed type,
+     with the same relationship type and redundancy group for all; the panel sends one audited request per CI,
+     lists any that failed and stays open. No batch endpoint.
+  7. **Export: "A. PNG and CSV now"**, amended the same day so the CSV follows DEC-041 item 3 ("exports are
+     audited, reads are not"; a side agent noticed the first wording broke it): **"A. CSV on the server,
+     audited."** `POST /api/v1/graph/export` takes the graph read's parameters and returns every relationship the
+     table view lists (group members included) as CSV through `Security/Csv.cs`, under the audit export's rule
+     (a row limit, refused rather than cut short, the count in `X-Goldmark-Entries`), and writes an audit entry
+     (focus CI, depth, direction, filters, row count) in the same transaction; an access policy, the endpoint
+     inventory test and `docs/security/endpoint-access.md`. The button reads "Export CSV…" and opens screen 16's
+     confirmation ("The export is recorded in the audit log."). PNG stays in the browser (`cy.png`, downloaded
+     from a `blob:` URL), unaudited: it is the pixels on screen, as a screenshot is. Rejected: B, both in the
+     browser and unaudited (contradicts DEC-041 for no gain, the pattern exists); C, no CSV (the useful half of
+     the export). No CSP change expected; confirmed in item 3's check. The entry's name and group (owner,
+     2026-10-25, AskUserQuestion): "A. Relationships, with one amendment: name the action relationship.exported
+     ("Relationships exported"), not graph.exported, with the graph's parameters (focus CI, depth, direction,
+     filters, row count) in the details. Then "Relationships (4 actions)" reads added, changed, deleted, exported,
+     and #47's cis.exported will sit the same way under its CI group." Rejected: B, a "Graph" group ("a group of
+     one for a screen, not an object"); C, beside "Audit log exported" ("'Audit log' is about the log itself").
+     The audit board's "Relationships (3 actions)" reads 4. The read's limit (owner, 2026-10-25, AskUserQuestion):
+     "A. Raise to 25,000." The read and the export stop before a hop that would pass 25,000 relationships (group
+     members included, so grouping can't get under it) and say `truncated`; a truncated graph's export is refused.
+     The reason the owner gave: at 5,000 "a Team that 6,000 CIs are owned_by" gets "no drawing, an empty table (no
+     hop is complete) and no CSV. That is worse than the field, which caps the picture (ServiceNow and BMC at 1,000
+     nodes) but never the list, because their lists page on the server. Our table is the accessible equivalent, so
+     it must not be the thing refused. 25,000 is the design target's CI count, and no single CI can have more direct
+     relationships of one type than there are CIs, so under the target the limit is never reached and the board's
+     wording keeps its numbers." Past the limit the page reads "More than 25,000 relationships within N hops is too
+     many to draw.", the table view lists the complete hops and its caption says where it stopped, Export CSV… is
+     disabled with that reason, and "Set depth to N" is offered when a depth fits. When hop 1 alone passes the limit
+     (owner, 2026-10-26, AskUserQuestion, after Codex found that PR #59 called it "no relationships"): "Answer A.
+     The board's sentences are simply false in this case, and showing them would be the real board violation.
+     Hop-1 limit: A. Only the filters. Tighten the first line so it names the hop, not the depth: "More than 25,000
+     relationships one hop from team-ops is too many to draw. Filter by CI type or relationship type." Table
+     caption as proposed. No buttons." The caption reads "No relationships: hop 1 from team-ops would pass the
+     25,000-relationship limit", and Export CSV…'s reason drops "lower the depth"; the Notes board says "hop 1 over
+     the limit: filters only; Set depth and grouping can't help, the server reads hop 1 whole before grouping".
+     Rejected: B, the board's text with 0 filled in ("lists the 0 hops that fit"). Rejected: keeping 5,000 with that
+     wording, and counting past the limit ("they make the honest number cheaper to show but keep the dead end"). "If
+     an estate ever outgrows 25,000, the fix is a server-paged table view (keyset cursor like Search), not a bigger
+     number"; the Notes board says so.
+     Measured (owner, 2026-10-26, "A. Measure now (Recommended)", after a side agent noted that the limit counts
+     every hop while its reason covered one CI's links): `PerformanceTests.The_graph_read_at_depth_6_on_the_synthetic_estate`
+     on 25,000 CIs and 51,915 relationships in §1.4's shape (`SyntheticInventory.SeedRelationshipsAsync`), depth 6,
+     both ways: at most 4,373 relationships (the largest team, 3,520 CIs owned_by it, grouping off), never truncated,
+     the slowest read 84 ms; a cluster 230 relationships grouped, 509 not (510 CIs, past the 500 the graph draws); a
+     storage array 48 and 1,155; a VM 50. NFR-PERF-1's 250,000 relationships are five times denser than this estate,
+     so a denser hub (more owned_by, slice 10's discovered links) is where the limit could come back; the test
+     measures it again then.
+  8. **A phrase per direction for relationship types: "B. Later, next slice touching screen 14"**, as #57.
+  9. **Keyboard selection on the graph canvas: "A. Not in slice 6, reason on Notes"**: none of the 11 products
+     documents it, and the table view is the accessible equivalent (NFR-A11Y-2); #58, for an accessibility pass.
+  10. **The graph opens at depth 3: "A. 3."**
+  11. **"View in graph" goes after Edit and Retire…: "A."** The approved slice 5 order stays; at 1024 it is the
+      last item in More actions; Viewers see it alone. In the field nobody puts the graph before Edit.
+  12. **Paging: "A. 50, then 'Show N more' on both"** (the CI page's tab and the graph's table view); each press
+      adds up to 200. No norm in the field; the point is consistency between the two screens.
+  13. **"Since" comes from a `CreatedAt` column: "B."** Migration 0008 adds a nullable `CreatedAt` to
+      `cmdb.Relationship`, backfilled once from the history (each row's earliest `ValidFrom`) and set on insert;
+      slice 10's collectors fill it as "first seen". Not A (the earliest history version per read):
+      `cmdb.RelationshipHistory` has only the clustered index on the period columns, so the join would scan the
+      history on every tab read, against NFR-PERF-1's 250k relationships with five years of history. ServiceNow,
+      BMC, Freshservice, NetBox and i-doit keep a creation date that survives edits. Built (2026-10-25): an UPDATE
+      of the versioned table would write a history version for every row, and with versioning off but the period
+      kept SQL Server 2025 still moves each `ValidFrom` (measured), so 0008 turns versioning off and drops the
+      period, fills current and history rows, and puts both back; `MigrationTests` checks that no version moved.
+  14. **The graph's selected-CI card drops Owner: "A."** It shows type, lifecycle and hops; "Owned by" shows only
+      when an `owned_by` relationship exists. A per-type list of card attributes, as iTop and ServiceNow have, is a
+      later feature if wanted.
+  15. **The graph's filters stop the walk: "A. Filters stop the walk, with the one-line note."** (owner,
+      2026-10-25, AskUserQuestion, during the build; a side agent noticed the boards didn't settle it.) The walk
+      never passes through a CI or a relationship that the CI types or relationship types filters leave out, so a CI
+      beyond a hidden one isn't reached; while a filter is on the page says "Filters also stop the walk: CIs beyond
+      a hidden one aren't reached." The owner's reasons: "every drawn line, table row and CSV row stays a real
+      relationship, which "Relationships exported" (the audit entry) and the table's a11y role require", and "A is
+      also the rule slice 19's impact walk uses (a relationship type with Impact None stops propagation the same
+      way)". Rejected: B, walking through and joining the shown CIs with "via 1 hidden CI" lines ("rows that aren't
+      relationships"); C, relationship types stopping the walk and CI types only hiding ("two rules for two filters
+      that look alike"). The later option, if people trip on the empty state, is a "Dim instead of hide" switch: the
+      unfiltered walk, filtered-out CIs dimmed rather than hidden, no synthetic lines and no table change. The field, as
+      a Claude research session read vendor documentation and source (relayed by the owner, 2026-10-25; its report is
+      `tmp/slice6-research/09-graph-filter-traversal.md`, git-ignored): ServiceNow's Dependency Views does A by
+      default (filtered items "will be removed from the graph along with any disconnected children"), with dimming as
+      an option; iTop does B in its code, bridging a hidden node with an edge from each predecessor to each successor,
+      a line that is no real relationship; Unified Map and BMC hide by default (Unified Map can show filtered CIs "as
+      dimmed view-only images") and don't document what lies beyond a hidden CI; Lansweeper's diagram isn't a walk,
+      and its "Reduced" is its dim; GLPI has no type filter. That session corrected its own earlier line that
+      ServiceNow "keeps the full walk and dims" by default. The later option is therefore worded as a "Show filtered
+      CIs dimmed" switch, like ServiceNow's option, with the unfiltered walk's cost and no synthetic lines; the Notes
+      board records it, and today's way out is the empty state's Clear filters.
+  16. **The graph's boxes: "C. Fix 2 and 3, accept 1."** (owner, 2026-10-25, during the build; a side agent noticed
+      the differences, and the owner's answer came relayed with a Claude session's reading of the Cytoscape source.)
+      Cytoscape draws a node's text as one label in one font. Accepted: (1) the name and type share one font ("the
+      icon, the card and the table carry the type in the boards' style"; the Notes board names the difference).
+      Fixed: (2) a group is a stack through Cytoscape's built-in ghost style ("ghost: yes, offsets 3 px ... not a
+      second node"); (3) a retired CI fades as a whole (node opacity), "· Retired" kept in its caption "so it never
+      relies on fading alone". Rejected: A, accepting all three; B, a bold name over a caption baked into each type's
+      icon image (breaks for custom types and theme changes). Layout, recorded with it ("correct the layout note"):
+      Hierarchical is Goldmark's rows (dependents above the focus, dependencies below, redundancy members one row
+      under their dependent; `web/src/graph/graphData.ts` `layeredPositions`) drawn with Cytoscape's built-in `preset`
+      layout, "because breadthfirst grows one way from its roots" and so can't place both directions in one run. Also
+      measured (2026-10-25, headless in Node): `breadthfirst`'s `maximal` option, which keeps arrows downward within
+      that one way, fails on the boards' sample with a TypeError in `getWeightedPercent` and blanked the page in the
+      browser; the relayed reading counted the source's one explicit error (an invalid `direction`), which is a
+      different failure. Item 3's "only the built-in layouts" holds: `preset` is built in, and no package was added.
+- **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
+  silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
+  covered.

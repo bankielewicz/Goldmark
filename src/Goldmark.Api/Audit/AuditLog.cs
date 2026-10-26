@@ -129,6 +129,7 @@ internal sealed class AuditLog(DbSession db)
         { Type: AuditTargetTypes.Ci, Name: var name, CiType: var type } => $"{name} ({type})",
         { Type: AuditTargetTypes.CiType, Name: var name } => $"{name} (CI type)",
         { Type: AuditTargetTypes.RelationshipType, Name: var name } => $"{name} (relationship type)",
+        { Type: AuditTargetTypes.Relationship, Name: var name } => $"{name} (relationship)",
         { DisplayName: { } name, UserName: { } user } => $"{name} ({user})",
         { Removed: true, UserName: { } user } => $"{user} (account removed)",
         { Removed: true } => "Removed account",
@@ -176,6 +177,10 @@ internal sealed class AuditLog(DbSession db)
             AuditTargetTypes.RelationshipType => new AuditParty(AuditTargetTypes.RelationshipType, null, null, null,
                 Removed: row.TargetRelationshipTypeName is null, Name: row.TargetRelationshipTypeName ?? Recorded(details, "name"),
                 Number: Number(row.TargetId)),
+            // A relationship's type and ends never change and a deleted one leaves no row, so its entries name it as
+            // they recorded it ("app-erp-db01 runs_on esx-mx-014"), whether it still exists or not.
+            AuditTargetTypes.Relationship => new AuditParty(AuditTargetTypes.Relationship, Guid.TryParse(row.TargetId, out var relationship) ? relationship : null,
+                null, null, Removed: false, Name: $"{Recorded(details, "from")} {Recorded(details, "type")} {Recorded(details, "to")}"),
             _ => null,
         };
         return new AuditEntry(row.Id, row.At, actor, row.Action, action.Label, action.Outcome, target, row.Ip, details);
@@ -207,17 +212,19 @@ internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string
 /// <summary>
 /// Who acted, or what it was about: a person (a removed account is <c>Removed</c>), a CI (<c>Name</c>,
 /// <c>CiType</c>), a CI type (<c>Name</c>; slice 5) or a relationship type (<c>Name</c>; slice 5b), these two with
-/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>).
+/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>), or a
+/// relationship (<c>Id</c>, <c>Name</c> as "from type to"; slice 6).
 /// </summary>
 internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null,
     int? Number = null);
 
-/// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5.</summary>
+/// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5; relationships from slice 6.</summary>
 internal static class AuditTargetTypes
 {
     public const string Ci = "Ci";
     public const string CiType = "CiType";
     public const string RelationshipType = "RelationshipType";
+    public const string Relationship = "Relationship";
 }
 
 internal sealed record AuditPerson(Guid Id, string UserName, string DisplayName);

@@ -18,7 +18,7 @@
       "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
     },
     "cytoscape": {
-      "justification": "Graph explorer canvas (screen 6). Not installed until slice 6.",
+      "justification": "Graph explorer canvas (screen 6), 3.34.4 from slice 6 (DEC-046 item 3); its one injected <style> is pre-created with the page nonce (src/graph/cytoscapeStylesheet.ts).",
       "approvedBy": "PRD NFR-SEC-9 initial runtime allow-list"
     },
     "react-router": {

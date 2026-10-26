@@ -38,6 +38,7 @@ import {
 } from '@fluentui/react-components';
 import {
   ArrowExportRegular,
+  ArrowRightRegular,
   CheckmarkCircleRegular,
   ChevronDownRegular,
   ChevronRightRegular,
@@ -79,6 +80,7 @@ const useStyles = makeStyles({
   expandColumn: { width: '48px' },
   timeCell: { whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
   party: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
+  inlineIcon: { verticalAlign: 'text-bottom' },
   dot: { color: tokens.colorNeutralForeground3 },
   mono: { fontFamily: tokens.fontFamilyMonospace, color: tokens.colorNeutralForeground2 },
   none: { color: tokens.colorNeutralForeground3 },
@@ -343,6 +345,7 @@ function personText(party: Party): string {
   if (party.type === 'Ci') return `${party.name ?? 'A CI'} · ${party.ciType ?? 'CI'}`;
   if (party.type === 'CiType') return `${party.name ?? 'A type'} · CI type`;
   if (party.type === 'RelationshipType') return `${party.name ?? 'A relationship type'} · Relationship type`;
+  if (party.type === 'Relationship') return `${party.name ?? 'A relationship'} (Relationship)`;
   if (party.displayName && party.userName) return `${party.displayName} · ${party.userName}`;
   if (party.removed) return party.userName ? `${party.userName} (account removed)` : 'Removed account';
   return '';
@@ -359,7 +362,10 @@ function peopleName(id: string, people: Person[], entries: readonly Entry[] = []
   return (party && personText(party)) || id;
 }
 
-/** The `target` filter names a person by id, or since slice 5b `ci:{id}`, `type:{number}` or `relationship-type:{number}`. */
+/**
+ * The `target` filter names a person by id, or since slice 5b `ci:{id}`, `type:{number}` or `relationship-type:{number}`,
+ * and since slice 6 `relationship:{id}`.
+ */
 function isPersonTarget(target: string): boolean {
   return !target.includes(':');
 }
@@ -373,9 +379,19 @@ function targetName(target: string, people: Person[], entries: readonly Entry[] 
     .find((p) =>
       kind === 'ci'
         ? p?.type === 'Ci' && p.id === key
-        : p?.type === (kind === 'type' ? 'CiType' : 'RelationshipType') && String(p.number) === key,
+        : kind === 'relationship'
+          ? p?.type === 'Relationship' && p.id === key
+          : p?.type === (kind === 'type' ? 'CiType' : 'RelationshipType') && String(p.number) === key,
     );
-  return party ? personText(party) : kind === 'ci' ? 'A CI' : kind === 'type' ? 'A CI type' : 'A relationship type';
+  return party
+    ? personText(party)
+    : kind === 'ci'
+      ? 'A CI'
+      : kind === 'type'
+        ? 'A CI type'
+        : kind === 'relationship'
+          ? 'A relationship'
+          : 'A relationship type';
 }
 
 /** The picker option for what a filter names when the people list doesn't have it (a removed account, a CI, a type). */
@@ -501,6 +517,23 @@ function describeRecordedFilters(value: unknown, catalog: Catalog | null, people
   return parts.length > 0 ? parts.join(' · ') : 'No filters';
 }
 
+/** A graph export's recorded parameters (DEC-046 item 7): "3 hops · Both · retired CIs left out". */
+function describeGraphFilters(value: unknown): string {
+  const f = (typeof value === 'object' && value !== null ? value : {}) as Record<string, unknown>;
+  const depth = typeof f.depth === 'number' ? f.depth : null;
+  const direction =
+    { both: 'Both', dependencies: 'Dependencies', dependents: 'Dependents' }[text(f.direction)] ?? text(f.direction);
+  const parts = [
+    depth === null ? '' : `${depth} ${depth === 1 ? 'hop' : 'hops'}`,
+    direction,
+    strings(f.types).length > 0 ? `CI types: ${strings(f.types).join(', ')}` : '',
+    strings(f.relationshipTypes).length > 0 ? `relationship types: ${strings(f.relationshipTypes).join(', ')}` : '',
+    f.retired === true ? 'retired CIs included' : 'retired CIs left out',
+    f.group === false ? 'Group many neighbours off' : '',
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+
 /** An entry's own details in words, never raw JSON; an unknown detail shows as its name and value. */
 function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]): [string, string][] {
   const details = entry.details ?? {};
@@ -590,6 +623,37 @@ function describeDetails(entry: Entry, catalog: Catalog | null, people: Person[]
     case 'relationship-type.changed':
       shown.add('name');
       add('changed', 'Changed', strings(details.changed).join(', '));
+      break;
+    // Slice 6 (DEC-046): what each entry recorded, as a deleted relationship leaves nothing to look up.
+    case 'relationship.added':
+    case 'relationship.deleted':
+    case 'relationship.changed':
+      shown.add('fromId').add('toId').add('fromType').add('toType');
+      add('type', 'Relationship', text(details.type));
+      add('from', 'From', `${text(details.from)} (${text(details.fromType)})`);
+      add('to', 'To', `${text(details.to)} (${text(details.toType)})`);
+      if (entry.action === 'relationship.changed') {
+        add(
+          'changed',
+          'Changed',
+          strings(details.changed)
+            .map((field) => (field === 'RedundancyGroup' ? 'Redundancy group' : field))
+            .join(', '),
+        );
+        add('before', 'Before', typeof details.before === 'string' ? details.before : '—');
+        add('after', 'After', typeof details.after === 'string' ? details.after : '—');
+      } else {
+        add(
+          'redundancyGroup',
+          'Redundancy group',
+          typeof details.redundancyGroup === 'string' ? details.redundancyGroup : '—',
+        );
+      }
+      break;
+    case 'relationship.exported':
+      shown.add('name').add('type');
+      add('filters', 'Graph', describeGraphFilters(details.filters));
+      add('relationships', 'Relationships exported', text(details.relationships));
       break;
     default:
       break;
@@ -1225,6 +1289,16 @@ function PartyName({ party }: { party: Party }) {
       </span>
     );
   }
+  if (party.type === 'Relationship') {
+    return (
+      <span className={styles.party}>
+        <span>
+          <ArrowRightRegular aria-hidden="true" className={styles.inlineIcon} /> {party.name}
+        </span>
+        <span className={styles.none}>· Relationship</span>
+      </span>
+    );
+  }
   if (party.type === 'CiType' || party.type === 'RelationshipType') {
     return (
       <span>
@@ -1322,6 +1396,26 @@ function EntryDetails({
           </Link>
           <Button appearance="subtle" icon={<FilterRegular />} onClick={() => onShowAll(`ci:${target.id ?? ''}`)}>
             Show all entries about {target.name ?? 'this CI'}
+          </Button>
+        </div>
+      ) : null}
+      {target?.type === 'Relationship' && target.id ? (
+        <div className={styles.detailActions}>
+          {(['from', 'to'] as const).map((end) => {
+            const id = entry.details?.[`${end}Id`];
+            const name = entry.details?.[end];
+            return typeof id === 'string' ? (
+              <Link key={end} href={`/ci/${id}`} onClick={(event) => followLink(event, `/ci/${id}`)}>
+                Open {typeof name === 'string' ? name : 'the CI'}
+              </Link>
+            ) : null;
+          })}
+          <Button
+            appearance="subtle"
+            icon={<FilterRegular />}
+            onClick={() => onShowAll(`relationship:${target.id ?? ''}`)}
+          >
+            Show all entries about this relationship
           </Button>
         </div>
       ) : null}

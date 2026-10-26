@@ -1,0 +1,68 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-25T03:10:00Z"
+  },
+  "title": "Goldmark slice 6: relationships",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · light · app-erp-db01, as an Editor (also the shell: Graph explorer under Inventory)" },
+    "RelsDark.dc.html": { "x": 1520, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · dark · as an Editor" },
+    "RelsViewer.dc.html": { "x": 3040, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · light · as a Viewer" },
+    "RelsEmpty.dc.html": { "x": 4560, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · light · no relationships yet (hcx-ma-01)" },
+    "RelsLoading.dc.html": { "x": 6080, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · light · loading" },
+    "RelsError.dc.html": { "x": 7600, "y": 0, "w": 1440, "h": 900, "title": "5 · Relationships tab · light · error" },
+    "Rels1024.dc.html": { "x": 9120, "y": 0, "w": 1024, "h": 768, "title": "5 · Relationships tab · 1024 · light · More actions open" },
+    "RelsMany.dc.html": { "x": 10640, "y": 0, "w": 1440, "h": 3000, "title": "5 · Relationships tab · light · esx-mx-014: 124 dependents, Show 74 more" },
+    "AddRel.dc.html": { "x": 0, "y": 1400, "w": 1440, "h": 900, "title": "Add relationship · light · runs_on, the other CI picked, the preview" },
+    "AddRelDark.dc.html": { "x": 1520, "y": 1400, "w": 1440, "h": 900, "title": "Add relationship · dark · runs_on" },
+    "AddRelGroups.dc.html": { "x": 3040, "y": 1400, "w": 1440, "h": 900, "title": "Add relationship · light · two CIs at once, the redundancy group's suggestions (esx-mx-014)" },
+    "AddRelErrors.dc.html": { "x": 4560, "y": 1400, "w": 1440, "h": 900, "title": "Add relationship · light · errors" },
+    "EditRel.dc.html": { "x": 6080, "y": 1400, "w": 1440, "h": 900, "title": "Edit relationship · light" },
+    "EditRelConflict.dc.html": { "x": 7600, "y": 1400, "w": 1440, "h": 900, "title": "Edit relationship · light · someone else saved (412)" },
+    "AddRelPartial.dc.html": { "x": 9120, "y": 1400, "w": 1440, "h": 900, "title": "Add relationship · light · two CIs, one already existed: the panel stays open" },
+    "Graph.dc.html": { "x": 0, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · 3 hops from app-erp-db01 plus redundancy groups, ERP selected" },
+    "GraphDark.dc.html": { "x": 1520, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · dark · 3 hops, ERP selected" },
+    "GraphTable.dc.html": { "x": 3040, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · table view, the same relationships" },
+    "GraphNoFocus.dc.html": { "x": 4560, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · no focus CI yet" },
+    "GraphLoading.dc.html": { "x": 6080, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · loading" },
+    "GraphTooLarge.dc.html": { "x": 7600, "y": 2800, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · too large to draw (CL-PROD-02, Group many neighbours off)" },
+    "GraphEmpty.dc.html": { "x": 0, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · no relationships (hcx-ma-01)" },
+    "GraphError.dc.html": { "x": 1520, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · error" },
+    "GraphNotFound.dc.html": { "x": 3040, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · the focus CI doesn't exist (an old link)" },
+    "Graph1024.dc.html": { "x": 4560, "y": 3920, "w": 1024, "h": 1000, "title": "6 · Graph explorer · 1024 · light · Filters drawer open" },
+    "GraphExport.dc.html": { "x": 7184, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · Export CSV… confirmation (recorded in the audit log)" },
+    "GraphGroups.dc.html": { "x": 5664, "y": 3920, "w": 1440, "h": 1000, "title": "6 · Graph explorer · light · CL-PROD-02 with Group many neighbours on, a group selected" },
+    "DeleteRel.dc.html": { "x": 0, "y": 5480, "w": 1440, "h": 900, "title": "Delete relationship · light" },
+    "DeleteRelDark.dc.html": { "x": 1520, "y": 5480, "w": 1440, "h": 900, "title": "Delete relationship · dark" },
+    "AuditRel.dc.html": { "x": 3040, "y": 5480, "w": 1440, "h": 1000, "title": "16 · Audit log · light · \"Relationship deleted\" expanded" },
+    "NavRail.dc.html": { "x": 4560, "y": 5480, "w": 240, "h": 852, "title": "Shell · 1024 rail · Graph explorer with its Tooltip" },
+    "Notes.dc.html": { "x": 4880, "y": 5480, "w": 1440, "h": 3000, "title": "Notes · components, decisions and the details to approve" },
+    "CiPage.dc.html": { "x": 0, "y": 8880, "w": 1440, "h": 900, "title": "Component · CI detail page (Attributes and Relationships tabs)" },
+    "RelPanel.dc.html": { "x": 1520, "y": 8880, "w": 480, "h": 852, "title": "Component · Add relationship and Edit relationship panel" },
+    "GraphPage.dc.html": { "x": 2080, "y": 8880, "w": 1440, "h": 1000, "title": "Component · graph explorer page" },
+    "AuditPage.dc.html": { "x": 3600, "y": 8880, "w": 1440, "h": 1000, "title": "Component · audit log page (slice 6 entries)" },
+    "TopBar.dc.html": { "x": 5120, "y": 8880, "w": 1440, "h": 48, "title": "Component · top bar" },
+    "Nav.dc.html": { "x": 6640, "y": 8880, "w": 260, "h": 852, "title": "Component · navigation" }
+  },
+  "order": [
+    "Main.dc.html", "CiPage.dc.html", "TopBar.dc.html", "Nav.dc.html", "RelPanel.dc.html", "GraphPage.dc.html", "AuditPage.dc.html",
+    "RelsDark.dc.html", "RelsViewer.dc.html", "RelsEmpty.dc.html", "RelsLoading.dc.html", "RelsError.dc.html", "Rels1024.dc.html", "RelsMany.dc.html",
+    "AddRel.dc.html", "AddRelDark.dc.html", "AddRelGroups.dc.html", "AddRelErrors.dc.html", "EditRel.dc.html", "EditRelConflict.dc.html", "AddRelPartial.dc.html",
+    "Graph.dc.html", "GraphDark.dc.html", "GraphTable.dc.html", "GraphNoFocus.dc.html", "GraphLoading.dc.html", "GraphTooLarge.dc.html",
+    "GraphEmpty.dc.html", "GraphError.dc.html", "GraphNotFound.dc.html", "Graph1024.dc.html", "GraphGroups.dc.html", "GraphExport.dc.html",
+    "DeleteRel.dc.html", "DeleteRelDark.dc.html", "AuditRel.dc.html", "NavRail.dc.html", "Notes.dc.html"
+  ],
+  "notes": {
+    "rowRels": {"x": 0, "y": -280, "text": "Screen 5 · CI detail · the Relationships tab and View in graph", "kind": "title1", "maxW": 12080},
+    "rowPanels": {"x": 0, "y": 1120, "text": "Add relationship and Edit relationship panels", "kind": "title1", "maxW": 10560},
+    "rowGraph": {"x": 0, "y": 2520, "text": "Screen 6 · Graph explorer", "kind": "title1", "maxW": 9040},
+    "rowDelete": {"x": 0, "y": 5200, "text": "Deleting a relationship, the audit log, the shell and the details to approve", "kind": "title1", "maxW": 6320},
+    "rowParts": {"x": 0, "y": 8600, "text": "Components the boards are built from", "kind": "title1", "maxW": 6900}
+  },
+  "designSystems": []
+}

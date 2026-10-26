@@ -9,7 +9,8 @@ namespace Goldmark.Api.Audit;
 /// reaches SQL or the export's audit entry: times are ISO 8601, people are ids, actions come from
 /// <see cref="AuditCatalog"/>, and an IP address prefix holds only hexadecimal digits, dots and colons,
 /// so it can never carry a LIKE wildcard or free text. <c>target</c> is a person's id, or what else an
-/// entry can be about: <c>ci:{id}</c>, <c>type:{number}</c>, <c>relationship-type:{number}</c> (slice 5b).
+/// entry can be about: <c>ci:{id}</c>, <c>type:{number}</c>, <c>relationship-type:{number}</c> (slice 5b),
+/// <c>relationship:{id}</c> (slice 6).
 /// </summary>
 internal sealed partial record AuditQuery(
     DateTimeOffset? From,
@@ -228,7 +229,7 @@ internal static class AuditActorTypes
     public const string Anonymous = "Anonymous";
 }
 
-/// <summary>What an entry is about, for the <c>target</c> filter: a person or a CI by id, a CI type or a relationship type by number.</summary>
+/// <summary>What an entry is about, for the <c>target</c> filter: a person, a CI or a relationship by id, a CI type or a relationship type by number.</summary>
 internal sealed record AuditTargetFilter(string Type, Guid? Id, int? Number)
 {
     public static AuditTargetFilter? Parse(string text)
@@ -241,6 +242,7 @@ internal sealed record AuditTargetFilter(string Type, Guid? Id, int? Number)
             "ci" when Guid.TryParseExact(value, "D", out var ci) => new(AuditTargetTypes.Ci, ci, null),
             "type" when PositiveNumber(value) is { } type => new(AuditTargetTypes.CiType, null, type),
             "relationship-type" when PositiveNumber(value) is { } relationshipType => new(AuditTargetTypes.RelationshipType, null, relationshipType),
+            "relationship" when Guid.TryParseExact(value, "D", out var relationship) => new(AuditTargetTypes.Relationship, relationship, null),
             _ => null,
         };
     }
@@ -250,6 +252,7 @@ internal sealed record AuditTargetFilter(string Type, Guid? Id, int? Number)
         AuditActorTypes.User => Id!.Value.ToString("D"),
         AuditTargetTypes.Ci => "ci:" + Id!.Value.ToString("D"),
         AuditTargetTypes.CiType => "type:" + Number!.Value.ToString(CultureInfo.InvariantCulture),
+        AuditTargetTypes.Relationship => "relationship:" + Id!.Value.ToString("D"),
         _ => "relationship-type:" + Number!.Value.ToString(CultureInfo.InvariantCulture),
     };
 

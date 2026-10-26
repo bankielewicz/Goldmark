@@ -34,6 +34,7 @@ import {
   BoardRegular,
   ChevronDownRegular,
   DocumentBulletListClockRegular,
+  FlowchartRegular,
   KeyRegular,
   NavigationRegular,
   PeopleRegular,
@@ -233,6 +234,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
     { value: 'search', label: 'Search', group: 'Inventory', path: '/search', icon: <SearchRegular /> },
+    // Slice 6 (screen 6): for everyone signed in, after Search.
+    { value: 'graph', label: 'Graph explorer', group: 'Inventory', path: '/graph', icon: <FlowchartRegular /> },
     ...(isAdmin(user)
       ? [
           // Slice 5b (screen 14): first in the group, Admin only.

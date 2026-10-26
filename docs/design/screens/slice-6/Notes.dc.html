@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Slice 6 screens: components, decisions and notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 3000px; box-sizing: border-box; padding: 48px; background: #ffffff; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 28px">
+  <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Slice 6 screens · components, decisions and notes</h1>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Fluent v9 components</h2>
+    <dl style="margin: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 8px 24px">
+      <sc-for list="{{components}}" as="c" hint-placeholder-count="10">
+        <dt style="font-weight: 600">{{c.k}}</dt>
+        <dd style="margin: 0; color: #424242">{{c.v}}</dd>
+      </sc-for>
+    </dl>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the design system</h2>
+    <p style="margin: 0; color: #424242">None. Every colour, type step, radius and shadow is a token from the approved system (DEC-039), and the shell, table, form, side panel, dialog and badge patterns are its own. The graph uses tokens too: nodes are neutral background 1 with stroke 1, the focus CI a 3 px brand stroke, the selected CI the focus ring, a group a stacked outline (Cytoscape’s ghost, an offset copy behind it), a retired CI faded as a whole with “Retired” in its caption; edges are neutral foreground 3 (the selected CI’s, foreground 1). One difference from these boards, accepted (DEC-046 item 16): the canvas draws a CI’s name and type in one font, since Cytoscape draws a node’s text as one label; the card and the table view show them in these styles. Dotted and dashed are line styles, so the graph never relies on colour alone. The type icons are stand-ins, as on slice 5’s boards.</p>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Decided by the owner (2026-10-24 and 25, DEC-046 items 1 to 14)</h2>
+    <ol style="margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{decided}}" as="d" hint-placeholder-count="14"><li>{{d}}</li></sc-for>
+    </ol>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Settled on these boards, with the reason (approved with them)</h2>
+    <ol style="margin: 0; padding-left: 24px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{settled}}" as="d" hint-placeholder-count="15"><li>{{d}}</li></sc-for>
+    </ol>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">In the handoff, not drawn</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{notDrawn}}" as="d" hint-placeholder-count="7"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Build notes</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; color: #424242">
+      <sc-for list="{{build}}" as="d" hint-placeholder-count="8"><li>{{d}}</li></sc-for>
+    </ul>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":3000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const kv = (k, v) => ({ k, v });
+    return {
+      components: [
+        kv('Navigation', 'NavItem “Graph explorer” (a flowchart icon) in the Inventory group after Search, for everyone signed in; on the 1024 rail the icon alone, with a Tooltip.'),
+        kv('CI page header', 'Toolbar: Edit, Retire… (as approved), then “View in graph” (a Button rendered as a link, secondary); Viewers see View in graph alone. Below 1100 px all three in the More actions Menu, View in graph last.'),
+        kv('CI page tabs', 'TabList: Tab “Attributes” (as approved) and Tab “Relationships” with its count in a Badge (tint, subtle, circular).'),
+        kv('Relationships tab', 'Button “Add relationship” (secondary, Add icon); two sections, each a heading and a Table in a fixed order; the relationship type in monospace with a Tooltip (its description); Link with the TypeIcon; Badge (tint, subtle) “Retired”; per row Buttons (subtle, icon only) Edit and Delete with accessible names; Button “Show N more”; Skeleton; MessageBar (error, Retry, Reference ID).'),
+        kv('Add / Edit relationship', 'OverlayDrawer (end, 480 px): Field + Combobox (relationship type, the option showing its ends), the side as text or a RadioGroup, a TagPicker (several CIs of the allowed type, searching names as you type), Combobox freeform (redundancy group, suggestions as options), a preview line; Input readOnly for what can’t change; MessageBar (error summary; warning after a partial add); Button Add or Save (primary), Cancel (Close after a partial add).'),
+        kv('Dialogs', 'Dialog (alertdialog): Delete relationship (Cancel, Delete in the danger style); the 412 dialog of slice 5, “Review their changes” / “Discard mine”.'),
+        kv('Graph options', 'A labelled region: Combobox (Focus CI, any CI, retired included), Slider (1 to 6, value shown), RadioGroup (horizontal; Direction), Dropdown multiselect (CI types grouped as §9.3; relationship types), Switch “Show retired”, Switch “Group many neighbours”, Dropdown (Layout), two ToggleButtons (View), Buttons Export PNG (graph view) and Export CSV… (a Dialog, as on screen 16); status text in a polite live region. Below 1100 px: Focus CI, Depth, View, Export and Button “Filters” opening an OverlayDrawer (start, 320 px) with the rest.'),
+        kv('Graph view', 'The Cytoscape.js canvas element with role img and a label, inside a labelled region that also holds Link “Switch to table view (same relationships)” (first) and Buttons Zoom in, Zoom out, Fit; the legend as a list; the selected CI in a Card (Badges, Buttons “Explore from here” and “Open CI”); a selected group in a Card (“Show these 124 in the table view”, “Explore from esx-mx-014”).'),
+        kv('Table view', 'Table with sortable headers: From, Relationship, To, Redundancy group, Hops; a visible caption; 50 rows, then Button “Show N more”.'),
+        kv('Audit log', 'Unchanged layout; the group “Relationships” in the Action list; Affected shows “From type To · Relationship”; the details link to both CIs.')
+      ],
+      decided: [
+        'Deleting a relationship ends it: the row goes, the history of both CIs keeps it, and the audit log records who ended it.',
+        'A redundancy group is an optional text now; the panel says impact analysis (a later release) uses it; one group is the relationships that share their dependent CI and their group text, trimmed, up to 200 characters, no line breaks, compared ignoring case (“AG-ERP” and “ag-erp” are one group, stored as typed).',
+        'The graph is drawn with Cytoscape.js 3.34.4 and its built-in layouts only: Hierarchical is Goldmark’s rows drawn with the built-in preset layout (dependents above the focus CI, dependencies below; breadthfirst grows one way from its roots, so it can’t place both, DEC-046 item 16), Concentric is concentric, Force is cose.',
+        'Both directions are two walks away from the focus CI, plus the other members of any redundancy group the dependents walk reaches. A member reached that way shows its true hop: from app-erp-db01, SQLPRD02\\ERP is at hop 4 at depth 3, and the status line reads “plus redundancy groups”.',
+        'More than 10 neighbours of one CI with the same direction, relationship type and CI type become one counted node, and the walk stops there; a group counts as one CI toward the 500 limit, and the table lists every member. A Switch “Group many neighbours”, on by default, turns it off. “What breaks if this host fails?” is the impact screen’s question (slice 19, US-41), not this screen’s.',
+        'Add relationship takes several CIs at once: one audited request per CI; failures are listed and the panel stays open.',
+        'Export PNG and CSV. The CSV comes from the server and is audited, as every export is (DEC-041 item 3): “Export CSV…” opens screen 16’s confirmation, “The export is recorded in the audit log.” The PNG is the pixels on screen, made in the browser and not audited, as a screenshot isn’t.',
+        'A phrase for each direction of a relationship type (“runs on” / “hosts”) waits for the next slice that touches screen 14 (an issue).',
+        'No keyboard selection on the graph canvas in slice 6: none of 11 products documents it, and the table view is the accessible equivalent (NFR-A11Y-2); an issue for an accessibility pass.',
+        'The graph opens at depth 3.',
+        '“View in graph” goes after Edit and Retire…, so the approved slice 5 order stays; at 1024 it is the last item in More actions.',
+        'Both the CI page’s tab and the graph’s table view show 50 rows, then “Show N more”, which adds up to 200.',
+        '“Since” is a new CreatedAt column (migration 0008), backfilled from the history and set on insert.',
+        'The graph’s selected-CI card shows type, lifecycle and hops; “Owned by” shows only when an owned_by relationship exists.'
+      ],
+      settled: [
+        'The address holds the whole view, as Search does, so a view can be bookmarked and shared: /graph?ci={id}&depth=…&direction=…&type=…&relationshipType=…&retired=true&group=false&layout=…&view=table, with only the values that differ from the defaults. It joins docs/integration/deep-links.md beside /ci/{id}?tab=relationships.',
+        'Defaults: depth 3, Both, all CI types, all relationship types, retired CIs hidden, Group many neighbours on, Hierarchical (dependents above the focus CI, dependencies below, so arrows read top-down), Graph view (the table view on a phone).',
+        'With Show retired off, retired CIs and their relationships are left out of the graph and the table, as on Search; the focus CI shows even when it’s retired, because it was asked for. The CI page’s tab always lists relationships with retired CIs, marked Retired.',
+        'The CI types and relationship types filters stop the walk, as Show retired does (owner, DEC-046 item 15): every line, table row and CSV row stays a real relationship. While a filter is on, a line under the status reads “Filters also stop the walk: CIs beyond a hidden one aren’t reached.”; the way out today is the empty state’s Clear filters. Later, if people trip on it: a “Show filtered CIs dimmed” switch, like ServiceNow’s option, that walks every type and dims the filtered-out CIs, with no lines that aren’t relationships (iTop bridges hidden CIs with lines that aren’t relationships, which is why that isn’t the way).',
+        'The graph draws at most 500 CIs (ServiceNow’s map stops at 250, BMC warns at 500). With grouping it is rarely reached; above it, the “too large” state offers Group many neighbours, the deepest depth that fits (“Set depth to 2”) and the table view.',
+        'A CI’s hops are the fewest relationships between it and the focus CI; a relationship’s hops are its farther end’s; a redundancy-group member keeps its true hop.',
+        'Edges point from the dependent to the dependency. A relationship type with Impact None draws dotted, because no impact passes along it. A relationship with a redundancy group draws dashed with the group’s name on the line, not a hull, because one CI can be in several groups and a Cytoscape compound node has one parent.',
+        'Selecting a CI shows its card beside the canvas (below it at 1024); Explore from here keeps the depth, direction and filters; double-click opens the CI page; node positions aren’t saved (saved views are a later feature).',
+        'A group node reads “124 VirtualMachines” with the caption “Group · runs_on” and a stacked outline; its card says the graph doesn’t go past it and that turning off Group many neighbours draws each member.',
+        'The Relationships tab’s count is both sections together, retired CIs included, and loads with the page. Each section is sorted by relationship type, then the related CI’s name, as iTop and CMDBuild group a CI’s relations by type.',
+        'Edit and Delete are offered on a relationship with a retired CI, so it can be cleaned up (Lansweeper, ServiceNow and BMC keep a retired CI’s relations); a retired CI’s own page offers no Add relationship until it is restored, as a retired CI changes only by restoring (DEC-044).',
+        'The redundancy group suggestions are the groups on the dependent CI’s relationships, because a group only means something among one dependent’s relationships (item 2): adding an uplink to esx-mx-014 offers “vSwitch0 · 2 relationships”.',
+        'Adding several CIs: the type and group apply to each; the preview names them all; after a partial add the warning names what was added and what failed, the added CIs leave the picker, and Cancel reads Close.',
+        'Export file names say what they hold (“graph-app-erp-db01-3-hops.png”, “…-3-hops.csv”); Export PNG shows in the graph view only, Export CSV… in both. The CSV lists every relationship the table view lists, group members included; past the row limit it is refused, never cut short, as the audit log’s export is.',
+        'Source reads “Manual” for every relationship until slice 10’s collectors fill it; the column stays so the layout doesn’t change then.',
+        'The audit log’s new group is “Relationships”: Relationship added, changed and deleted. Affected names “From type To · Relationship”; the details list Relationship, From, To and Redundancy group (a change: Changed, Before, After) and link to both CIs. Row buttons are named for the relationship: “Edit runs_on esx-mx-014”, “Edit ERP depends_on app-erp-db01”.'
+      ],
+      notDrawn: [
+        'The Toasts (“Relationship added”, “2 relationships added”, “Changes saved”, “Relationship deleted”) and their polite announcement; a panel’s saving state; the discard dialog (slice 5’s).',
+        'The Edit panel when the relationship was deleted meanwhile (a warning, Save disabled) and after “Review their changes” (slice 5’s review, one field).',
+        'The relationship type list open (each option “runs_on · VirtualMachine → HypervisorHost”) and the other messages: “A CI can’t have a relationship with itself.”, “Choose a HypervisorHost.”, “That CI was retired meanwhile. Choose another.”, “Choose a relationship type.”, “Choose a CI.”',
+        'The graph with Show retired on (Payroll dimmed, “Retired” in its caption), the Concentric and Force layouts, Group many neighbours off on a graph that fits, the no-relationships state “… within the current filters” with Clear filters, and the phone layouts of both pages.',
+        'The table view’s “Show N more”, the table view of a grouped graph (every member listed) and of the too-large state.',
+        'The CI page’s Attributes tab, unchanged from slice 5.',
+        'The impact question (“what breaks if this CI fails?”): screen 7, slice 19.'
+      ],
+      build: [
+        'The graph read: GET /api/v1/graph?ci&depth&direction&type&relationshipType&retired&group returns nodes (with hops), relationships (with hops and group), groups (hub, direction, relationship type, CI type, count, member ids), counts per hop and a truncated flag. It walks hop by hop in batched queries over the two relationship indexes, groups a hub’s frontier before the next hop, adds the redundancy-group members after the dependents walk, and stops before a hop that would pass 25,000 relationships (group members included; truncated), the design target’s CI count, so under it the limit is never reached. Past it the page reads “More than 25,000 relationships within 3 hops is too many to draw.”, the table view lists the complete hops and says where it stopped, and Export CSV… is disabled with that reason. Hop 1 over the limit: filters only (“More than 25,000 relationships one hop from team-ops is too many to draw. Filter by CI type or relationship type.”, no buttons); Set depth and grouping can’t help, the server reads hop 1 whole before grouping. An estate that outgrows 25,000 needs a server-paged table view (a keyset cursor, as Search has), not a larger number. Every signed-in role may read it. The same queries serve slice 19’s impact engine (FR-IM-3).',
+        'Cytoscape draws nodes on its own canvas, so the type icons are images; the served CSP has img-src ‘self’, so they ship as files in the build (no data: URIs), which also keeps the canvas untainted for cy.png. The PNG downloads a blob: URL through a download link; no CSP change is expected. The CSV is POST /api/v1/graph/export with the graph read’s parameters, through Security/Csv.cs, its count in X-Goldmark-Entries, writing relationship.exported, “Relationships exported” in the Relationships group (focus CI, depth, direction, filters, row count), in the same transaction. Both confirmed in the Cytoscape CSP check of DEC-046 item 3.',
+        'Cytoscape styles are JavaScript, not CSS: the graph reads its colours from the theme tokens at runtime and restyles when the theme changes. Edges at neutral foreground 3 (#616161 light, #adadad dark) clear 3:1 on the canvas background.',
+        'Only the canvas element carries role img: an element with role img hides its children from assistive technology, so the table link and the zoom buttons sit beside it in the region.',
+        'Migration 0008 adds cmdb.Relationship.CreatedAt (nullable, backfilled once from each row’s earliest ValidFrom in the history, then set on insert).',
+        'Several CIs in one Add are sent one request each, in order; no batch endpoint, so each is audited and checked like a single add.',
+        'The graph boards are static stand-ins with hand-set positions. Their counts agree: from app-erp-db01, 14 CIs and 13 relationships in the status line, the canvas, the table and its caption (Payroll, retired, left out); from CL-PROD-02, 250 CIs, 244 of them in 5 groups.',
+        'Sample data is fictional.'
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
