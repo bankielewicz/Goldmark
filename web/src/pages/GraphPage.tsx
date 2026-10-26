@@ -54,7 +54,6 @@ import { api, type ApiError } from '../api';
 import { GraphCanvas, type GraphCanvasHandle, type GraphSelection } from '../graph/GraphCanvas';
 import {
   canvasLabel,
-  completeHops,
   directions,
   exportFileName,
   exportSummary,
@@ -68,7 +67,9 @@ import {
   statusLine,
   tableCaption,
   isEmpty,
+  stoppedBeforeHop1,
   tooLarge,
+  tooLargeMessage,
   type GraphResult,
   type GraphView,
 } from '../graph/graphData';
@@ -516,7 +517,7 @@ export function GraphPage() {
             ) : null}
             {result.truncated ? (
               <Tooltip
-                content={`More than ${relationshipLimit.toLocaleString('en-US')} relationships: lower the depth, or filter by CI type or relationship type.`}
+                content={`More than ${relationshipLimit.toLocaleString('en-US')} relationships: ${stoppedBeforeHop1(result) ? 'filter' : 'lower the depth, or filter'} by CI type or relationship type.`}
                 relationship="description"
               >
                 <Button icon={<ArrowDownloadRegular />} disabledFocusable aria-haspopup="dialog">
@@ -626,7 +627,7 @@ export function GraphPage() {
       ) : null}
 
       {result && !empty && large && kind === 'graph' ? (
-        <TooLarge result={result} view={view} onUpdate={update} />
+        <TooLarge result={result} view={view} focusName={focusName} onUpdate={update} />
       ) : null}
 
       {result && !empty && !large && kind === 'graph' ? (
@@ -809,24 +810,18 @@ function Message({
 function TooLarge({
   result,
   view,
+  focusName,
   onUpdate,
 }: {
   result: GraphResult;
   view: GraphView;
+  focusName: string;
   onUpdate: (patch: Partial<GraphView>) => void;
 }) {
   const fits = fittingDepth(result);
-  // Hop 1 alone passes the limit: it is read whole before it is grouped, so only a filter helps.
-  const firstHop = completeHops(result) === 0;
-  const title = result.truncated
-    ? `More than ${relationshipLimit.toLocaleString('en-US')} relationships within ${hopsText(view.depth)} is too many to draw.`
-    : `${result.nodes.length.toLocaleString('en-US')} CIs within ${hopsText(view.depth)} is too many to draw.`;
-  const table = result.truncated
-    ? `The table view lists the ${hopsText(completeHops(result))} that fit.`
-    : 'The table view lists every relationship.';
-  const text = firstHop
-    ? 'Filter by CI type or relationship type: hop 1 alone passes the limit.'
-    : `${view.group ? 'Lower the depth' : 'Turn on Group many neighbours, lower the depth'}, or filter by CI type or relationship type. ${table}`;
+  // Past the limit before hop 1, only a filter helps: no buttons.
+  const firstHop = stoppedBeforeHop1(result);
+  const { title, text } = tooLargeMessage(result, view, focusName);
   return (
     <Message icon={<FlowchartRegular />} title={title} text={text}>
       {view.group || firstHop ? null : (

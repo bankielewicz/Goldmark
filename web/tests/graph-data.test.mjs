@@ -15,8 +15,10 @@ import {
   layeredPositions,
   readGraphView,
   statusLine,
+  stoppedBeforeHop1,
   tableCaption,
   tooLarge,
+  tooLargeMessage,
 } from '../src/graph/graphData.ts';
 
 const ci = '0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f20';
@@ -150,6 +152,11 @@ describe('graph words', () => {
       '13 relationships within 2 hops of CL-PROD-02; hop 3 would pass the 25,000-relationship limit',
     );
     assert.equal(isEmpty(truncated), false);
+    assert.equal(stoppedBeforeHop1(truncated), false);
+    assert.deepEqual(tooLargeMessage(truncated, readGraphView(new URLSearchParams(`ci=${ci}`)), 'CL-PROD-02'), {
+      title: 'More than 25,000 relationships within 3 hops is too many to draw.',
+      text: 'Lower the depth, or filter by CI type or relationship type. The table view lists the 2 hops that fit.',
+    });
   });
 
   it('stopped before hop 1, is too large, not empty', () => {
@@ -159,9 +166,14 @@ describe('graph words', () => {
     assert.equal(isEmpty(stopped), false);
     assert.equal(tooLarge(stopped), true);
     assert.equal(fittingDepth(stopped), null);
+    assert.equal(stoppedBeforeHop1(stopped), true);
+    assert.deepEqual(tooLargeMessage(stopped, readGraphView(new URLSearchParams(`ci=${ci}&group=false`)), 'team-ops'), {
+      title: 'More than 25,000 relationships one hop from team-ops is too many to draw.',
+      text: 'Filter by CI type or relationship type.',
+    });
     assert.equal(
-      tableCaption(stopped, 'esx-big'),
-      'No relationships: hop 1 from esx-big would pass the 25,000-relationship limit',
+      tableCaption(stopped, 'team-ops'),
+      'No relationships: hop 1 from team-ops would pass the 25,000-relationship limit',
     );
   });
 });

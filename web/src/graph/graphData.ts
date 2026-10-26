@@ -183,6 +183,36 @@ export function completeHops(result: GraphResult): number {
   return result.truncated ? Math.max(0, result.countsByHop.length - 1) : result.depth;
 }
 
+/**
+ * The read stopped at the limit before hop 1: hop 1 is read whole before it is grouped, so neither a lower depth nor
+ * grouping helps, only a filter (owner, 2026-10-26; Notes board).
+ */
+export function stoppedBeforeHop1(result: GraphResult): boolean {
+  return completeHops(result) === 0;
+}
+
+/** The too-large message's two lines (Notes board). */
+export function tooLargeMessage(
+  result: GraphResult,
+  view: GraphView,
+  focusName: string,
+): { title: string; text: string } {
+  const limit = relationshipLimit.toLocaleString('en-US');
+  if (stoppedBeforeHop1(result))
+    return {
+      title: `More than ${limit} relationships one hop from ${focusName} is too many to draw.`,
+      text: 'Filter by CI type or relationship type.',
+    };
+  const title = result.truncated
+    ? `More than ${limit} relationships within ${hopsText(view.depth)} is too many to draw.`
+    : `${result.nodes.length.toLocaleString('en-US')} CIs within ${hopsText(view.depth)} is too many to draw.`;
+  const table = result.truncated
+    ? `The table view lists the ${hopsText(completeHops(result))} that fit.`
+    : 'The table view lists every relationship.';
+  const ways = view.group ? 'Lower the depth' : 'Turn on Group many neighbours, lower the depth';
+  return { title, text: `${ways}, or filter by CI type or relationship type. ${table}` };
+}
+
 /** "14 CIs · 13 relationships · up to 3 hops from app-erp-db01, plus redundancy groups". */
 export function statusLine(result: GraphResult, focusName: string): string {
   const from = `up to ${hopsText(result.depth)} from ${focusName}`;

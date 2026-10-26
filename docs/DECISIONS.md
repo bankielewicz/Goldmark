@@ -2156,7 +2156,15 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      relationships of one type than there are CIs, so under the target the limit is never reached and the board's
      wording keeps its numbers." Past the limit the page reads "More than 25,000 relationships within N hops is too
      many to draw.", the table view lists the complete hops and its caption says where it stopped, Export CSV… is
-     disabled with that reason, and "Set depth to N" is offered when a depth fits. Rejected: keeping 5,000 with that
+     disabled with that reason, and "Set depth to N" is offered when a depth fits. When hop 1 alone passes the limit
+     (owner, 2026-10-26, AskUserQuestion, after Codex found that PR #59 called it "no relationships"): "Answer A.
+     The board's sentences are simply false in this case, and showing them would be the real board violation.
+     Hop-1 limit: A. Only the filters. Tighten the first line so it names the hop, not the depth: "More than 25,000
+     relationships one hop from team-ops is too many to draw. Filter by CI type or relationship type." Table
+     caption as proposed. No buttons." The caption reads "No relationships: hop 1 from team-ops would pass the
+     25,000-relationship limit", and Export CSV…'s reason drops "lower the depth"; the Notes board says "hop 1 over
+     the limit: filters only; Set depth and grouping can't help, the server reads hop 1 whole before grouping".
+     Rejected: B, the board's text with 0 filled in ("lists the 0 hops that fit"). Rejected: keeping 5,000 with that
      wording, and counting past the limit ("they make the honest number cheaper to show but keep the dead end"). "If
      an estate ever outgrows 25,000, the fix is a server-paged table view (keyset cursor like Search), not a bigger
      number"; the Notes board says so.

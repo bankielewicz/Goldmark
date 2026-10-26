@@ -18,9 +18,9 @@ as DEC-041 item 3 requires), which version `1792944707-7e7e` shows: "Export CSVâ
 `GraphExport.dc.html`. Building the backend, the owner settled two details on 2026-10-25 (DEC-046 item 7): the
 export's audit action is `relationship.exported`, "Relationships exported", in the Relationships group, so the audit
 board's filter reads "Relationships (4 actions)"; and the graph read stops at 25,000 relationships, which the Notes
-board's build notes describe. Version `1792959081-5191` shows both; version `1792962402-d51d` adds DEC-046 item 15 (the filters stop the walk) to the Notes board, and `1792972526-db8a` item 16 (the graph's boxes and the Hierarchical layout). The UI code must match these boards.
+board's build notes describe. Version `1792959081-5191` shows both; version `1792962402-d51d` adds DEC-046 item 15 (the filters stop the walk) to the Notes board, `1792972526-db8a` item 16 (the graph's boxes and the Hierarchical layout), and `1792979261-cacf` item 7's hop-1 case (the owner, 2026-10-26, in PR #59's review: filters only). The UI code must match these boards.
 
-These files are version `1792972526-db8a`'s files, unchanged: 39 files, checked against the canvas's SHA-256 of each. Like the
+These files are version `1792979261-cacf`'s files, unchanged: 39 files, checked against the canvas's SHA-256 of each. Like the
 other mockups they need the Claude Design runtime and render unstyled when opened directly; review them on the
 canvas. `canvas.json` is the canvas index (board positions and titles). Every board is a small wrapper that sets the
 properties of a page component:
