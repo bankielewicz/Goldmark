@@ -1669,13 +1669,17 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        and resetting an existing operator key copy's permissions.
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
-     - A refusal while the host is still starting (CI on PR #59, 2026-11-05; owner: "B. Fix it in #59"): the
-       service's check runs beside Kestrel's start, and the host ties its start to `ApplicationStopping`, so a stop
-       asked for then cancelled the start, which threw out of `RunAsync`: the process ended as a crash (exit code
-       1067, an unhandled .NET exception in the Application log; restart-on-failure would repeat it) instead of the
-       refusal's 13. `RuntimeRightsCheck` now logs and records the refusal at once but stops the host only once it has
-       started (`RightsAtStartTests` holds a start step until the refusal to show it); the smoke's diagnostics print
-       a crash's .NET Runtime entry first.
+     - A refused start that crashed (CI on PR #59, 2026-11-05; owner: "B. Fix it in #59"): Windows recorded exit
+       code 1067 and an unhandled .NET exception in Goldmark.Api.exe instead of the refusal's 13 (restart-on-failure
+       would repeat a crash). The exception itself wasn't captured: the smoke printed only Goldmark's own entries, and
+       its log tail showed a later refusal, not that one. So the cause is the likely one, not a confirmed one: the
+       service's check runs beside Kestrel's start, the host ties its start to `ApplicationStopping`, and a stop asked
+       for during the start cancels it, which throws out of `RunAsync` unhandled. `RightsAtStartTests` shows that
+       mechanism (on the old code a start step that honours its token throws `OperationCanceledException`); it does
+       not reproduce CI's crash. `RuntimeRightsCheck` now logs and records the refusal at once but stops the host only
+       once it has started, and the smoke prints a crash's .NET Runtime entry first, so a repeat would name the
+       exception. The crash came and went (every earlier run passed), so one green run doesn't prove the fix (a side
+       agent's note, 2026-11-05).
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**
      (owner, 2026-10-22). The principal audit's baseline (DEC-031) was measured on the Linux image; on the owner's
      Windows SQL Server 2025 Developer, `public` also holds `SELECT` on `master.sys.dm_pal_cpu_stats`,
