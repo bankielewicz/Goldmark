@@ -11,6 +11,7 @@ import {
   fittingDepth,
   graphAddress,
   graphQuery,
+  groupLabel,
   isEmpty,
   knownFilters,
   layeredPositions,
@@ -190,6 +191,15 @@ describe('graph words', () => {
       tableCaption(stopped, 'team-ops'),
       'No relationships: hop 1 from team-ops would pass the 25,000-relationship limit',
     );
+  });
+});
+
+describe('a group', () => {
+  it('names its type in the plural unless it holds one', () => {
+    assert.equal(groupLabel(124, 'VirtualMachine'), '124 VirtualMachines');
+    assert.equal(groupLabel(1, 'VirtualMachine'), '1 VirtualMachine');
+    assert.equal(groupLabel(2, 'Chassis'), '2 Chassis');
+    assert.equal(groupLabel(1200, 'Server'), '1,200 Servers');
   });
 });
 

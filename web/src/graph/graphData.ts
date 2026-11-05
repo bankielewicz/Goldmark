@@ -127,6 +127,11 @@ export function knownFilters(
   return { types: known(view.types, types), relationshipTypes: known(view.relationshipTypes, relationshipTypes) };
 }
 
+/** A group's name: its count and CI type, the type plural unless it holds one ("1 VirtualMachine", "124 VirtualMachines"). */
+export function groupLabel(count: number, ciType: string): string {
+  return `${count.toLocaleString('en-US')} ${count === 1 || ciType.endsWith('s') ? ciType : `${ciType}s`}`;
+}
+
 /** The address of a view, with only the values that differ from the defaults. */
 export function graphAddress(view: GraphView): string {
   const query = new URLSearchParams();

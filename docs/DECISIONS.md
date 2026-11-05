@@ -2139,7 +2139,13 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      its client-side hub-and-members matching", Codex's suggestion). Built (`GraphStore`): both walks decide from the
      graph as the hop began; a walk that reaches a CI already in a group stops there; a CI two groups took in one hop
      stays in the first in a fixed order (hop, dependencies first, hub, relationship type, CI type), and groups are
-     numbered in that order.
+     numbered in that order. The legend (owner, 2026-11-05, AskUserQuestion): "A, with this wording instead: "Group:
+     CIs of one type drawn as one, with their count". Keep the threshold out of the legend; it lives on the Notes
+     board and in the group's card ("the graph doesn't go past it")." Notes board: "A group holds the like
+     neighbours the graph doesn't draw elsewhere, so after a loop it can show 10 or fewer, even 1; the legend and the
+     label never state the threshold." And: "make the plural follow the count, since a box of 1 is now possible"
+     (the label and card's "1 VirtualMachine"; the card's "Show this 1" and the table caption's "1 relationship"
+     follow it too). Rejected: B, the board's legend "Group: more than 10 CIs of one type, counted".
   6. **Adding several CIs at once: "A. Several at once."** The CI picker takes several CIs of the allowed type,
      with the same relationship type and redundancy group for all; the panel sends one audited request per CI,
      lists any that failed and stays open. No batch endpoint.

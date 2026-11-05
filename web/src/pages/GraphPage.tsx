@@ -60,6 +60,7 @@ import {
   fittingDepth,
   graphAddress,
   graphQuery,
+  groupLabel,
   hopsText,
   layouts,
   readGraphView,
@@ -879,7 +880,7 @@ function Legend() {
       {item(styles.swatchLine, 'Depends on: the arrow points to the dependency')}
       {item(styles.swatchDotted, 'Impact None: no impact passes along it')}
       {item(styles.swatchDashed, 'In a redundancy group (its name on the line)')}
-      {item(styles.swatchGroup, 'Group: more than 10 CIs of one type, counted')}
+      {item(styles.swatchGroup, 'Group: CIs of one type drawn as one, with their count')}
     </ul>
   );
 }
@@ -912,7 +913,7 @@ function SelectionCard({
     const group = result.groups.find((g) => g.id === selection.id);
     if (!group) return null;
     const hub = names.get(group.hub) ?? '';
-    const label = `${group.count.toLocaleString('en-US')} ${group.ciType.endsWith('s') ? group.ciType : `${group.ciType}s`}`;
+    const label = groupLabel(group.count, group.ciType);
     return (
       <aside aria-labelledby="graph-selected-group" className={mergeClasses(styles.card, className)}>
         <div className={styles.cardHeader}>
@@ -942,7 +943,7 @@ function SelectionCard({
         </dl>
         <div className={styles.cardActions}>
           <Link as="button" onClick={() => onShowGroup(group.id)}>
-            Show these {group.count.toLocaleString('en-US')} in the table view
+            Show {group.count === 1 ? 'this' : 'these'} {group.count.toLocaleString('en-US')} in the table view
           </Link>
           <Button onClick={() => onExplore(group.hub)}>Explore from {hub}</Button>
         </div>
@@ -1072,8 +1073,8 @@ function GraphTable({
         <caption className={styles.caption}>
           {selectedGroup ? (
             <>
-              {rows.length.toLocaleString('en-US')} relationships into the group of{' '}
-              {selectedGroup.count.toLocaleString('en-US')} {selectedGroup.ciType} ·{' '}
+              {rows.length.toLocaleString('en-US')} {rows.length === 1 ? 'relationship' : 'relationships'} into the
+              group of {groupLabel(selectedGroup.count, selectedGroup.ciType)} ·{' '}
               <Link as="button" onClick={onShowAll}>
                 Show all relationships
               </Link>

@@ -6,7 +6,7 @@ import { usePreferences } from '../preferences';
 import { darkTheme, lightTheme } from '../theme';
 import type { CiType, RelationshipType } from '../ui/inventory';
 import { ensureCytoscapeStylesheet } from './cytoscapeStylesheet';
-import { layeredPositions, type GraphLayout, type GraphResult } from './graphData';
+import { groupLabel, layeredPositions, type GraphLayout, type GraphResult } from './graphData';
 
 // The type icons as files in the build (Vite never inlines them): src/graph/typeIcons.ts says why.
 const iconFiles = import.meta.glob<string>('./icons/*.svg', { eager: true, query: '?url', import: 'default' });
@@ -35,10 +35,6 @@ export interface GraphCanvasHandle {
 }
 
 const groupNode = (id: string) => `group:${id}`;
-
-function plural(type: string): string {
-  return type.endsWith('s') ? type : `${type}s`;
-}
 
 /** Cytoscape's stylesheet from the theme's tokens (Notes board): Cytoscape styles are JavaScript, not CSS. */
 function stylesheet(theme: Theme): cytoscape.StylesheetJson {
@@ -145,7 +141,7 @@ function elements(
     group: 'nodes',
     data: {
       id: groupNode(g.id),
-      label: `${g.count.toLocaleString('en-US')} ${plural(g.ciType)}\nGroup · ${g.relationshipType}`,
+      label: `${groupLabel(g.count, g.ciType)}\nGroup · ${g.relationshipType}`,
       iconKey: iconKey(g.ciType, types),
       icon: iconUrl(iconKey(g.ciType, types), theme),
       hops: g.hops,
