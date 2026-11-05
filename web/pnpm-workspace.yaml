@@ -28,3 +28,9 @@ engineStrict: true
 
 # Direct dependencies are saved as exact versions.
 savePrefix: ''
+
+# A transitive package forced to a patched version until the packages that use
+# it move on. Each one must be listed under "overrides" in
+# dependency-allowlist.json at this exact version, with why and when to remove it.
+overrides:
+  minimatch: 11.0.3

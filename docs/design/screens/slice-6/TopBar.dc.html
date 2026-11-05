@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark top bar with CI search</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<header style="{{rootStyle}}">
+  <button type="button" aria-label="Open navigation" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h14"></path></svg></button>
+  <span aria-hidden="true" style="width: 24px; height: 24px; border-radius: 4px; background: var(--brand); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700">G</span>
+  <span style="font-weight: 600; white-space: nowrap">Goldmark</span>
+  <div style="flex: 1"></div>
+  <sc-if value="{{showBox}}" hint-placeholder-val="{{true}}">
+    <div role="search" style="width: 300px; height: 32px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg><input type="search" aria-label="Search CIs" placeholder="Search CIs by name" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></div>
+  </sc-if>
+  <sc-if value="{{showIcon}}" hint-placeholder-val="{{false}}">
+    <button type="button" aria-label="Search CIs" aria-haspopup="dialog" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 1 1 0 11 5.5 5.5 0 0 1 0-11zM12.5 12.5L17 17"></path></svg></button>
+  </sc-if>
+  <button type="button" aria-label="Switch theme" aria-pressed="{{darkPressed}}" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M15 12.5A6.5 6.5 0 0 1 7.5 3a6.5 6.5 0 1 0 7.5 9.5z"></path></svg></button>
+  <button type="button" aria-label="DK, Account: Dana Kowalski" aria-haspopup="menu" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">DK</span><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M5 8l5 5 5-5"></path></svg></button>
+</header>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"search":{"editor":"enum","options":["box","icon","none"],"default":"box"},"$preview":{"width":1440,"height":48}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const search = this.props.search ?? 'box';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--bg2); border-bottom: 1px solid var(--st2); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      showBox: search === 'box',
+      showIcon: search === 'icon',
+      darkPressed: dark ? 'true' : 'false'
+    };
+  }
+}
+</script>
+</body>
+</html>

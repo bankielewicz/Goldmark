@@ -94,7 +94,8 @@ jobs:
     # container (the image digest from deploy/docker-compose.yml), one per test collection.
     name: SQL Server integration tests (Testcontainers, SQL Server 2025)
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # 12 to 18.5 minutes on main before slice 6 added its graph tests (owner, 2026-11-05: room for later slices).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

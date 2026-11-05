@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AuditPage } from './pages/AuditPage';
 import { CiPage } from './pages/CiPage';
 import { EnrolmentPage } from './pages/EnrolmentPage';
+import { GraphPage } from './pages/GraphPage';
 import { SearchPage } from './pages/SearchPage';
 import { DashboardPage, ForbiddenPage, NotFoundPage } from './pages/SimplePages';
 import { SignInPage } from './pages/SignInPage';
@@ -42,7 +43,7 @@ function Redirect({ to }: { to: string }) {
 /**
  * The routes (DEC-040: an in-repo router). Unauthenticated: /sign-in, /setup, /invite, /reset and
  * /password-reset (their token in the URL fragment). Signed in, inside the app shell: /, /search and /ci/{id} (slice 5,
- * US-53's stable deep links: docs/integration/deep-links.md), /types and /users (Admin only), /audit (Admin and
+ * US-53's stable deep links: docs/integration/deep-links.md), /graph (slice 6), /types and /users (Admin only), /audit (Admin and
  * Auditor) and /account/two-factor. Anything else signed in is "not found"; signed out, it leads to sign-in and back afterwards.
  */
 export function App() {
@@ -109,6 +110,8 @@ export function App() {
     );
   } else if (pathname === '/search') {
     page = <SearchPage />;
+  } else if (pathname === '/graph') {
+    page = <GraphPage />;
   } else if (pathname.startsWith('/ci/') && pathname.split('/').length === 3) {
     page = <CiPage key={pathname} id={decodedSegment(pathname.slice('/ci/'.length))} />;
   } else if (pathname === '/account/two-factor') {

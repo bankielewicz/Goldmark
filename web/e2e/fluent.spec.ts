@@ -1,8 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 
 import { CONTROL_DIRECTIVES } from './fluent-check/app/controls';
+import { headerNonce, swapInSampler } from './sampler-swap';
 
 // Fluent UI v9 under the served CSP and Trusted Types (DEC-017, DEC-037).
 //
@@ -22,44 +21,6 @@ declare global {
 }
 
 const direct = process.env.GOLDMARK_FLUENT_CHECK_DIRECT === '1';
-
-const CONTENT_TYPES: Record<string, string> = {
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.woff2': 'font/woff2',
-  '.woff': 'font/woff',
-  '.ttf': 'font/ttf',
-};
-
-/** Serves the sampler's assets; the shell's entry script is answered with the sampler's entry. */
-async function swapInSampler(page: Page) {
-  const dist = process.env.GOLDMARK_FLUENT_CHECK_DIST;
-  if (!dist || !existsSync(join(dist, 'index.html'))) {
-    throw new Error('The Fluent UI sampler was not built (e2e/fluent-check/build.ts is the global setup).');
-  }
-  const entry = readFileSync(join(dist, 'index.html'), 'utf8').match(
-    /<script type="module" crossorigin src="\/assets\/([^"]+\.js)">/,
-  )?.[1];
-  if (!entry) throw new Error('No module entry in the sampler build.');
-  const assets = join(dist, 'assets');
-
-  await page.route('**/assets/*', async (route) => {
-    const name = basename(new URL(route.request().url()).pathname);
-    const own = existsSync(join(assets, name)) ? name : route.request().resourceType() === 'script' ? entry : null;
-    const contentType = own ? CONTENT_TYPES[extname(own)] : undefined;
-    if (!own || !contentType) {
-      await route.continue();
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      headers: { 'content-type': contentType, 'x-content-type-options': 'nosniff' },
-      body: readFileSync(join(assets, own)),
-    });
-  });
-}
-
-const headerNonce = (csp: string) => csp.match(/(?:^|; )style-src 'self' 'nonce-([A-Za-z0-9_-]{22,})';/)?.[1];
 
 const violationDirectives = (page: Page) =>
   page.evaluate(() => (window.__fluentCheckViolations ?? []).map((v) => v.split(' ', 1)[0]).sort());
@@ -84,7 +45,7 @@ test('Fluent UI v9 works under the served CSP with a per-response style nonce', 
     if (m.type() === 'error') errors.push(m.text());
   });
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
-  if (!direct) await swapInSampler(page);
+  if (!direct) await swapInSampler(page, 'GOLDMARK_FLUENT_CHECK_DIST', 'e2e/fluent-check/build.ts');
 
   const response = await page.goto(direct ? '/' : '/__fluent-check');
   expect(response?.status()).toBe(200);

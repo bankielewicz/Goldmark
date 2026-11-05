@@ -1,4 +1,5 @@
 import {
+  Badge,
   Button,
   Card,
   Dialog,
@@ -37,6 +38,7 @@ import {
   ArrowCounterclockwiseRegular,
   CheckmarkCircleRegular,
   EditRegular,
+  FlowchartRegular,
   MoreHorizontalRegular,
 } from '@fluentui/react-icons';
 import { useCallback, useEffect, useState } from 'react';
@@ -49,6 +51,9 @@ import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
 import { CiPanel } from '../ui/CiPanel';
 import { CopyButton, ErrorBar } from '../ui/common';
+import { RelationshipPanel, type RelationshipPanelMode } from '../ui/RelationshipPanel';
+import { useRelationships } from '../ui/relationships';
+import { RelationshipsTab } from '../ui/RelationshipsTab';
 import {
   asApiError,
   canEditCis,
@@ -128,15 +133,17 @@ const useStyles = makeStyles({
     padding: tokens.spacingHorizontalXL,
   },
   search: { maxWidth: '480px' },
+  tabLabel: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalS },
 });
 
 type Change = 'retire' | 'restore';
 
 /**
- * Screen 5, CI detail, Attributes tab (US-11, US-53 `/ci/{id}`, `/ci/{id}?tab=attributes`; DEC-044):
- * the CI's general fields, its type's attributes and its custom attributes; Edit, Retire… (confirmed)
- * and Restore for Admins and Editors. Later slices add tabs (relationships, history, identifiers,
- * impact). An unknown ID, or one that isn't a CI ID, gets the friendly not-found page.
+ * Screen 5, CI detail (US-11, US-53 `/ci/{id}`, `/ci/{id}?tab=attributes`, `/ci/{id}?tab=relationships`; DEC-044,
+ * DEC-046): the Attributes tab (the CI's general fields, its type's attributes and its custom attributes) and the
+ * Relationships tab, its count loaded with the page; Edit, Retire… (confirmed) and Restore for Admins and Editors,
+ * then View in graph for everyone. Later slices add tabs (history, identifiers, impact). An unknown ID, or one
+ * that isn't a CI ID, gets the friendly not-found page.
  */
 export function CiPage({ id }: { id: string }) {
   if (!isCiId(id)) return <CiNotFound id={id} malformed />;
@@ -149,7 +156,9 @@ function CiView({ id }: { id: string }) {
   const canEdit = canEditCis(session.user);
   const wide = useWide();
   const { search } = useLocation();
-  const { types, failure: typesFailure, reload: reloadTypes } = useCiTypes();
+  const { types, relationshipTypes, failure: typesFailure, reload: reloadTypes } = useCiTypes();
+  const relationships = useRelationships(id);
+  const [relationshipPanel, setRelationshipPanel] = useState<RelationshipPanelMode | null>(null);
   const toasterId = useId('ci-toaster');
   const { dispatchToast } = useToastController(toasterId);
   const [ci, setCi] = useState<CiDetail | null>(null);
@@ -198,10 +207,11 @@ function CiView({ id }: { id: string }) {
     if (pending) toast(pending);
   }, [loaded, toast]);
 
-  // Only the Attributes tab exists in slice 5: any other ?tab= shows it and the address is corrected.
+  // An unknown ?tab= shows the Attributes tab and the address is corrected.
   const tab = search.get('tab');
+  const onRelationships = tab === 'relationships';
   useEffect(() => {
-    if (tab !== null && tab !== 'attributes') navigate(`/ci/${id}`, { replace: true });
+    if (tab !== null && tab !== 'attributes' && tab !== 'relationships') navigate(`/ci/${id}`, { replace: true });
   }, [tab, id]);
 
   const change = async (kind: Change) => {
@@ -249,8 +259,57 @@ function CiView({ id }: { id: string }) {
   const retired = ci.lifecycleState === 'Retired';
   const type = types?.find((t) => t.name === ci.type);
   const who = ci.changedBy?.displayName ?? (ci.changedBy ? 'a removed account' : 'System');
-  const actions = canEdit
-    ? wide
+  const graphPath = `/graph?ci=${ci.id}`;
+  const viewInGraph = (
+    <Button
+      key="graph"
+      as="a"
+      href={graphPath}
+      icon={<FlowchartRegular />}
+      onClick={(event) => followLink(event, graphPath)}
+    >
+      View in graph
+    </Button>
+  );
+  const relationshipTotal = relationships.totals
+    ? relationships.totals.dependencies + relationships.totals.dependents
+    : null;
+  // "View in graph" comes after Edit and Retire… (DEC-046 item 11); Viewers see it alone; below 1100 px it is the
+  // last item of More actions.
+  const actions = !wide
+    ? [
+        <Menu key="more">
+          <MenuTrigger disableButtonEnhancement>
+            <Tooltip content="More actions" relationship="label">
+              <Button icon={<MoreHorizontalRegular />} disabled={busy !== null} />
+            </Tooltip>
+          </MenuTrigger>
+          <MenuPopover>
+            <MenuList>
+              {canEdit ? (
+                retired ? (
+                  <MenuItem icon={<ArrowCounterclockwiseRegular />} onClick={() => void change('restore')}>
+                    Restore
+                  </MenuItem>
+                ) : (
+                  <>
+                    <MenuItem icon={<EditRegular />} disabled={!types} onClick={() => setEditing(true)}>
+                      Edit
+                    </MenuItem>
+                    <MenuItem icon={<ArchiveRegular />} onClick={() => setConfirmRetire(true)}>
+                      Retire…
+                    </MenuItem>
+                  </>
+                )
+              ) : null}
+              <MenuItem icon={<FlowchartRegular />} onClick={() => navigate(graphPath)}>
+                View in graph
+              </MenuItem>
+            </MenuList>
+          </MenuPopover>
+        </Menu>,
+      ]
+    : canEdit
       ? retired
         ? [
             <Button
@@ -262,6 +321,7 @@ function CiView({ id }: { id: string }) {
               {busy === 'restore' ? <Spinner size="tiny" aria-label="Restoring" /> : null}
               Restore
             </Button>,
+            viewInGraph,
           ]
         : [
             <Button
@@ -283,35 +343,9 @@ function CiView({ id }: { id: string }) {
               {busy === 'retire' ? <Spinner size="tiny" aria-label="Retiring" /> : null}
               Retire…
             </Button>,
+            viewInGraph,
           ]
-      : [
-          <Menu key="more">
-            <MenuTrigger disableButtonEnhancement>
-              <Tooltip content="More actions" relationship="label">
-                <Button icon={<MoreHorizontalRegular />} disabled={busy !== null} />
-              </Tooltip>
-            </MenuTrigger>
-            <MenuPopover>
-              <MenuList>
-                {retired ? (
-                  <MenuItem icon={<ArrowCounterclockwiseRegular />} onClick={() => void change('restore')}>
-                    Restore
-                  </MenuItem>
-                ) : (
-                  <>
-                    <MenuItem icon={<EditRegular />} disabled={!types} onClick={() => setEditing(true)}>
-                      Edit
-                    </MenuItem>
-                    <MenuItem icon={<ArchiveRegular />} onClick={() => setConfirmRetire(true)}>
-                      Retire…
-                    </MenuItem>
-                  </>
-                )}
-              </MenuList>
-            </MenuPopover>
-          </Menu>,
-        ]
-    : [];
+      : [viewInGraph];
 
   return (
     <>
@@ -329,7 +363,7 @@ function CiView({ id }: { id: string }) {
             <LifecycleBadge state={ci.lifecycleState} />
           </>
         }
-        {...(actions.length > 0 ? { actions: <>{actions}</> } : {})}
+        actions={<>{actions}</>}
       />
       <Tooltip content={`${formatUtc(ci.changedAt)} UTC`} relationship="description">
         <Text className={styles.changed}>
@@ -363,14 +397,82 @@ function CiView({ id }: { id: string }) {
         />
       ) : null}
 
-      <TabList selectedValue="attributes" aria-label="CI sections">
-        <Tab value="attributes" id="tab-attributes" aria-controls="panel-attributes">
+      <TabList
+        selectedValue={onRelationships ? 'relationships' : 'attributes'}
+        aria-label="CI sections"
+        onTabSelect={(_, data) =>
+          navigate(data.value === 'relationships' ? `/ci/${ci.id}?tab=relationships` : `/ci/${ci.id}`, {
+            replace: true,
+          })
+        }
+      >
+        <Tab value="attributes" id="tab-attributes" aria-controls={onRelationships ? undefined : 'panel-attributes'}>
           Attributes
         </Tab>
+        <Tab
+          value="relationships"
+          id="tab-relationships"
+          aria-controls={onRelationships ? 'panel-relationships' : undefined}
+        >
+          <span className={styles.tabLabel}>
+            Relationships
+            {relationshipTotal !== null ? (
+              <Badge appearance="tint" color="subtle" shape="circular" size="small">
+                {relationshipTotal.toLocaleString('en-US')}
+              </Badge>
+            ) : null}
+          </span>
+        </Tab>
       </TabList>
-      <section id="panel-attributes" role="tabpanel" aria-labelledby="tab-attributes" className={styles.panel}>
-        <Attributes ci={ci} type={type} types={types} />
-      </section>
+      {onRelationships ? (
+        <section
+          id="panel-relationships"
+          role="tabpanel"
+          aria-labelledby="tab-relationships"
+          aria-busy={relationships.data === null}
+        >
+          <RelationshipsTab
+            ci={ci}
+            relationships={relationships}
+            canEdit={canEdit}
+            types={types}
+            relationshipTypes={relationshipTypes}
+            onAdd={() => {
+              if (relationshipTypes) setRelationshipPanel({ kind: 'add' });
+            }}
+            onEdit={(relationship) => {
+              if (relationshipTypes) setRelationshipPanel({ kind: 'edit', relationship });
+            }}
+            onDeleted={() => {
+              void relationships.reload();
+              toast('Relationship deleted');
+            }}
+          />
+        </section>
+      ) : (
+        <section id="panel-attributes" role="tabpanel" aria-labelledby="tab-attributes" className={styles.panel}>
+          <Attributes ci={ci} type={type} types={types} />
+        </section>
+      )}
+
+      {relationshipPanel && relationshipTypes ? (
+        <RelationshipPanel
+          mode={relationshipPanel}
+          ci={ci}
+          types={types}
+          relationshipTypes={relationshipTypes}
+          onClose={() => setRelationshipPanel(null)}
+          onAdded={(count, done) => {
+            void relationships.reload();
+            if (done)
+              toast(count === 1 ? 'Relationship added' : `${count.toLocaleString('en-US')} relationships added`);
+          }}
+          onSaved={(changed) => {
+            void relationships.reload();
+            if (changed) toast('Changes saved');
+          }}
+        />
+      ) : null}
 
       {editing && types ? (
         <CiPanel

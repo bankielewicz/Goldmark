@@ -149,18 +149,30 @@ export function asApiError(error: unknown): ApiError {
   return error instanceof ApiError ? error : new ApiError(0, 'unexpected', 'Something went wrong on this page.');
 }
 
-/** The CI types with their attributes, read when a page opens (an Admin may change them at any time). */
-export function useCiTypes(): { types: CiType[] | null; failure: ApiError | null; reload: () => void } {
+/**
+ * The CI types with their attributes, and the relationship types, read when a page opens (an Admin may change
+ * them at any time).
+ */
+export function useCiTypes(): {
+  types: CiType[] | null;
+  relationshipTypes: RelationshipType[] | null;
+  failure: ApiError | null;
+  reload: () => void;
+} {
   const [types, setTypes] = useState<CiType[] | null>(null);
+  const [relationshipTypes, setRelationshipTypes] = useState<RelationshipType[] | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const load = useCallback(() => {
     setFailure(null);
-    api<{ types: CiType[] }>('GET', '/api/v1/types')
-      .then(({ data }) => setTypes(data.types))
+    api<{ types: CiType[]; relationshipTypes: RelationshipType[] }>('GET', '/api/v1/types')
+      .then(({ data }) => {
+        setTypes(data.types);
+        setRelationshipTypes(data.relationshipTypes);
+      })
       .catch((error: unknown) => setFailure(asApiError(error)));
   }, []);
   useEffect(load, [load]);
-  return { types, failure, reload: load };
+  return { types, relationshipTypes, failure, reload: load };
 }
 
 const icons: Record<string, ReactElement> = {

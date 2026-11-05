@@ -260,7 +260,10 @@ it, and ask first if the PRD did not anticipate it.
   justification, then `pnpm add --save-exact <name>`. pnpm refuses versions
   published less than 7 days ago and never runs install scripts. Commit
   `package.json`, `pnpm-lock.yaml` and the allow-list together; CI rejects
-  anything not on the allow-list and any SSR/RSC package.
+  anything not on the allow-list and any SSR/RSC package. To force a transitive
+  package to a patched version until its dependents move on, list it under
+  `overrides` in the allow-list (exact version, why, and when to remove it) and
+  in `pnpm-workspace.yaml`'s `overrides`, then `pnpm install` (DEC-011).
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
   `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and

@@ -15,5 +15,5 @@
     "noEmit": true
   },
   "include": ["vite.config.ts", "playwright.config.ts", "e2e"],
-  "exclude": ["e2e/fluent-check/app"]
+  "exclude": ["e2e/fluent-check/app", "e2e/cytoscape-check/app"]
 }

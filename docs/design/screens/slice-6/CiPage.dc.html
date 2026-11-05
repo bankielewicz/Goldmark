@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark CI detail page, Attributes and Relationships tabs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="flex: none; position: relative; z-index: 3">
+    <dc-import name="TopBar" dark="{{dark}}" width="{{width}}" search="{{search}}" hint-size="{{width}}px,48px"></dc-import>
+  </div>
+
+  <div style="flex: 1; min-height: 0; display: flex; position: relative">
+    <sc-if value="{{showNav}}" hint-placeholder-val="{{true}}">
+      <div style="flex: none">
+        <dc-import name="Nav" dark="{{dark}}" width="{{width}}" height="{{bodyHeight}}" current="search" role="{{role}}" hint-size="{{navWidth}}px,{{bodyHeight}}px"></dc-import>
+      </div>
+    </sc-if>
+
+    <main aria-busy="{{busy}}" style="flex: 1; min-width: 0; padding: {{pad}}px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; flex-wrap: wrap; color: var(--fg3)"><a href="#" style="color: var(--blink); text-decoration: none">Search</a><span aria-hidden="true">›</span><a href="#" style="color: var(--blink); text-decoration: none">{{ci.type}}</a><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">{{crumbName}}</span></nav>
+
+      <sc-if value="{{showError}}" hint-placeholder-val="{{false}}">
+        <div role="alert" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span style="flex: 1; min-width: 240px"><b>Couldn’t load this CI.</b> Check your connection, then try again.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">4bf92f3577b34da6a3ce929d0e0e4736</span></span><button type="button" aria-label="Copy reference ID" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h9v9H7zM4 13V4h9"></path></svg></button><button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button></div>
+      </sc-if>
+
+      <sc-if value="{{showLoading}}" hint-placeholder-val="{{false}}">
+        <div style="display: flex; flex-direction: column; gap: 12px">
+          <span style="width: 280px; height: 28px; border-radius: 4px; background: var(--bg4)"></span>
+          <span style="width: 220px; height: 14px; border-radius: 3px; background: var(--bg4)"></span>
+          <span style="width: 100px; height: 28px; border-radius: 4px; background: var(--bg4)"></span>
+          <div style="padding: 20px; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; display: grid; grid-template-columns: 180px minmax(0, 1fr) 180px minmax(0, 1fr); gap: 16px 16px">
+            <sc-for list="{{skeleton}}" as="s" hint-placeholder-count="8"><span style="{{s}}"></span></sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{showCi}}" hint-placeholder-val="{{true}}">
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-height: 0">
+          <div style="display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap">
+            <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+                <h1 style="{{h1Style}}">{{ci.name}}</h1>
+                <span style="display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{ci.icon}}"></path></svg>{{ci.type}}</span>
+                <span style="{{lifeStyle}}">{{lifeText}}</span>
+              </div>
+              <span style="color: var(--fg3)">{{changedLine}}</span>
+            </div>
+            <sc-if value="{{showButtons}}" hint-placeholder-val="{{true}}">
+              <div role="toolbar" aria-label="CI actions" style="display: flex; gap: 8px">
+                <sc-if value="{{editLive}}" hint-placeholder-val="{{true}}">
+                  <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 16l1-4 8-8 3 3-8 8zM11.5 5.5l3 3"></path></svg>Edit</button>
+                  <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h14v3H3zM4 7v9h12V7M8 10.5h4"></path></svg>Retire…</button>
+                </sc-if>
+                <sc-if value="{{editRetired}}" hint-placeholder-val="{{false}}">
+                  <button type="button" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4.5 9.5a5.5 5.5 0 1 1 1.6 4.4M4 4.5v5h5"></path></svg>Restore</button>
+                </sc-if>
+                <a href="#" style="height: 32px; box-sizing: border-box; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{graphIcon}}"></path></svg>View in graph</a>
+              </div>
+            </sc-if>
+            <sc-if value="{{showMore}}" hint-placeholder-val="{{false}}">
+              <div style="position: relative">
+                <button type="button" aria-label="More actions" aria-haspopup="menu" aria-expanded="{{menuExpanded}}" style="{{moreStyle}}"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 10h.01M10 10h.01M15 10h.01"></path></svg></button>
+                <sc-if value="{{menuOpen}}" hint-placeholder-val="{{false}}">
+                  <div role="menu" aria-label="More actions" style="position: absolute; right: 0; top: 36px; width: 200px; padding: 4px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh16); display: flex; flex-direction: column; z-index: 4">
+                    <sc-if value="{{editLive}}" hint-placeholder-val="{{true}}">
+                      <button type="button" role="menuitem" style="{{firstItemStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 16l1-4 8-8 3 3-8 8zM11.5 5.5l3 3"></path></svg>Edit</button>
+                      <button type="button" role="menuitem" style="height: 32px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; text-align: left"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h14v3H3zM4 7v9h12V7M8 10.5h4"></path></svg>Retire…</button>
+                    </sc-if>
+                    <a href="#" role="menuitem" style="{{graphItemStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{graphIcon}}"></path></svg>View in graph</a>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+
+          <sc-if value="{{retired}}" hint-placeholder-val="{{false}}">
+            <div role="note" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="var(--mbinfoi)" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M3 4h14v3H3zM4 7v9h12V7M8 10.5h4"></path></svg><span style="flex: 1">Retired on 2026-10-23 by Dana Kowalski. It’s hidden from search unless Show retired is on.</span><sc-if value="{{canEdit}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Restore</button></sc-if></div>
+          </sc-if>
+
+          <div role="tablist" aria-label="CI sections" style="display: flex; gap: 4px; border-bottom: 1px solid var(--st2)">
+            <button type="button" role="tab" aria-selected="{{tabAttrSelected}}" aria-controls="tab-attributes" style="{{tabAttrStyle}}">Attributes<span aria-hidden="true" style="{{tabAttrBar}}"></span></button>
+            <button type="button" role="tab" aria-selected="{{tabRelSelected}}" aria-controls="tab-relationships" style="{{tabRelStyle}}">Relationships<sc-if value="{{showCount}}" hint-placeholder-val="{{true}}"><span style="display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; margin-left: 6px; border-radius: 10px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{relCount}}</span></sc-if><span aria-hidden="true" style="{{tabRelBar}}"></span></button>
+          </div>
+
+          <sc-if value="{{showAttrTab}}" hint-placeholder-val="{{false}}">
+            <section id="tab-attributes" role="tabpanel" aria-label="Attributes" style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 20px; overflow: auto">
+              <sc-for list="{{groups}}" as="g" hint-placeholder-count="2">
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <h2 style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">{{g.title}}</h2>
+                  <dl style="{{gridStyle}}">
+                    <sc-for list="{{g.items}}" as="i" hint-placeholder-count="4">
+                      <dt style="color: var(--fg3); font-weight: 600">{{i.k}}</dt>
+                      <dd style="margin: 0; min-width: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap">
+                        <sc-if value="{{i.plain}}" hint-placeholder-val="{{true}}"><span style="{{i.style}}">{{i.v}}</span></sc-if>
+                        <sc-if value="{{i.isLife}}" hint-placeholder-val="{{false}}"><span style="{{lifeStyle}}">{{lifeText}}</span></sc-if>
+                        <sc-if value="{{i.isId}}" hint-placeholder-val="{{false}}"><span style="font-family: Consolas, 'Courier New', monospace; font-size: 13px; overflow-wrap: anywhere">{{i.v}}</span><button type="button" aria-label="Copy ID" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h9v9H7zM4 13V4h9"></path></svg></button></sc-if>
+                        <sc-if value="{{i.isLink}}" hint-placeholder-val="{{false}}"><a href="#" style="display: inline-flex; align-items: center; gap: 6px; color: var(--blink); font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 7h14v9H3zM7 7V4.5h6V7"></path></svg>{{i.v}}</a><span style="font-size: 12px; color: var(--fg3)">BusinessService</span></sc-if>
+                      </dd>
+                    </sc-for>
+                  </dl>
+                </div>
+              </sc-for>
+              <sc-if value="{{noAttributes}}" hint-placeholder-val="{{false}}">
+                <div style="display: flex; flex-direction: column; gap: 4px; padding-top: 16px; border-top: 1px solid var(--st2)">
+                  <span style="font-weight: 600">This type has no attributes yet.</span>
+                </div>
+              </sc-if>
+            </section>
+          </sc-if>
+
+          <sc-if value="{{showRelTab}}" hint-placeholder-val="{{true}}">
+            <section id="tab-relationships" role="tabpanel" aria-label="Relationships" aria-busy="{{relBusy}}" style="display: flex; flex-direction: column; gap: 16px">
+              <sc-if value="{{showAddRel}}" hint-placeholder-val="{{true}}">
+                <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+                  <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>Add relationship</button>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{relError}}" hint-placeholder-val="{{false}}">
+                <div role="alert" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span style="flex: 1; min-width: 240px"><b>Couldn’t load the relationships.</b> Check your connection, then try again.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">7d3e1c9a5b2f4e60a8c1d4f2b9e07a3c</span></span><button type="button" aria-label="Copy reference ID" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h9v9H7zM4 13V4h9"></path></svg></button><button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button></div>
+              </sc-if>
+
+              <sc-if value="{{relLoading}}" hint-placeholder-val="{{false}}">
+                <sc-for list="{{relSkeleton}}" as="k" hint-placeholder-count="2">
+                  <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+                    <span style="width: 160px; height: 18px; border-radius: 3px; background: var(--bg4)"></span>
+                    <sc-for list="{{k}}" as="b" hint-placeholder-count="3">
+                      <div style="display: grid; grid-template-columns: 140px 220px 140px 120px 80px 90px; gap: 24px; align-items: center; height: 30px"><span style="{{b.a}}"></span><span style="{{b.b}}"></span><span style="{{b.c}}"></span><span style="{{b.d}}"></span><span style="{{b.e}}"></span><span style="{{b.f}}"></span></div>
+                    </sc-for>
+                  </div>
+                </sc-for>
+              </sc-if>
+
+              <sc-if value="{{relEmpty}}" hint-placeholder-val="{{false}}">
+                <div style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; padding: 48px 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center">
+                  <svg width="40" height="40" viewBox="0 0 20 20" fill="none" stroke="var(--fg3)" stroke-width="1.2" aria-hidden="true"><path d="{{graphIcon}}"></path></svg>
+                  <p style="margin: 0; font-size: 16px; line-height: 22px; font-weight: 600">{{emptyText}}</p>
+                  <sc-if value="{{canEdit}}" hint-placeholder-val="{{true}}">
+                    <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M10 4v12M4 10h12"></path></svg>Add relationship</button>
+                  </sc-if>
+                </div>
+              </sc-if>
+
+              <sc-for list="{{sections}}" as="s" hint-placeholder-count="2">
+                <section aria-labelledby="{{s.id}}" style="background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; display: flex; flex-direction: column">
+                  <h2 id="{{s.id}}" style="margin: 0; padding: 14px 16px 6px; font-size: 16px; line-height: 22px; font-weight: 600">{{s.title}}</h2>
+                  <div style="overflow-x: auto">
+                    <table style="width: 100%; min-width: 900px; border-collapse: collapse">
+                      <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{s.caption}}</caption>
+                      <thead>
+                        <tr style="text-align: left">
+                          <th scope="col" style="height: 36px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap; width: 170px">Relationship</th>
+                          <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap">Related CI</th>
+                          <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap; width: 170px">CI type</th>
+                          <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap; width: 150px">Redundancy group</th>
+                          <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap; width: 80px">Source</th>
+                          <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st2); font-weight: 600; color: var(--fg2); white-space: nowrap; width: 100px">Since</th>
+                          <sc-if value="{{canEditRows}}" hint-placeholder-val="{{true}}"><th scope="col" style="padding: 0 16px 0 12px; border-bottom: 1px solid var(--st2); width: 72px"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></th></sc-if>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <sc-for list="{{s.rows}}" as="r" hint-placeholder-count="4">
+                          <tr>
+                            <td style="height: 44px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--st2); white-space: nowrap; position: relative"><span tabindex="0" aria-describedby="{{r.tipId}}" style="{{r.typeStyle}}">{{r.type}}</span><span id="{{r.tipId}}" role="tooltip" style="{{r.tipStyle}}">{{r.description}}</span></td>
+                            <td style="padding: 0 12px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap"><a href="#" style="{{r.linkStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{r.icon}}"></path></svg>{{r.name}}</a><sc-if value="{{r.retired}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">Retired</span></sc-if></span></td>
+                            <td style="padding: 0 12px; border-bottom: 1px solid var(--st2); color: var(--fg2); white-space: nowrap">{{r.ciType}}</td>
+                            <td style="{{r.groupStyle}}">{{r.group}}</td>
+                            <td style="padding: 0 12px; border-bottom: 1px solid var(--st2); color: var(--fg2)">Manual</td>
+                            <td style="padding: 0 12px; border-bottom: 1px solid var(--st2); color: var(--fg2); white-space: nowrap; font-variant-numeric: tabular-nums">{{r.since}}</td>
+                            <sc-if value="{{canEditRows}}" hint-placeholder-val="{{true}}">
+                              <td style="padding: 0 16px 0 12px; border-bottom: 1px solid var(--st2)">
+                                <div style="display: flex; gap: 2px; justify-content: flex-end">
+                                  <button type="button" aria-haspopup="dialog" aria-label="Edit {{r.label}}" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13.5 3.5l3 3L7 16H4v-3z"></path></svg></button>
+                                  <button type="button" aria-haspopup="dialog" aria-label="Delete {{r.label}}" style="width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 6h12M8 6V4h4v2M5.5 6l1 11h7l1-11"></path></svg></button>
+                                </div>
+                              </td>
+                            </sc-if>
+                          </tr>
+                        </sc-for>
+                      </tbody>
+                    </table>
+                  </div>
+                  <sc-if value="{{s.hasMore}}" hint-placeholder-val="{{false}}">
+                    <div style="padding: 12px 16px; display: flex; align-items: center; gap: 12px">
+                      <button type="button" style="height: 32px; padding: 0 12px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">{{s.moreLabel}}</button>
+                      <span style="color: var(--fg3)">{{s.shownLine}}</span>
+                    </div>
+                  </sc-if>
+                </section>
+              </sc-for>
+            </section>
+          </sc-if>
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">Sample data (fictional)</span>
+        </div>
+      </sc-if>
+    </main>
+
+    <sc-if value="{{showRelPanel}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <aside role="dialog" aria-modal="true" aria-labelledby="panel-title" style="position: absolute; top: 0; right: 0; bottom: 0; width: 480px; box-sizing: border-box; background: var(--bg1); box-shadow: var(--sh64); display: flex; flex-direction: column">
+        <dc-import name="RelPanel" mode="{{relPanelMode}}" dark="{{dark}}" height="{{bodyHeight}}" hint-size="480px,{{bodyHeight}}px"></dc-import>
+      </aside>
+    </sc-if>
+
+    <sc-if value="{{dialog.show}}" hint-placeholder-val="{{false}}">
+      <div aria-hidden="true" style="position: absolute; inset: 0; background: var(--scrim)"></div>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="cd-title" aria-describedby="cd-body" style="position: absolute; left: 50%; top: 140px; width: 480px; margin-left: -240px; box-sizing: border-box; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h2 id="cd-title" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">{{dialog.title}}</h2>
+        <p id="cd-body" style="margin: 0">{{dialog.body}}</p>
+        <div style="display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap">
+          <button type="button" style="{{dialog.secondaryStyle}}">{{dialog.secondary}}</button>
+          <button type="button" style="{{dialog.primaryStyle}}">{{dialog.primary}}</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{toast.show}}" hint-placeholder-val="{{false}}">
+      <div role="status" style="position: absolute; right: 24px; bottom: 24px; width: 320px; box-sizing: border-box; padding: 12px 16px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh8); display: flex; align-items: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="var(--gnfg)" stroke-width="1.5" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg><span style="flex: 1; font-weight: 600">{{toast.text}}</span></div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":900},"ci":{"editor":"enum","options":["vm","host","hcx","server","location"],"default":"vm"},"role":{"editor":"enum","options":["editor","viewer","admin"],"default":"editor"},"state":{"editor":"enum","options":["default","retired","loading","error"],"default":"default"},"tab":{"editor":"enum","options":["attributes","relationships"],"default":"attributes"},"rels":{"editor":"enum","options":["default","loading","error"],"default":"default"},"dialog":{"editor":"enum","options":["none","retire","conflict","deleteRel","relConflict"],"default":"none"},"panel":{"editor":"enum","options":["none","relAdd","relAddGroups","relAddErrors","relAddPartial","relEdit"],"default":"none"},"toast":{"editor":"enum","options":["none","retired","created","relAdded","relSaved","relDeleted"],"default":"none"},"menu":{"editor":"boolean","default":false},"tip":{"editor":"boolean","default":false},"search":{"editor":"enum","options":["box","icon","none"],"default":"box"},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--bg4:#f0f0f0;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--brand:#8a5a00;--bfg1:#8a5a00;--bbg2:#fcefd8;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--dgbg:#c50f1f;--rdfg:#bc2f32;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--sh8:0 0 2px rgba(0,0,0,.12),0 4px 8px rgba(0,0,0,.14);--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);--scrim:rgba(0,0,0,.4);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--bg4:#0a0a0a;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--stacc:#adadad;--brand:#7d5200;--bfg1:#c28a2a;--bbg2:#2c1d00;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--dgbg:#c50f1f;--rdfg:#e37d80;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--sh8:0 0 2px rgba(0,0,0,.24),0 4px 8px rgba(0,0,0,.28);--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);--scrim:rgba(0,0,0,.5);';
+    const p = this.props;
+    const dark = p.dark ?? false;
+    const width = p.width ?? 1440;
+    const height = p.height ?? 900;
+    const which = p.ci ?? 'vm';
+    const role = p.role ?? 'editor';
+    const state = p.state ?? 'default';
+    const tab = p.tab ?? 'attributes';
+    const relsState = p.rels ?? 'default';
+    const dialogKind = p.dialog ?? 'none';
+    const panel = p.panel ?? 'none';
+    const toastKind = p.toast ?? 'none';
+    const menu = p.menu ?? false;
+    const tip = p.tip ?? false;
+    const phone = width < 600;
+    const wide = width >= 1100;
+    const search = p.search ?? (wide ? 'box' : 'icon');
+    const ICON = {
+      VirtualMachine: 'M3 4h14v9H3zM7 16h6M10 13v3',
+      Server: 'M4 3h12v5H4zM4 11h12v5H4zM7 5.5h1M7 13.5h1',
+      HypervisorHost: 'M3 4h14v12H3zM3 8h14M3 12h14',
+      HypervisorCluster: 'M2 5h7v5H2zM11 5h7v5h-7zM6.5 13h7v5h-7z',
+      HypervisorManager: 'M4 3h12v8H4zM10 11v3M5 17h10M7 14h6',
+      NetworkDevice: 'M3 8h14v5H3zM6 10.5h.5M9 10.5h.5M12 5l2 3M8 5l-2 3',
+      Datastore: 'M4 4h12v4H4zM4 8h12v4H4zM4 12h12v4H4z',
+      ClusterNetworkName: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM2.5 10h15M10 2.5c2 2.2 3 4.7 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.7-3-7.5s1-5.3 3-7.5z',
+      BusinessService: 'M3 7h14v9H3zM7 7V4.5h6V7',
+      Location: 'M10 17s5-4.6 5-8.5a5 5 0 0 0-10 0C5 12.4 10 17 10 17zM10 10.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'
+    };
+    const DESC = {
+      depends_on: 'A general dependency, set by hand.',
+      runs_on: 'A VM runs on a hypervisor host.',
+      uses_datastore: 'A VM keeps its disks on a datastore.',
+      os_of: 'The operating system running in a VM.',
+      member_of_cluster: 'A host is a member of a cluster. Carries no impact.',
+      uplinks_to: 'A host’s uplink to a switch. Grouped by virtual switch: the host loses the network only if all its uplinks are down.'
+    };
+    const CIS = {
+      vm: { name: 'app-erp-db01', type: 'VirtualMachine', icon: ICON.VirtualMachine, id: '0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f20', changed: '9 min ago', typeGroup: null,
+        custom: [['Cost centre', 'CC-4410'], ['vCPUs reserved', '8'], ['Monitored', 'Yes'], ['Patch window starts', '2026-11-07'], ['Backup tier', 'Gold'], ['Supports service', 'ERP', 'link']],
+        out: [['runs_on', 'esx-mx-014', 'HypervisorHost', null, '2026-10-02'], ['uses_datastore', 'DS-S3-ERP-01', 'Datastore', null, '2026-10-02']],
+        in: [['depends_on', 'ERP', 'BusinessService', null, '2026-08-30'], ['depends_on', 'ERP Reporting', 'BusinessService', null, '2026-10-24'], ['depends_on', 'Payroll', 'BusinessService', null, '2026-03-11', true], ['os_of', 'APP-ERP-DB01', 'Server', null, '2026-10-02']] },
+      host: { name: 'esx-mx-014', type: 'HypervisorHost', icon: ICON.HypervisorHost, id: '0192f3a4-6d20-7c11-8e4f-3a9b2c1d0e57', changed: '2 h ago', typeGroup: null, custom: [],
+        out: [['member_of_cluster', 'CL-PROD-02', 'HypervisorCluster', null, '2026-07-01'], ['uplinks_to', 'sw-core-01', 'NetworkDevice', 'vSwitch0', '2026-07-01'], ['uplinks_to', 'sw-core-02', 'NetworkDevice', 'vSwitch0', '2026-10-24']],
+        in: null },
+      hcx: { name: 'hcx-ma-01', type: 'HypervisorManager', icon: ICON.HypervisorManager, id: '0192f3a4-5a10-7e22-9d3c-4b8a1c2e3f60', changed: '3 d ago', typeGroup: null, custom: [], out: [], in: [] },
+      server: { name: 'APP-ERP-DB01', type: 'Server', icon: ICON.Server, id: '0192f3a4-81b0-7a2c-b6e3-5d1c9e7a4f02', changed: '9 min ago', typeGroup: [['Platform', 'vmware']],
+        custom: [['Patch group', null]], out: [['os_of', 'app-erp-db01', 'VirtualMachine', null, '2026-10-02']], in: [] },
+      location: { name: 'DC-East', type: 'Location', icon: ICON.Location, id: '0192e1d0-3f6a-7b81-8c2d-9a4b5e6f7a10', changed: '6 d ago', typeGroup: null, custom: [], out: [], in: [] }
+    };
+    const ci = CIS[which];
+    // esx-mx-014's 124 dependents: every one runs_on it.
+    let dependents = ci.in;
+    if (!dependents) {
+      const names = ['app-erp-app01', 'app-erp-app02', 'app-erp-app03', 'app-erp-app04', 'app-erp-batch01', 'app-erp-batch02', 'app-erp-db01', 'app-erp-db02', 'app-erp-web01', 'app-erp-web02', 'app-erp-web03', 'app-erp-web04'];
+      const pad = (n) => (n < 10 ? '0' : '') + n;
+      [['app-crm-', 10], ['app-hr-', 8], ['bld-agent-', 9], ['dc-mx-', 4], ['fs-mx-', 6], ['jump-mx-', 3], ['mon-', 7], ['sql-rpt-', 11], ['vdi-mx-', 40], ['web-portal-', 14]].forEach(([prefix, n]) => { for (let i = 1; i <= n; i++) names.push(prefix + pad(i)); });
+      names.sort();
+      const since = ['2026-10-02', '2026-09-28', '2026-10-11', '2026-08-19'];
+      dependents = names.map((n, i) => ['runs_on', n, 'VirtualMachine', null, since[i % 4]]);
+    }
+    const retired = state === 'retired';
+    const loading = state === 'loading';
+    const error = state === 'error';
+    const canEdit = role !== 'viewer';
+    const badge = (k) => 'display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--' + k + 'bd); background: var(--' + k + 'bg); color: var(--' + k + 'fg); font-size: 12px; font-weight: 600; white-space: nowrap';
+    const item = (k, v, kind) => ({
+      k, v: v === null ? 'Not set' : v,
+      plain: !kind, isLife: kind === 'life', isId: kind === 'id', isLink: kind === 'link',
+      style: v === null ? 'color: var(--fg3)' : ''
+    });
+    const groups = [{ title: 'General', items: [item('Name', ci.name), item('Type', ci.type), item('Lifecycle', '', 'life'), item('ID', ci.id, 'id')] }];
+    if (ci.typeGroup) groups.push({ title: ci.type + ' attributes', items: ci.typeGroup.map(([k, v]) => item(k, v)) });
+    if (ci.custom.length) groups.push({ title: 'Custom attributes', items: ci.custom.map(([k, v, kind]) => item(k, v, kind)) });
+
+    const LIMIT = 50;
+    let tipShown = false;
+    const row = (outgoing) => ([type, name, ciType, group, since, isRetired], i) => {
+      const showTip = tip && !tipShown && type === 'runs_on';
+      if (showTip) tipShown = true;
+      return {
+        type, name, ciType, since, retired: !!isRetired,
+        icon: ICON[ciType] ?? ICON.BusinessService,
+        description: DESC[type] ?? '',
+        tipId: 'tip-' + (outgoing ? 'o' : 'i') + i,
+        typeStyle: 'font-family: Consolas, \'Cascadia Mono\', monospace; font-size: 13px; font-weight: 600; border-radius: 2px; ' + (showTip ? 'outline: 2px solid var(--fo); outline-offset: 2px' : ''),
+        tipStyle: showTip
+          ? 'position: absolute; left: 16px; top: 40px; width: 260px; box-sizing: border-box; padding: 8px 10px; background: var(--bg1); border-radius: 4px; box-shadow: var(--sh16); font-size: 12px; line-height: 16px; white-space: normal; z-index: 2'
+          : 'position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)',
+        label: outgoing ? type + ' ' + name : name + ' ' + type + ' ' + ci.name,
+        linkStyle: 'display: inline-flex; align-items: center; gap: 8px; color: ' + (isRetired ? 'var(--fg2)' : 'var(--blink)') + '; font-weight: 600; text-decoration: none',
+        group: group ?? '—',
+        groupStyle: 'padding: 0 12px; border-bottom: 1px solid var(--st2); white-space: nowrap; color: ' + (group ? 'var(--fg1)' : 'var(--fg3)')
+      };
+    };
+    const section = (id, title, list, outgoing) => {
+      const total = list.length;
+      const shown = list.slice(0, LIMIT);
+      const rest = total - shown.length;
+      return {
+        id, title: title + ' (' + total + ')',
+        caption: title + ': ' + (outgoing ? 'the CIs ' + ci.name + ' depends on' : 'the CIs that depend on ' + ci.name),
+        rows: shown.map(row(outgoing)),
+        hasMore: rest > 0,
+        moreLabel: 'Show ' + Math.min(rest, 200) + ' more',
+        shownLine: 'Showing ' + shown.length + ' of ' + total
+      };
+    };
+    const relTotal = ci.out.length + dependents.length;
+    const relLoading = relsState === 'loading';
+    const relError = relsState === 'error';
+    const relEmpty = !relLoading && !relError && relTotal === 0;
+    const sections = relLoading || relError || relEmpty ? [] : [
+      section('rel-out', 'Depends on', ci.out, true),
+      section('rel-in', 'Depended on by', dependents, false)
+    ];
+    const sk = (w) => 'display: block; width: ' + w + '; height: 14px; border-radius: 3px; background: var(--bg4)';
+    const skRow = () => ({ a: sk('90px'), b: sk('160px'), c: sk('100px'), d: sk('40px'), e: sk('50px'), f: sk('76px') });
+    const relPanels = { relAdd: 'add', relAddGroups: 'addGroups', relAddErrors: 'addErrors', relAddPartial: 'addPartial', relEdit: 'edit' };
+    const relPanelMode = relPanels[panel] ?? 'none';
+    const DIALOGS = {
+      retire: { title: 'Retire ' + ci.name + '?', body: 'It’s hidden from search unless Show retired is on. Its details are kept, and you can restore it.', secondary: 'Cancel', primary: 'Retire', danger: false },
+      conflict: { title: 'This CI changed while you were editing', body: 'Sam Rivera saved changes to Cost centre and Backup tier at 14:02 UTC. Your edits are not saved yet.', secondary: 'Discard mine', primary: 'Review their changes', danger: false },
+      deleteRel: { title: 'Delete runs_on esx-mx-014?', body: 'app-erp-db01 will no longer depend on esx-mx-014. The history of both CIs keeps the relationship.', secondary: 'Cancel', primary: 'Delete', danger: true },
+      relConflict: { title: 'This relationship changed while you were editing', body: 'Sam Rivera changed its redundancy group at 14:02 UTC. Your change isn’t saved yet.', secondary: 'Discard mine', primary: 'Review their changes', danger: false }
+    };
+    const d = DIALOGS[dialogKind];
+    const dialogVals = d ? Object.assign({ show: true }, d, {
+      secondaryStyle: 'height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600; outline: 2px solid var(--fo); outline-offset: 1px',
+      primaryStyle: 'height: 32px; padding: 0 16px; border: none; border-radius: 4px; color: #ffffff; font: inherit; font-weight: 600; background: ' + (d.danger ? 'var(--dgbg)' : 'var(--brand)')
+    }) : { show: false, title: '', body: '', secondary: '', primary: '', secondaryStyle: '', primaryStyle: '' };
+    const TOASTS = { retired: ci.name + ' retired', created: ci.name + ' created', relAdded: 'Relationship added', relSaved: 'Changes saved', relDeleted: 'Relationship deleted' };
+    const collapse = !wide;
+    const skBar = (w, h) => 'display: block; width: ' + w + '; height: ' + h + 'px; border-radius: 3px; background: var(--bg4)';
+    const tabStyle = (on) => 'position: relative; height: 40px; padding: 0 12px; display: inline-flex; align-items: center; border: none; background: transparent; font: inherit; ' + (on ? 'color: var(--fg1); font-weight: 600' : 'color: var(--fg2)');
+    const tabBar = (on) => on ? 'position: absolute; left: 12px; right: 12px; bottom: -1px; height: 3px; border-radius: 2px; background: var(--cbrand)' : 'display: none';
+    const onRel = tab === 'relationships';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      dark, width, role, search,
+      bodyHeight: height - 48,
+      navWidth: wide ? 260 : 48,
+      showNav: !phone,
+      pad: phone ? 16 : width >= 1280 ? 32 : 24,
+      busy: loading ? 'true' : 'false',
+      ci,
+      graphIcon: 'M3 3h5v4H3zM12 3h5v4h-5zM7.5 13h5v4h-5zM5.5 7v3h9V7M10 10v3',
+      crumbName: loading || error ? '…' : ci.name,
+      showError: error,
+      showLoading: loading,
+      skeleton: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => skBar(i % 2 ? '70%' : '60%', 14)),
+      showCi: !loading && !error,
+      h1Style: 'margin: 0; font-size: ' + (phone ? 20 : 24) + 'px; line-height: ' + (phone ? 28 : 32) + 'px; font-weight: 600; overflow-wrap: anywhere; color: ' + (retired ? 'var(--fg2)' : 'var(--fg1)'),
+      lifeStyle: badge(retired ? 'sb' : 'gn'),
+      lifeText: retired ? 'Retired' : 'Active',
+      changedLine: 'Changed ' + (retired ? 'just now' : ci.changed) + ' by Dana Kowalski',
+      showButtons: !collapse,
+      editLive: canEdit && !retired,
+      editRetired: canEdit && retired,
+      retired,
+      canEdit,
+      showMore: collapse,
+      menuOpen: menu,
+      firstItemStyle: 'height: 32px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border: none; border-radius: 4px; color: var(--fg1); font: inherit; text-align: left; background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px',
+      graphItemStyle: 'height: 32px; padding: 0 8px; display: flex; align-items: center; gap: 8px; border-radius: 4px; color: var(--fg1); text-decoration: none; ' + (canEdit && !retired ? 'background: transparent' : 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px'),
+      menuExpanded: menu ? 'true' : 'false',
+      moreStyle: 'width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); ' + (menu ? 'background: var(--sub)' : 'background: var(--bg1)'),
+      tabAttrSelected: onRel ? 'false' : 'true',
+      tabRelSelected: onRel ? 'true' : 'false',
+      tabAttrStyle: tabStyle(!onRel),
+      tabRelStyle: tabStyle(onRel),
+      tabAttrBar: tabBar(!onRel),
+      tabRelBar: tabBar(onRel),
+      showCount: !relLoading && !relError,
+      relCount: relTotal.toLocaleString('en-US'),
+      showAttrTab: !onRel,
+      showRelTab: onRel,
+      groups,
+      gridStyle: 'margin: 0; display: grid; gap: ' + (phone ? '4px 0' : '12px 16px') + '; grid-template-columns: ' + (phone ? 'minmax(0, 1fr)' : wide ? '180px minmax(0, 1fr) 180px minmax(0, 1fr)' : '180px minmax(0, 1fr)') + '; align-items: center',
+      noAttributes: !ci.typeGroup && !ci.custom.length,
+      relBusy: relLoading ? 'true' : 'false',
+      showAddRel: canEdit && !retired && !relEmpty,
+      relError,
+      relLoading,
+      relSkeleton: [[skRow(), skRow(), skRow()], [skRow(), skRow(), skRow(), skRow()]],
+      relEmpty,
+      emptyText: ci.name + ' has no relationships yet.',
+      sections,
+      canEditRows: canEdit,
+      showRelPanel: relPanelMode !== 'none',
+      relPanelMode,
+      dialog: dialogVals,
+      toast: toastKind === 'none' ? { show: false, text: '' } : { show: true, text: TOASTS[toastKind] }
+    };
+  }
+}
+</script>
+</body>
+</html>
