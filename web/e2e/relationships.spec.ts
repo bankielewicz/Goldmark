@@ -296,6 +296,12 @@ test.describe('slice 6 screens', () => {
     await page.goto('/graph?ci=0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f99');
     await expect(page.getByRole('heading', { level: 2, name: 'We can’t find that CI' })).toBeVisible();
     await expectAccessible(page, 'graph, not found');
+
+    // A link naming types this Goldmark doesn't have (deleted since it was saved) opens with every type, and the
+    // address drops them (deep-links.md).
+    await page.goto(`/graph?ci=${ids['app-erp-db01']}&type=NoSuchType&relationshipType=no_such_type`);
+    await expect(page.getByText(status), problems.join('\n')).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/graph\\?ci=${ids['app-erp-db01']}$`));
   });
 
   test('each section of the tab pages on its own, so a second Show more never sends the same page twice', async ({

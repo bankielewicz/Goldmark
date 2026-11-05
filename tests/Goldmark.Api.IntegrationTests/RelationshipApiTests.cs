@@ -232,7 +232,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
 
         // The boards' sample (DEC-046 item 4): 14 CIs and 13 relationships at depth 3, Payroll (retired) left out,
         // SQLPRD02\ERP at hop 4 as AG-ERP's other replica.
-        var graph = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/graph?ci={d1["app-erp-db01"]}")).Body;
+        var graph = DrawnOnce(AuthScenario.Ok(await viewer.GetAsync($"/api/v1/graph?ci={d1["app-erp-db01"]}")).Body);
         Assert.Equal((3, "both", false), (graph.GetProperty("depth").GetInt32(), graph.Value("direction"), graph.GetProperty("truncated").GetBoolean()));
         Assert.Equal(new Dictionary<string, int>
         {
@@ -302,7 +302,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
             FROM cmdb.Ci AS s JOIN cmdb.Ci AS v ON s.Name = CONCAT(N'svc-', v.Name);
             """);
 
-        var grouped = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}")).Body;
+        var grouped = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}")).Body);
         var group = Assert.Single(grouped.GetProperty("groups").EnumerateArray());
         Assert.Equal((host, "dependents", "runs_on", "VirtualMachine", 1, 12), (group.Value("hub"), group.Value("direction"), group.Value("relationshipType"),
             group.Value("ciType"), group.GetProperty("hops").GetInt32(), group.GetProperty("count").GetInt32()));
@@ -314,7 +314,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
         Assert.Equal([1, 2], grouped.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
 
         // Off, the walk goes through the VMs to their services; ten neighbours are never a group.
-        var flat = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&group=false")).Body;
+        var flat = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&group=false")).Body);
         Assert.Empty(flat.GetProperty("groups").EnumerateArray());
         Assert.Equal([1, 13, 12], flat.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
         Assert.Empty(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={small}")).Body.GetProperty("groups").EnumerateArray());
@@ -372,7 +372,7 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
     }
 
     [Fact]
-    public async Task A_group_the_other_walk_reaches_a_hop_later_is_counted_at_its_own_hop()
+    public async Task A_CI_in_a_group_stays_there_and_a_walk_that_reaches_it_later_stops_at_it()
     {
         await using var scenario = await AuthScenario.StartAsync(sql);
         var (admin, _) = await scenario.SetUpAsync();
@@ -388,12 +388,16 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
             await RelateAsync(editor, "depends_on", service, focus);
         }
 
-        // The dependents walk groups the eleven at hop 1, the dependencies walk past the hub at hop 2; the CIs stay at 1.
-        var graph = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={focus}")).Body;
-        Assert.Equal([("dependents", 1), ("dependencies", 2)],
-            graph.GetProperty("groups").EnumerateArray().Select(g => (g.Value("direction"), g.GetProperty("hops").GetInt32())));
+        // The dependents walk groups the eleven at hop 1; at hop 2 the dependencies walk reaches them from the hub and
+        // stops there: no second group, and the hub's relationships into the first group are listed, not grouped.
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={focus}")).Body);
+        var group = Assert.Single(graph.GetProperty("groups").EnumerateArray());
+        Assert.Equal((focus, "dependents", 1, 11), (group.Value("hub"), group.Value("direction"), group.GetProperty("hops").GetInt32(), group.GetProperty("count").GetInt32()));
         Assert.All(Hops(graph).Where(h => h.Key.StartsWith("svc-", StringComparison.Ordinal)), h => Assert.Equal(1, h.Value));
-        Assert.Equal([1, 2, 1], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        Assert.Equal([1, 2], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        var relationships = graph.GetProperty("relationships").EnumerateArray().ToList();
+        Assert.Equal(23, relationships.Count);
+        Assert.Equal(11, relationships.Count(r => r.Value("from") == hub && r.Value("group") is null));
         Assert.Equal("23", (await editor.PostAsync($"/api/v1/graph/export?ci={focus}")).Headers["X-Goldmark-Entries"]);
     }
 
@@ -418,13 +422,164 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
             FROM cmdb.Ci AS v WHERE v.Name = N'vm-001';
             """);
 
-        var graph = AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&direction=dependents&group=false")).Body;
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={host}&direction=dependents&group=false")).Body);
         Assert.False(graph.GetProperty("truncated").GetBoolean());
         Assert.Equal(13_001, graph.GetProperty("relationships").GetArrayLength());
         var hops = Hops(graph);
         Assert.Equal(2, hops["esx-spare"]);
         Assert.DoesNotContain("esx-other", hops.Keys);
         Assert.Equal("13001", (await editor.PostAsync($"/api/v1/graph/export?ci={host}&direction=dependents&group=false")).Headers["X-Goldmark-Entries"]);
+    }
+
+    [Fact]
+    public async Task A_loop_through_the_focus_draws_each_CI_once_whichever_walk_reaches_it_first()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        foreach (var dependenciesFirst in new[] { true, false })
+        {
+            // Codex's loop on PR #59: F and eleven people A (six through depends_on, five through owned_by, so F's own
+            // hop groups none), each A and B, and B and F. One walk draws the A at hop 1; at hop 2 the other walk
+            // reaches all eleven from B and, before the owner's rule, grouped them too.
+            var prefix = dependenciesFirst ? "d" : "r";
+            var f = await CiAsync(editor, "Person", $"{prefix}-f");
+            var b = await CiAsync(editor, "Person", $"{prefix}-b");
+            for (var i = 1; i <= 11; i++)
+            {
+                var a = await CiAsync(editor, "Person", $"{prefix}-a{i:00}");
+                var type = i <= 6 ? "depends_on" : "owned_by";
+                if (dependenciesFirst)
+                {
+                    await RelateAsync(editor, type, f, a);
+                    await RelateAsync(editor, "depends_on", a, b);
+                }
+                else
+                {
+                    await RelateAsync(editor, type, a, f);
+                    await RelateAsync(editor, "depends_on", b, a);
+                }
+            }
+
+            await RelateAsync(editor, "depends_on", dependenciesFirst ? b : f, dependenciesFirst ? f : b);
+            var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={f}")).Body);
+            Assert.Empty(graph.GetProperty("groups").EnumerateArray());
+            Assert.Equal(13, graph.GetProperty("nodes").GetArrayLength());
+            Assert.Equal(23, graph.GetProperty("relationships").GetArrayLength());
+            Assert.Equal([1, 12], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        }
+    }
+
+    [Fact]
+    public async Task A_CI_one_walk_draws_while_the_other_groups_it_in_the_same_hop_leaves_the_group()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        foreach (var groupedByDependents in new[] { true, false })
+        {
+            // X depends on F and F on X; ten more services sit on the side X shares with them, so one walk groups
+            // eleven at hop 1 while the other draws X. X leaves the group, which shows ten.
+            var prefix = groupedByDependents ? "d" : "r";
+            var f = await CiAsync(editor, "BusinessService", $"{prefix}-f");
+            var x = await CiAsync(editor, "BusinessService", $"{prefix}-x");
+            await RelateAsync(editor, "depends_on", f, x);
+            await RelateAsync(editor, "depends_on", x, f);
+            for (var i = 1; i <= 10; i++)
+            {
+                var y = await CiAsync(editor, "BusinessService", $"{prefix}-y{i:00}");
+                await RelateAsync(editor, "depends_on", groupedByDependents ? y : f, groupedByDependents ? f : y);
+            }
+
+            var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={f}")).Body);
+            var group = Assert.Single(graph.GetProperty("groups").EnumerateArray());
+            Assert.Equal((groupedByDependents ? "dependents" : "dependencies", 10), (group.Value("direction"), group.GetProperty("count").GetInt32()));
+            Assert.DoesNotContain(x, group.GetProperty("members").EnumerateArray().Select(m => m.GetString()));
+            Assert.Equal([1, 2], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        }
+    }
+
+    [Fact]
+    public async Task A_redundancy_group_member_that_was_in_a_group_leaves_it_when_it_comes_in()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // F depends on eleven services, grouped at hop 1. D depends on F and on the first of them, in one redundancy
+        // group: after the dependents walk that member comes in on its own, so it leaves F's group.
+        var f = await CiAsync(editor, "BusinessService", "f");
+        var members = new List<string>();
+        for (var i = 1; i <= 11; i++)
+        {
+            members.Add(await CiAsync(editor, "BusinessService", $"m{i:00}"));
+            await RelateAsync(editor, "depends_on", f, members[^1]);
+        }
+
+        var d = await CiAsync(editor, "BusinessService", "d");
+        await RelateAsync(editor, "depends_on", d, f, "pair");
+        await RelateAsync(editor, "depends_on", d, members[0], "PAIR");
+
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={f}")).Body);
+        var group = Assert.Single(graph.GetProperty("groups").EnumerateArray());
+        Assert.Equal(("dependencies", 10), (group.Value("direction"), group.GetProperty("count").GetInt32()));
+        Assert.DoesNotContain(members[0], group.GetProperty("members").EnumerateArray().Select(m => m.GetString()));
+        Assert.False(graph.GetProperty("nodes").EnumerateArray().Single(n => n.Value("id") == members[0]).GetProperty("grouped").GetBoolean());
+        Assert.Equal([1, 3], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+    }
+
+    [Fact]
+    public async Task Relationships_read_again_through_a_loop_never_count_toward_the_limit()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // Codex's case on PR #59: 9,000 services the focus depends on, each of which depends on the focus. Hop 1 holds all
+        // 18,000 relationships; hop 2 reads them again from the other side, which used to count as 9,000 more.
+        var focus = await CiAsync(editor, "BusinessService", "loop-focus");
+        await scenario.Sql.AsAdminAsync(scenario.Installation.Database, $$"""
+            WITH n AS (SELECT TOP (9000) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i FROM sys.all_objects AS a CROSS JOIN sys.all_objects AS b)
+            INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', (SELECT Id FROM cmdb.CiType WHERE Name = N'BusinessService'),
+                CONCAT(N'svc-', FORMAT(i, '0000')), 'Active', '{}', 'test'
+            FROM n;
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', '{{focus}}', s.Id, (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'depends_on'), 'test'
+            FROM cmdb.Ci AS s WHERE s.Name LIKE N'svc-%';
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', s.Id, '{{focus}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'depends_on'), 'test'
+            FROM cmdb.Ci AS s WHERE s.Name LIKE N'svc-%';
+            """);
+
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={focus}&group=false")).Body);
+        Assert.False(graph.GetProperty("truncated").GetBoolean());
+        Assert.Equal(18_000, graph.GetProperty("relationships").GetArrayLength());
+        Assert.Equal([1, 9_000], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+        Assert.Equal("18000", (await editor.PostAsync($"/api/v1/graph/export?ci={focus}&group=false")).Headers["X-Goldmark-Entries"]);
+    }
+
+    /// <summary>
+    /// The owner's rule for the graph (2026-11-05): each CI once, on its own or in one group; each relationship once;
+    /// a group's relationships as many as its count; and the counts per hop one for each drawn CI and each group.
+    /// </summary>
+    private static JsonElement DrawnOnce(JsonElement graph)
+    {
+        var nodes = graph.GetProperty("nodes").EnumerateArray().ToList();
+        var groups = graph.GetProperty("groups").EnumerateArray().ToList();
+        var relationships = graph.GetProperty("relationships").EnumerateArray().ToList();
+        var members = groups.SelectMany(g => g.GetProperty("members").EnumerateArray().Select(m => m.GetString()!)).ToList();
+        Assert.Equal(members.Count, members.Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(nodes.Count, nodes.Select(n => n.Value("id")).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(nodes.Where(n => n.GetProperty("grouped").GetBoolean()).Select(n => n.Value("id")).Order(StringComparer.Ordinal),
+            members.Order(StringComparer.Ordinal));
+        Assert.Equal(relationships.Count, relationships.Select(r => r.Value("id")).Distinct(StringComparer.Ordinal).Count());
+        Assert.All(groups, g =>
+        {
+            Assert.Equal(g.GetProperty("count").GetInt32(), g.GetProperty("members").GetArrayLength());
+            Assert.Equal(g.GetProperty("count").GetInt32(), relationships.Count(r => r.Value("group") == g.Value("id")));
+        });
+        Assert.Equal(nodes.Count(n => !n.GetProperty("grouped").GetBoolean()) + groups.Count,
+            graph.GetProperty("countsByHop").EnumerateArray().Sum(c => c.GetInt32()));
+        return graph;
     }
 
     /// <summary>The boards' sample around app-erp-db01 (Graph.dc.html), by name.</summary>

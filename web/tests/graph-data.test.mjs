@@ -12,6 +12,7 @@ import {
   graphAddress,
   graphQuery,
   isEmpty,
+  knownFilters,
   layeredPositions,
   readGraphView,
   statusLine,
@@ -96,6 +97,20 @@ describe('graph address', () => {
       `/graph?ci=${ci}&depth=2&direction=dependents&type=VirtualMachine&type=Server&retired=true&group=false&layout=force&view=table`,
     );
     assert.deepEqual(readGraphView(new URLSearchParams(address.slice('/graph?'.length))), changed);
+  });
+
+  it('reads a type this Goldmark does not have as every type, and names the others as the catalog does', () => {
+    const view = readGraphView(
+      new URLSearchParams(`ci=${ci}&type=virtualmachine&type=Deleted&relationshipType=RUNS_ON&relationshipType=gone`),
+    );
+    assert.deepEqual(knownFilters(view, [{ name: 'VirtualMachine' }, { name: 'Server' }], [{ name: 'runs_on' }]), {
+      types: ['VirtualMachine'],
+      relationshipTypes: ['runs_on'],
+    });
+    assert.deepEqual(knownFilters({ ...view, types: ['Deleted'], relationshipTypes: [] }, [], []), {
+      types: [],
+      relationshipTypes: [],
+    });
   });
 
   it('reads an unknown value as its default and passes the read its parameters', () => {

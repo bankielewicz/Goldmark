@@ -113,6 +113,20 @@ export function readGraphView(search: URLSearchParams): GraphView {
   };
 }
 
+/**
+ * A link's type filters as this Goldmark names them: a name it doesn't have, such as a custom type deleted since the
+ * link was saved, is read as the default, every type (deep-links.md), as Search reads its types.
+ */
+export function knownFilters(
+  view: GraphView,
+  types: readonly { name: string }[],
+  relationshipTypes: readonly { name: string }[],
+): Pick<GraphView, 'types' | 'relationshipTypes'> {
+  const known = (names: string[], catalog: readonly { name: string }[]) =>
+    names.flatMap((n) => catalog.filter((c) => c.name.toLowerCase() === n.toLowerCase()).map((c) => c.name));
+  return { types: known(view.types, types), relationshipTypes: known(view.relationshipTypes, relationshipTypes) };
+}
+
 /** The address of a view, with only the values that differ from the defaults. */
 export function graphAddress(view: GraphView): string {
   const query = new URLSearchParams();

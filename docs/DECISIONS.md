@@ -2127,6 +2127,19 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      `group=false`, one boolean on the graph read). The status line says when groups are present ("124 CIs in 1
      group"); a group's card offers "Show these 124 in the table view" and "Explore from esx-mx-014". "What breaks
      if this host fails?" is slice 19's question (US-41, screen 7), not screen 6's (US-40).
+     Loops (owner, 2026-11-05, a pasted rule, relayed by the owner, after Codex found on PR #59 that a loop back
+     through the focus drew the same CIs on their own and again as a group, the group's table view empty): "1. A CI
+     is drawn once: on its own, or inside one box, never both. 2. A box takes only the like neighbours the graph
+     doesn't already draw or box. A neighbour that another path draws on its own leaves its box; an empty box
+     disappears. A box may therefore show fewer than 10: it holds what the graph doesn't draw elsewhere, not a count
+     of the hub's neighbours. 3. The walk still stops at a box. A CI that left a box is expanded only by the walk that
+     drew it. 4. A relationship is listed once. It is drawn when both its CIs are drawn, or as the box's one line
+     when it is the hub's own relationship into the box. A relationship from a drawn CI into someone else's box is
+     listed in the table, not drawn." The server derives each relationship's group from the final groups ("don't take
+     its client-side hub-and-members matching", Codex's suggestion). Built (`GraphStore`): both walks decide from the
+     graph as the hop began; a walk that reaches a CI already in a group stops there; a CI two groups took in one hop
+     stays in the first in a fixed order (hop, dependencies first, hub, relationship type, CI type), and groups are
+     numbered in that order.
   6. **Adding several CIs at once: "A. Several at once."** The CI picker takes several CIs of the allowed type,
      with the same relationship type and redundancy group for all; the panel sends one audited request per CI,
      lists any that failed and stays open. No batch endpoint.
@@ -2162,7 +2175,8 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
      Hop-1 limit: A. Only the filters. Tighten the first line so it names the hop, not the depth: "More than 25,000
      relationships one hop from team-ops is too many to draw. Filter by CI type or relationship type." Table
      caption as proposed. No buttons." The caption reads "No relationships: hop 1 from team-ops would pass the
-     25,000-relationship limit", and Export CSV…'s reason drops "lower the depth"; the Notes board says "hop 1 over
+     25,000-relationship limit"; Export CSV…'s reason there drops "lower the depth" too (Claude's change following
+     the owner's reason, not the owner's words; open to veto). The Notes board says "hop 1 over
      the limit: filters only; Set depth and grouping can't help, the server reads hop 1 whole before grouping".
      Rejected: B, the board's text with 0 filled in ("lists the 0 hops that fit"). Rejected: keeping 5,000 with that
      wording, and counting past the limit ("they make the honest number cheaper to show but keep the dead end"). "If

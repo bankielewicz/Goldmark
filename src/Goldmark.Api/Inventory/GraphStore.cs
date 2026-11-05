@@ -134,13 +134,16 @@ internal sealed record GraphQuery(Guid Ci, int Depth, string Direction, IReadOnl
 /// (FR-IM-3's alternative to one recursive CTE): the dependencies walk follows <c>UQ_Relationship (FromCiId, …)</c>
 /// away from the focus CI, the dependents walk <c>IX_Relationship_ToCi</c>, and neither turns round. Each walk keeps its
 /// own visited set, so a CI both walks reach is expanded by each in its direction; its hops are the fewer. At each hop
-/// a CI's new neighbours of one relationship type and CI type become a group when there are more than
-/// <see cref="GraphQuery.GroupAbove"/> of them, before the next hop, so the walk never expands them. After the
-/// dependents walk, the other members of each redundancy group it reached (same dependent, same text under
-/// <see cref="RedundancyGroups"/>) come in at their true hop, one past their dependent's, and are not expanded.
-/// Retired CIs (unless asked for) and CIs or relationships of types not shown are left out, and the walk doesn't pass
-/// through them; the focus CI is always shown. The walk stops before a hop that would take it past
-/// <see cref="MaxRelationships"/>, so every hop it returns is complete.
+/// a CI's neighbours of one relationship type and CI type that the graph doesn't already draw or group become a group
+/// when there are more than <see cref="GraphQuery.GroupAbove"/> of them, before the next hop, and a walk stops at a
+/// group (its own or the other walk's). After the dependents walk, the other members of each redundancy group it
+/// reached (same drawn dependent, same text under <see cref="RedundancyGroups"/>) come in at their true hop, one past
+/// their dependent's, and are not expanded. A CI is drawn once, on its own or in one group (owner, 2026-11-05): at the
+/// end a CI another path draws leaves its group, one two groups took stays in the first, an empty group goes, and a
+/// relationship belongs to a group only as its hub's own relationship into it. Retired CIs (unless asked for) and CIs
+/// or relationships of types not shown are left out, and the walk doesn't pass through them; the focus CI is always
+/// shown. The walk stops before a hop that would take it past <see cref="MaxRelationships"/>, so every hop it returns
+/// is complete.
 /// </summary>
 internal sealed class GraphStore(DbSession db)
 {
@@ -204,8 +207,9 @@ internal sealed class GraphStore(DbSession db)
             query.Retired);
         var hops = new Dictionary<Guid, int> { [query.Ci] = 0 };
         var drawn = new HashSet<Guid> { query.Ci };
+        var boxed = new HashSet<Guid>();
         var edges = new Dictionary<Guid, Edge>();
-        var groups = new List<GraphGroup>();
+        var groups = new List<Group>();
         var walks = new List<Walk>();
         if (query.WalksDependencies)
         {
@@ -222,13 +226,18 @@ internal sealed class GraphStore(DbSession db)
         var truncated = false;
         for (var hop = 1; hop <= query.Depth && !truncated && walks.Any(w => w.Frontier.Count > 0); hop++)
         {
-            // This hop's additions, applied only if the hop fits under the limit.
+            // This hop's additions, applied only if the hop fits under the limit. Both walks decide from the graph as the
+            // hop began, so neither decision depends on which walk reads first.
             var newEdges = new Dictionary<Guid, Edge>();
-            var newGroups = new List<GraphGroup>();
-            var reached = new List<(Walk Walk, HashSet<Guid> Expanded, HashSet<Guid> Grouped)>();
+            var newGroups = new List<Group>();
+            var reached = new List<(Walk Walk, HashSet<Guid> Expanded, HashSet<Guid> Stopped)>();
             foreach (var walk in walks.Where(w => w.Frontier.Count > 0))
             {
-                var take = MaxRelationships - edges.Count - newEdges.Count + 1;
+                // Through a loop the hop reads again relationships the graph already holds: they don't count toward the
+                // limit, so a full answer means new ones alone would pass it.
+                var frontier = walk.Frontier.ToHashSet();
+                var known = edges.Values.Concat(newEdges.Values).Count(e => frontier.Contains(walk.Near(e.Row)));
+                var take = MaxRelationships - edges.Count - newEdges.Count + known + 1;
                 var rows = await HopAsync(walk.Forward, walk.Frontier, filter, take);
                 if (rows.Count >= take)
                 {
@@ -236,41 +245,40 @@ internal sealed class GraphStore(DbSession db)
                     break;
                 }
 
-                var groupedKeys = new Dictionary<(Guid Near, int RelationshipTypeId, int FarTypeId), string>();
+                var groupedKeys = new HashSet<(Guid Near, int RelationshipTypeId, int FarTypeId)>();
                 if (query.Group)
                 {
-                    foreach (var g in rows.Where(r => !walk.Visited.Contains(walk.Far(r))).GroupBy(r => (walk.Near(r), r.RelationshipTypeId, r.FarTypeId)))
+                    foreach (var g in rows.Where(r => Open(walk, walk.Far(r))).GroupBy(r => (walk.Near(r), r.RelationshipTypeId, r.FarTypeId)))
                     {
                         var members = g.Select(walk.Far).Distinct().ToList();
                         if (members.Count > GraphQuery.GroupAbove)
                         {
-                            var id = $"g{groups.Count + newGroups.Count + 1}";
-                            newGroups.Add(new GraphGroup(id, g.Key.Item1, walk.Forward ? RelationshipDirections.Dependencies : RelationshipDirections.Dependents,
-                                relationshipTypeNames[g.Key.RelationshipTypeId], typeNames[g.Key.FarTypeId], hop, members.Count, members));
-                            groupedKeys[g.Key] = id;
+                            newGroups.Add(new Group(g.Key.Item1, walk.Forward, g.Key.RelationshipTypeId, g.Key.FarTypeId, hop, members));
+                            groupedKeys.Add(g.Key);
                         }
                     }
                 }
 
+                // A CI in a group, or put in one now, stops the walk; one the graph draws is expanded in this direction too.
                 var expanded = new HashSet<Guid>();
-                var grouped = new HashSet<Guid>();
+                var stopped = new HashSet<Guid>();
                 foreach (var row in rows)
                 {
-                    var far = walk.Far(row);
-                    var isNew = !walk.Visited.Contains(far);
-                    var group = isNew && groupedKeys.TryGetValue((walk.Near(row), row.RelationshipTypeId, row.FarTypeId), out var g) ? g : null;
                     if (!edges.ContainsKey(row.Id))
                     {
-                        newEdges.TryAdd(row.Id, new Edge(row, Dependents: !walk.Forward, group));
+                        newEdges.TryAdd(row.Id, new Edge(row, Dependents: !walk.Forward));
                     }
 
-                    if (isNew)
+                    var far = walk.Far(row);
+                    if (!walk.Visited.Contains(far))
                     {
-                        (group is null ? expanded : grouped).Add(far);
+                        var stops = !drawn.Contains(far)
+                            && (boxed.Contains(far) || groupedKeys.Contains((walk.Near(row), row.RelationshipTypeId, row.FarTypeId)));
+                        (stops ? stopped : expanded).Add(far);
                     }
                 }
 
-                reached.Add((walk, expanded, grouped));
+                reached.Add((walk, expanded, stopped));
             }
 
             if (truncated || edges.Count + newEdges.Count > MaxRelationships)
@@ -285,9 +293,14 @@ internal sealed class GraphStore(DbSession db)
             }
 
             groups.AddRange(newGroups);
-            foreach (var (walk, expanded, grouped) in reached)
+            foreach (var group in newGroups)
             {
-                foreach (var ci in expanded.Concat(grouped))
+                boxed.UnionWith(group.Members);
+            }
+
+            foreach (var (walk, expanded, stopped) in reached)
+            {
+                foreach (var ci in expanded.Concat(stopped))
                 {
                     walk.Visited.Add(ci);
                     hops[ci] = Math.Min(hops.GetValueOrDefault(ci, int.MaxValue), hop);
@@ -309,8 +322,35 @@ internal sealed class GraphStore(DbSession db)
             return null;
         }
 
-        // A group can be one hop past every CI it holds: both walks reach them, the other walk first (a cycle).
-        var counts = new int[hops.Values.Concat(groups.Select(g => g.Hops)).Max() + 1];
+        // The groups as drawn: a CI another path draws leaves its group, one two groups took stays in the first (in a
+        // fixed order: hop, dependencies first, hub, relationship type, CI type), and an empty group goes.
+        var final = new List<(Group Group, string Id, List<Guid> Members)>();
+        var groupOf = new Dictionary<Guid, (Group Group, string Id)>();
+        foreach (var group in groups.OrderBy(g => g.Hops).ThenBy(g => g.Forward ? 0 : 1).ThenBy(g => g.Hub)
+            .ThenBy(g => g.RelationshipTypeId).ThenBy(g => g.CiTypeId))
+        {
+            var members = group.Members.Where(m => !drawn.Contains(m) && !groupOf.ContainsKey(m)).ToList();
+            if (members.Count > 0)
+            {
+                var id = $"g{final.Count + 1}";
+                final.Add((group, id, members));
+                foreach (var member in members)
+                {
+                    groupOf[member] = (group, id);
+                }
+            }
+        }
+
+        // A relationship is a group's line only as the hub's own relationship of the group's type into it.
+        string? GroupOf(HopRow row) =>
+            groupOf.TryGetValue(row.ToCiId, out var into) && into.Group.Forward && into.Group.Hub == row.FromCiId
+                && into.Group.RelationshipTypeId == row.RelationshipTypeId ? into.Id
+            : groupOf.TryGetValue(row.FromCiId, out var from) && !from.Group.Forward && from.Group.Hub == row.ToCiId
+                && from.Group.RelationshipTypeId == row.RelationshipTypeId ? from.Id
+            : null;
+
+        // Each drawn CI and each group counts once, at its hop.
+        var counts = new int[hops.Values.Concat(final.Select(g => g.Group.Hops)).Max() + 1];
         foreach (var (ci, hop) in hops)
         {
             if (drawn.Contains(ci))
@@ -319,7 +359,7 @@ internal sealed class GraphStore(DbSession db)
             }
         }
 
-        foreach (var group in groups)
+        foreach (var (group, _, _) in final)
         {
             counts[group.Hops]++;
         }
@@ -329,21 +369,27 @@ internal sealed class GraphStore(DbSession db)
                 .OrderBy(n => n.Hops).ThenBy(n => n.Node.Name, StringComparer.OrdinalIgnoreCase).ThenBy(n => n.Node.Id)
                 .Select(n => new GraphNode(n.Node.Id, n.Node.Name, typeNames[n.Node.CiTypeId], n.Node.LifecycleState, n.Hops, !drawn.Contains(n.Node.Id)))],
             [.. edges.Values.Select(e => new GraphRelationship(e.Row.Id, relationshipTypeNames[e.Row.RelationshipTypeId], e.Row.FromCiId, e.Row.ToCiId,
-                    e.Row.RedundancyGroup, Math.Max(hops[e.Row.FromCiId], hops[e.Row.ToCiId]), e.Group))
+                    e.Row.RedundancyGroup, Math.Max(hops[e.Row.FromCiId], hops[e.Row.ToCiId]), GroupOf(e.Row)))
                 .OrderBy(r => r.Hops).ThenBy(r => r.Type, StringComparer.Ordinal).ThenBy(r => r.Id)],
-            groups, counts, truncated);
+            [.. final.Select(f => new GraphGroup(f.Id, f.Group.Hub,
+                f.Group.Forward ? RelationshipDirections.Dependencies : RelationshipDirections.Dependents,
+                relationshipTypeNames[f.Group.RelationshipTypeId], typeNames[f.Group.CiTypeId], f.Group.Hops, f.Members.Count, f.Members))],
+            counts, truncated);
+
+        // New to the walk, and neither drawn nor in a group when the hop began: only these can form a group.
+        bool Open(Walk walk, Guid ci) => !walk.Visited.Contains(ci) && !drawn.Contains(ci) && !boxed.Contains(ci);
     }
 
     /// <summary>
-    /// DEC-046 item 4: for each relationship the dependents walk reached its dependent through (not into a group) that
-    /// has a redundancy group, the dependent's other relationships in the same group, with their far ends at one hop
-    /// past the dependent. False when they would take the graph past the limit; nothing is added then. The dependents'
+    /// DEC-046 item 4: for each relationship the dependents walk reached a drawn dependent through that has a redundancy
+    /// group, the dependent's other relationships in the same group, with their far ends at one hop past the dependent,
+    /// drawn (one that was in a group leaves it). False when they would take the graph past the limit; nothing is added then. The dependents'
     /// relationships in any group are read page by page, so those already in the graph and those in other groups never
     /// count toward the limit (the texts are matched here, not in SQL).
     /// </summary>
     private async Task<bool> AddRedundancyMembersAsync(Dictionary<Guid, Edge> edges, Dictionary<Guid, int> hops, HashSet<Guid> drawn, Filter filter)
     {
-        var reachedThrough = edges.Values.Where(e => e.Dependents && e.Group is null && e.Row.RedundancyGroup is not null).ToList();
+        var reachedThrough = edges.Values.Where(e => e.Dependents && drawn.Contains(e.Row.FromCiId) && e.Row.RedundancyGroup is not null).ToList();
         if (reachedThrough.Count == 0)
         {
             return true;
@@ -372,7 +418,7 @@ internal sealed class GraphStore(DbSession db)
 
         foreach (var row in members)
         {
-            edges[row.Id] = new Edge(row, Dependents: false, Group: null);
+            edges[row.Id] = new Edge(row, Dependents: false);
             hops[row.ToCiId] = Math.Min(hops.GetValueOrDefault(row.ToCiId, int.MaxValue), hops[row.FromCiId] + 1);
             drawn.Add(row.ToCiId);
         }
@@ -426,7 +472,10 @@ internal sealed class GraphStore(DbSession db)
         public Guid Far(HopRow row) => Forward ? row.ToCiId : row.FromCiId;
     }
 
-    private sealed record Edge(HopRow Row, bool Dependents, string? Group);
+    private sealed record Edge(HopRow Row, bool Dependents);
+
+    /// <summary>A group as the walk formed it: its hub, its direction, the relationship type and CI type, the CIs it took.</summary>
+    private sealed record Group(Guid Hub, bool Forward, int RelationshipTypeId, int CiTypeId, int Hops, IReadOnlyList<Guid> Members);
 
     private sealed record HopRow(Guid Id, Guid FromCiId, Guid ToCiId, int RelationshipTypeId, string? RedundancyGroup, int FarTypeId);
 

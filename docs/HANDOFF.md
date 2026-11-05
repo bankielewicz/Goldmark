@@ -132,7 +132,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 ## 3. Next slice: notes
 
 Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in review** (PR #59), with its approved screens in
-`docs/design/screens/slice-6/` (canvas version `1792979261-cacf`). The decisions are DEC-046 items 1 to 16, with the
+`docs/design/screens/slice-6/` (canvas version `1793894949-8625`). The decisions are DEC-046 items 1 to 16, with the
 owner's words.
 
 **What it adds:**
@@ -163,7 +163,11 @@ owner's words.
   otherwise normalised; DEC-046 item 2), never by a SQL collation; slice 19's impact engine uses it too.
 - The graph walks hop by hop: two one-way walks, each with its own visited set, more than 10 like neighbours of a CI
   grouped before the next hop and never expanded, redundancy-group members after the dependents walk at one hop
-  past their dependent. It stops before a hop that would pass 25,000 relationships (`GraphStore.MaxRelationships`,
+  past their dependent. A CI is drawn once, on its own or in one group (DEC-046 item 5's loop rule, owner
+  2026-11-05): a group takes only CIs the graph doesn't already draw or group, a walk stops at any group, and at the
+  end a CI another path draws leaves its group, an empty group goes and each relationship's group comes from the
+  final groups (a group may then hold 10 or fewer). Relationships a hop reads again through a loop don't count
+  toward the limit. It stops before a hop that would pass 25,000 relationships (`GraphStore.MaxRelationships`,
   the design target's CI count; owner, DEC-046 item 7) and says `truncated`; a truncated graph's export is refused.
   An estate past 25,000 needs a server-paged table view (a keyset cursor, as Search has), not a larger number.
   Measured on the synthetic estate (25,000 CIs, 51,915 relationships; `PerformanceTests`, `GOLDMARK_PERF=1`): at

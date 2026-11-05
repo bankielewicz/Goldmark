@@ -67,6 +67,7 @@ import {
   statusLine,
   tableCaption,
   isEmpty,
+  knownFilters,
   stoppedBeforeHop1,
   tooLarge,
   tooLargeMessage,
@@ -320,6 +321,10 @@ type Load =
  * in the table view (the accessible equivalent, NFR-A11Y-2). The address holds the whole view. A graph past 500 CIs
  * offers the ways out instead; the CSV export is the server's, recorded in the audit log; the PNG is the canvas.
  */
+function sameNames(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((name, i) => name === b[i]);
+}
+
 export function GraphPage() {
   const styles = useStyles();
   const wide = useWide();
@@ -327,7 +332,7 @@ export function GraphPage() {
   const { search } = useLocation();
   const view = useMemo(() => readGraphView(search), [search]);
   const kind = view.view ?? (phone ? 'table' : 'graph');
-  const { types, relationshipTypes } = useCiTypes();
+  const { types, relationshipTypes, failure: typesFailure } = useCiTypes();
   const [focusCi, setFocusCi] = useState<CiDetail | null>(null);
   const [load, setLoad] = useState<Load>({ state: 'idle' });
   const [selection, setSelection] = useState<GraphSelection>(null);
@@ -345,6 +350,21 @@ export function GraphPage() {
     [view],
   );
 
+  // A link's type filters as this Goldmark names them; one it doesn't have is dropped from the address before the
+  // graph is read. Without filters there is nothing to wait for; if the types can't be read, the link goes as it is.
+  const known = useMemo(
+    () => (types && relationshipTypes ? knownFilters(view, types, relationshipTypes) : view),
+    [view, types, relationshipTypes],
+  );
+  const filtersSettled =
+    sameNames(known.types, view.types) && sameNames(known.relationshipTypes, view.relationshipTypes);
+  const filtersReady =
+    (view.types.length === 0 && view.relationshipTypes.length === 0) ||
+    ((types !== null || typesFailure !== null) && filtersSettled);
+  useEffect(() => {
+    if (!filtersSettled) update({ types: known.types, relationshipTypes: known.relationshipTypes });
+  }, [filtersSettled, known, update]);
+
   const fetchGraph = useCallback(async () => {
     const current = ++request.current;
     if (!view.ci) {
@@ -358,6 +378,7 @@ export function GraphPage() {
       return;
     }
     setLoad({ state: 'loading' });
+    if (!filtersReady) return;
     try {
       const [{ data: ci }, { data: result }] = await Promise.all([
         api<CiDetail>('GET', `/api/v1/cis/${view.ci}`),
@@ -373,7 +394,7 @@ export function GraphPage() {
       const problem = asApiError(error);
       setLoad(problem.status === 404 ? { state: 'missing' } : { state: 'failed', error: problem });
     }
-  }, [view.ci, query]);
+  }, [view.ci, query, filtersReady]);
 
   useEffect(() => {
     void fetchGraph();
