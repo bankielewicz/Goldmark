@@ -86,7 +86,7 @@ One ASP.NET Core project for now (`src/Goldmark.Api`, DEC-005). The PRD's other 
 
 - Warnings are errors and code style is enforced at build time (`Directory.Build.props`, `.editorconfig`: file-scoped namespaces, 4-space C#, 2-space everything else).
 - NuGet: central versions in `Directory.Packages.props`, nuget.org only with source mapping and required signatures, locked restore, NuGetAudit failing on any known vulnerability. Changing a package means regenerating and committing `packages.lock.json` (see README "Changing dependencies").
-- npm: every package needs an entry with a justification in `web/dependency-allowlist.json`; pnpm settings live in `web/pnpm-workspace.yaml` (pnpm 11 ignores non-auth `.npmrc` settings). Versions younger than 7 days fail to install and install scripts never run. SSR/RSC packages are banned.
+- npm: every package needs an entry with a justification in `web/dependency-allowlist.json`; pnpm settings live in `web/pnpm-workspace.yaml` (pnpm 11 ignores non-auth `.npmrc` settings). Versions younger than 7 days fail to install and install scripts never run. SSR/RSC packages are banned. An override (forcing a transitive version) is allowed only for a package listed under `overrides` in the allow-list at that exact version, with why and when to remove it (DEC-011, minimatch 11.0.3 for ESLint).
 - Base images are pinned by digest. Don't rely on Dockerfile file modes for secrets; the app enforces them at start.
 
 ## Design mockups

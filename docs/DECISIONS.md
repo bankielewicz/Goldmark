@@ -255,6 +255,17 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   `typescript-eslint`, `prettier`, `@playwright/test`.
 - **Evidence:** the first lockfile was resolved under the policy (pnpm chose
   react 19.3.0 over the 6-day-old 19.3.1).
+- **Overrides (owner, 2026-11-05, PR #59, AskUserQuestion):** GHSA-g3hv-75wg-m249
+  (moderate) failed CI's audit on minimatch 10.2.6, which only ESLint uses, and
+  no ESLint release uses the fixed 11.x yet. The owner chose "B. Force 11.0.3
+  inside #59", then, told that the check refused overrides and that 11.0.3 adds
+  `@isaacs/nonrecursive-glob-match`, "A. Allow named, pinned overrides": the
+  check accepts `overrides` in `pnpm-workspace.yaml` only for a package listed
+  under `overrides` in `dependency-allowlist.json` at that exact version, with a
+  justification and a removal condition, and the lockfile's `overrides` must
+  match; anything else is still refused. Rejected: B, the key with no per-entry
+  rules; C, exempting the advisory; D, waiting for ESLint. The files ESLint
+  checks were compared before and after (the same 67), as a side agent asked.
 
 ## DEC-012 Front-end tooling choices
 

@@ -9,6 +9,8 @@
 //   - a lockfile entry resolves from anywhere other than the registry;
 //   - a pnpm/npm supply-chain setting is missing or weakened, or any setting
 //     outside the reviewed allow-lists appears (e.g. a scoped registry);
+//   - an override forces a package that dependency-allowlist.json doesn't list
+//     under "overrides", or to another version than the exact one listed there;
 //   - package.json declares install lifecycle scripts.
 //
 // Usage: node scripts/check-dependency-policy.mjs [webDir]
@@ -45,10 +47,17 @@ const REQUIRED_PNPM_SETTINGS = {
 
 /**
  * The only settings pnpm-workspace.yaml may contain. Anything else (registries,
- * overrides, policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or
- * weaken installs and must be reviewed by changing this list.
+ * policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or weaken
+ * installs and must be reviewed by changing this list. "overrides" may only name
+ * packages that dependency-allowlist.json lists under "overrides", each at the
+ * exact version listed there (owner, 2026-11-05).
  */
-const ALLOWED_PNPM_SETTINGS = new Set([...Object.keys(REQUIRED_PNPM_SETTINGS), 'allowBuilds', 'savePrefix']);
+const ALLOWED_PNPM_SETTINGS = new Set([
+  ...Object.keys(REQUIRED_PNPM_SETTINGS),
+  'allowBuilds',
+  'savePrefix',
+  'overrides',
+]);
 
 /**
  * The only keys .npmrc may contain, with their required values. Scoped
@@ -75,6 +84,8 @@ const LIFECYCLE_SCRIPTS = [
 ];
 
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+/** A plain package name: an override key with a selector ("a>b", "a@1") is refused. */
+const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const PACKAGE_MANAGER_PIN = /^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/;
 
 function stripComment(line) {
@@ -239,7 +250,7 @@ export function parseLockfile(text) {
     }
   };
 
-  onlyKeys(root, ['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
+  onlyKeys(root, ['lockfileVersion', 'settings', 'overrides', 'importers', 'packages', 'snapshots']);
   const section = (key) => root.children.get(key);
   if (section('lockfileVersion')?.value !== "'9.0'") errors.push("pnpm-lock.yaml: lockfileVersion must be '9.0'");
 
@@ -249,6 +260,21 @@ export function parseLockfile(text) {
     onlyKeys(settings, ['autoInstallPeers', 'excludeLinksFromLockfile']);
     for (const s of settings.children.values())
       if (!BOOLEAN.test(s.value ?? '')) fail(s, `"${s.key}" must be true or false`);
+  }
+
+  // pnpm copies pnpm-workspace.yaml's overrides here; checkPolicy compares the two.
+  const overrides = {};
+  const overridesNode = section('overrides');
+  if (overridesNode) {
+    expectBlock(overridesNode);
+    for (const o of overridesNode.children.values()) {
+      if (!PACKAGE_NAME.test(o.key) || !EXACT_VERSION.test(o.value ?? '') || o.children.size > 0)
+        fail(o, `override "${o.key}" must be a package name at an exact version`);
+      else {
+        addName(o.key, o);
+        overrides[o.key] = o.value;
+      }
+    }
   }
 
   const importers = section('importers');
@@ -343,7 +369,7 @@ export function parseLockfile(text) {
       }
     }
   }
-  return { errors, names };
+  return { errors, names, overrides };
 }
 
 function readJson(path, errors) {
@@ -415,6 +441,19 @@ export function checkPolicy(webDir) {
       }
     }
   }
+  const allowedOverrides = allow.overrides ?? {};
+  for (const [name, entry] of Object.entries(allowedOverrides)) {
+    checkForbidden(name, 'dependency-allowlist.json overrides', errors);
+    if (!PACKAGE_NAME.test(name)) errors.push(`dependency-allowlist.json: override "${name}" must be a package name`);
+    if (!EXACT_VERSION.test(entry?.version ?? '')) {
+      errors.push(`dependency-allowlist.json: override "${name}" needs an exact "version"`);
+    }
+    for (const field of ['justification', 'remove']) {
+      if (typeof entry?.[field] !== 'string' || entry[field].trim().length < 10) {
+        errors.push(`dependency-allowlist.json: override "${name}" needs "${field}"`);
+      }
+    }
+  }
 
   // --- pnpm-workspace.yaml -------------------------------------------------
   const wsPath = join(webDir, 'pnpm-workspace.yaml');
@@ -434,6 +473,30 @@ export function checkPolicy(webDir) {
         errors.push(
           `pnpm-workspace.yaml: "${key}" is not on the reviewed settings list; settings such as registries, overrides or policy exclusions can redirect or weaken installs`,
         );
+      }
+    }
+    const overrides = settings.overrides ?? {};
+    if (typeof overrides !== 'object' || overrides === null) {
+      errors.push('pnpm-workspace.yaml: "overrides" must be a map');
+    } else {
+      for (const [name, version] of Object.entries(overrides)) {
+        const entry = allowedOverrides[name];
+        if (!entry) {
+          errors.push(
+            `pnpm-workspace.yaml: override "${name}" is not in dependency-allowlist.json "overrides"; forcing a version requires a reviewed entry with a reason and when to remove it`,
+          );
+        } else if (version !== entry.version || !EXACT_VERSION.test(version)) {
+          errors.push(
+            `pnpm-workspace.yaml: override "${name}" must be the exact version dependency-allowlist.json lists (${entry.version}), found "${version}"`,
+          );
+        }
+      }
+      for (const name of Object.keys(allowedOverrides)) {
+        if (!(name in overrides)) {
+          errors.push(
+            `dependency-allowlist.json: override "${name}" isn't in pnpm-workspace.yaml; remove the entry with the override`,
+          );
+        }
       }
     }
     const builds = settings.allowBuilds;
@@ -472,9 +535,19 @@ export function checkPolicy(webDir) {
   if (!existsSync(lockPath)) {
     if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
   } else {
-    const { errors: lockErrors, names } = parseLockfile(readFileSync(lockPath, 'utf8'));
+    const { errors: lockErrors, names, overrides: lockOverrides } = parseLockfile(readFileSync(lockPath, 'utf8'));
     errors.push(...lockErrors);
     for (const name of names) checkForbidden(name, 'pnpm-lock.yaml', errors);
+    const wanted = existsSync(wsPath)
+      ? (parseWorkspaceYaml(readFileSync(wsPath, 'utf8')).settings.overrides ?? {})
+      : {};
+    const same = (a, b) =>
+      Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+    if (typeof wanted === 'object' && wanted !== null && !same(wanted, lockOverrides)) {
+      errors.push(
+        'pnpm-lock.yaml: its "overrides" differ from pnpm-workspace.yaml\'s; run pnpm install and commit the lockfile',
+      );
+    }
   }
 
   return errors;

@@ -142,15 +142,9 @@ describe('pnpm and npm settings', () => {
     );
   });
 
-  it('fails when pnpm-workspace.yaml adds registries or overrides', () => {
-    editText(
-      dir,
-      'pnpm-workspace.yaml',
-      (t) => `${t}\nregistries:\n  '@playwright': https://attacker.example/\noverrides:\n  react: 19.0.0\n`,
-    );
-    const errors = checkPolicy(dir);
-    assert.ok(errors.some((e) => e.includes('"registries" is not on the reviewed settings list')));
-    assert.ok(errors.some((e) => e.includes('"overrides" is not on the reviewed settings list')));
+  it('fails when pnpm-workspace.yaml adds registries', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => `${t}\nregistries:\n  '@playwright': https://attacker.example/\n`);
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"registries" is not on the reviewed settings list')));
   });
 
   it('fails on a scoped registry override in .npmrc', () => {
@@ -190,6 +184,59 @@ describe('pnpm and npm settings', () => {
   });
 });
 
+describe('overrides', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fixture();
+  });
+  const override = '  minimatch: 11.0.3';
+
+  it('fails when an override is not allow-listed', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, `${override}\n  react: 19.0.0`));
+    assert.ok(
+      checkPolicy(dir).some((e) => e.includes('override "react" is not in dependency-allowlist.json "overrides"')),
+    );
+  });
+
+  it('fails when an override is not the exact version the allow-list names', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, '  minimatch: ^11.0.1'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "minimatch" must be the exact version')));
+  });
+
+  it('fails on an override with a selector', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, '  eslint>minimatch: 11.0.3'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "eslint>minimatch" is not in')));
+  });
+
+  it('fails when an allow-listed override is no longer in pnpm-workspace.yaml', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(`overrides:\n${override}`, ''));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "minimatch" isn\'t in pnpm-workspace.yaml')));
+  });
+
+  it('fails when an override has no reason or no removal condition', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.overrides.minimatch.remove;
+      a.overrides.minimatch.justification = '';
+    });
+    const errors = checkPolicy(dir);
+    assert.ok(errors.some((e) => e.includes('override "minimatch" needs "remove"')));
+    assert.ok(errors.some((e) => e.includes('override "minimatch" needs "justification"')));
+  });
+
+  it('fails when the lockfile forces something else', () => {
+    editText(dir, 'pnpm-lock.yaml', (t) => t.replace(`overrides:\n${override}`, 'overrides:\n  minimatch: 11.0.2'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('its "overrides" differ from pnpm-workspace.yaml')));
+  });
+
+  it('fails on a banned package even as an allow-listed override', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.overrides.next = { version: '15.0.0', justification: 'a test of the ban', remove: 'a test of the ban' };
+    });
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, `${override}\n  next: 15.0.0`));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('Next.js')));
+  });
+});
+
 describe('lockfile', () => {
   const lockPath = join(webDir, 'pnpm-lock.yaml');
   const committed = readFileSync(lockPath, 'utf8');
@@ -219,7 +266,11 @@ describe('lockfile', () => {
       (t) => t.replace('\n  acorn@8.19.0: {}', '\n    acorn@8.19.0: {}'),
       'unexpected key',
     ],
-    ['an extra top-level key', (t) => `${t}\noverrides:\n  react: 19.0.0\n`, 'unexpected key "overrides"'],
+    [
+      'an extra top-level key',
+      (t) => `${t}\npatchedDependencies:\n  react: patches/react.patch\n`,
+      'unexpected key "patchedDependencies"',
+    ],
     [
       'a duplicate key',
       (t) => t.replace('\n  acorn@8.19.0: {}', '\n  acorn@8.19.0: {}\n  acorn@8.19.0: {}'),
