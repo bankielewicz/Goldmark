@@ -1669,6 +1669,13 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        and resetting an existing operator key copy's permissions.
      - The virtual account replaced a plain credential file an administrator wrote with a DPAPI-encrypted
        copy and read it back (item 10's fallback); DPAPI-NG `SID=` fails for it as well.
+     - A refusal while the host is still starting (CI on PR #59, 2026-11-05; owner: "B. Fix it in #59"): the
+       service's check runs beside Kestrel's start, and the host ties its start to `ApplicationStopping`, so a stop
+       asked for then cancelled the start, which threw out of `RunAsync`: the process ended as a crash (exit code
+       1067, an unhandled .NET exception in the Application log; restart-on-failure would repeat it) instead of the
+       refusal's 13. `RuntimeRightsCheck` now logs and records the refusal at once but stops the host only once it has
+       started (`RightsAtStartTests` holds a start step until the refusal to show it); the smoke's diagnostics print
+       a crash's .NET Runtime entry first.
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**
      (owner, 2026-10-22). The principal audit's baseline (DEC-031) was measured on the Linux image; on the owner's
      Windows SQL Server 2025 Developer, `public` also holds `SELECT` on `master.sys.dm_pal_cpu_stats`,
