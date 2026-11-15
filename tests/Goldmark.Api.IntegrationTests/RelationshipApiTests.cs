@@ -528,6 +528,64 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task A_redundancy_member_whose_relationship_the_graph_already_holds_leaves_its_group()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // Codex on PR #59 (6e60f96): F and D depend on each other, D on eleven services; D->F and D->a01 are one
+        // redundancy group. The dependencies walk groups the eleven at hop 2, so D->a01 is in the graph before the
+        // members come in; a01 is still D's redundancy member, so it leaves the group (owner, 2026-11-15).
+        var f = await CiAsync(editor, "BusinessService", "f");
+        var d = await CiAsync(editor, "BusinessService", "d");
+        await RelateAsync(editor, "depends_on", f, d);
+        await RelateAsync(editor, "depends_on", d, f, "G");
+        var members = new List<string>();
+        for (var i = 1; i <= 11; i++)
+        {
+            members.Add(await CiAsync(editor, "BusinessService", $"a{i:00}"));
+            await RelateAsync(editor, "depends_on", d, members[^1], i == 1 ? "g" : "");
+        }
+
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={f}")).Body);
+        var group = Assert.Single(graph.GetProperty("groups").EnumerateArray());
+        Assert.Equal((d, "dependencies", 10), (group.Value("hub"), group.Value("direction"), group.GetProperty("count").GetInt32()));
+        Assert.DoesNotContain(members[0], group.GetProperty("members").EnumerateArray().Select(m => m.GetString()));
+        Assert.Equal(2, Hops(graph)["a01"]);
+        Assert.Equal([1, 1, 2], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+    }
+
+    [Fact]
+    public async Task A_relationship_the_dependents_walk_reads_brings_its_redundancy_group_in_whichever_walk_recorded_it_first()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // The owner's second case (2026-11-15): X depends on D, D on F and eleven services, F on X; D->F and D->v01
+        // are one redundancy group. At hop 2 the dependencies walk records D->F before the dependents walk reads it
+        // from F, which reached D through it all the same: v01 comes in as D's member and leaves the group.
+        var x = await CiAsync(editor, "BusinessService", "x");
+        var d = await CiAsync(editor, "BusinessService", "d");
+        var f = await CiAsync(editor, "BusinessService", "f");
+        await RelateAsync(editor, "depends_on", x, d);
+        await RelateAsync(editor, "depends_on", f, x);
+        await RelateAsync(editor, "depends_on", d, f, "G");
+        var members = new List<string>();
+        for (var i = 1; i <= 11; i++)
+        {
+            members.Add(await CiAsync(editor, "BusinessService", $"v{i:00}"));
+            await RelateAsync(editor, "depends_on", d, members[^1], i == 1 ? "G" : "");
+        }
+
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={x}")).Body);
+        var group = Assert.Single(graph.GetProperty("groups").EnumerateArray());
+        Assert.Equal((d, 10), (group.Value("hub"), group.GetProperty("count").GetInt32()));
+        Assert.DoesNotContain(members[0], group.GetProperty("members").EnumerateArray().Select(m => m.GetString()));
+        Assert.Equal(2, Hops(graph)["v01"]);
+        Assert.Equal([1, 2, 2], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+    }
+
+    [Fact]
     public async Task Relationships_read_again_through_a_loop_never_count_toward_the_limit()
     {
         await using var scenario = await AuthScenario.StartAsync(sql);

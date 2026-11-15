@@ -218,6 +218,18 @@ export function RelationshipsTab({
   return (
     <div className={styles.tab}>
       {gone ? <Notice intent="warning">{gone}</Notice> : null}
+      {failure ? (
+        // A refresh after a change that failed: the rows below are the ones from before it (owner, 2026-11-15).
+        <ErrorBar
+          error={failure}
+          message={
+            failure.status === 0
+              ? 'Couldn’t refresh the relationships, so the list below may be out of date. Check your connection, then try again.'
+              : 'Couldn’t refresh the relationships, so the list below may be out of date: something went wrong on the server.'
+          }
+          onRetry={() => void reload()}
+        />
+      ) : null}
       {total === 0 ? (
         <div className={styles.empty}>
           <p className={styles.emptyText}>{ci.name} has no relationships yet.</p>

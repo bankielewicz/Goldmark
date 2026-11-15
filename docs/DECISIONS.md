@@ -1680,6 +1680,8 @@ private, the agent's GitHub API token could not see it (public-repository scope 
        once it has started, and the smoke prints a crash's .NET Runtime entry first, so a repeat would name the
        exception. The crash came and went (every earlier run passed), so one green run doesn't prove the fix (a side
        agent's note, 2026-11-05).
+       Then, the owner's "A. Rerun the Windows job 3 times": with the fix, run 42102728929 passed four times in a row
+       (the first attempt and three reruns, 2026-11-15).
   12. **SQL Server 2025's own defaults on Windows: "A. Measure Windows defaults, add them (Recommended)"**
      (owner, 2026-10-22). The principal audit's baseline (DEC-031) was measured on the Linux image; on the owner's
      Windows SQL Server 2025 Developer, `public` also holds `SELECT` on `master.sys.dm_pal_cpu_stats`,
@@ -2274,6 +2276,20 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       that one way, fails on the boards' sample with a TypeError in `getWeightedPercent` and blanked the page in the
       browser; the relayed reading counted the source's one explicit error (an invalid `direction`), which is a
       different failure. Item 3's "only the built-in layouts" holds: `preset` is built in, and no package was added.
+  17. **Codex's findings after the two review rounds: both "A, fix now", each with a condition** (owner, 2026-11-15,
+      as a pasted recommendation from another Claude session, relayed by the owner; that session traced both in the
+      source at `f562910` and ran nothing). (1) The graph: "A, fix now, with one condition. The fix must also cover a
+      loop where the dependencies walk records the group's relationship before the dependents walk reads it", with a
+      failing test for each case. A redundancy member whose relationship the graph already held (a loop) stayed in
+      its group, against item 5's loop rule; and a relationship counted as the dependents walk's only if that walk
+      recorded it first. Now the dependents walk marks every relationship it reads, and members already in the graph
+      are drawn too, without counting toward the limit. Rejected: B, an issue. (2) The Relationships tab: A, "Show
+      the bar on any failed refresh that leaves rows on screen (after add, edit, delete and the
+      already-deleted/changed path) ... Keep the existing split": "Couldn’t refresh the relationships, so the list
+      below may be out of date. Check your connection, then try again." for a failed connection, "... may be out of
+      date: something went wrong on the server." for a server error, with Retry, above the rows from before.
+      Rejected: B, the board's "Couldn’t load the relationships" over rows that did load; C, an issue. The Notes
+      board says so.
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.

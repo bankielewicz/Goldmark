@@ -343,5 +343,36 @@ test.describe('slice 6 screens', () => {
       const names = await section.getByRole('link').allTextContents();
       expect(new Set(names).size).toBe(51);
     }
+
+    // A refresh after a change that fails keeps the old rows and says so, with Retry (owner, 2026-11-15): first the
+    // connection, then the server, then a retry that works.
+    const list = /\/api\/v1\/cis\/[^/]+\/relationships$/;
+    await page.route(list, (route) => route.abort());
+    await page.getByRole('button', { name: 'Delete depends_on pager-dep-01' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Delete depends_on pager-dep-01?' })
+      .getByRole('button', { name: 'Delete', exact: true })
+      .click();
+    await expect(toast(page, 'Relationship deleted')).toBeVisible();
+    await expect(
+      page.getByText(
+        'Couldn’t refresh the relationships, so the list below may be out of date. Check your connection, then try again.',
+      ),
+    ).toBeVisible();
+    await expect(dependencies.getByRole('row', { name: /pager-dep-01/ })).toBeVisible();
+    await page.unroute(list);
+    await page.route(list, (route) =>
+      route.fulfill({ status: 500, contentType: 'application/problem+json', body: '{"title":"Error","status":500}' }),
+    );
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(
+      page.getByText(
+        'Couldn’t refresh the relationships, so the list below may be out of date: something went wrong on the server.',
+      ),
+    ).toBeVisible();
+    await page.unroute(list);
+    await page.getByRole('button', { name: 'Retry' }).click();
+    await expect(page.getByRole('region', { name: 'Depends on (50)' })).toBeVisible();
+    await expect(page.getByText('Couldn’t refresh the relationships', { exact: false })).toHaveCount(0);
   });
 });

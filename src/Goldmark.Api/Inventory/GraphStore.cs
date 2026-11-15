@@ -229,6 +229,7 @@ internal sealed class GraphStore(DbSession db)
             // This hop's additions, applied only if the hop fits under the limit. Both walks decide from the graph as the
             // hop began, so neither decision depends on which walk reads first.
             var newEdges = new Dictionary<Guid, Edge>();
+            var readByDependents = new HashSet<Guid>();
             var newGroups = new List<Group>();
             var reached = new List<(Walk Walk, HashSet<Guid> Expanded, HashSet<Guid> Stopped)>();
             foreach (var walk in walks.Where(w => w.Frontier.Count > 0))
@@ -269,6 +270,12 @@ internal sealed class GraphStore(DbSession db)
                         newEdges.TryAdd(row.Id, new Edge(row, Dependents: !walk.Forward));
                     }
 
+                    // The dependents walk reached its dependent through it, whichever walk recorded it first (item 4).
+                    if (!walk.Forward)
+                    {
+                        readByDependents.Add(row.Id);
+                    }
+
                     var far = walk.Far(row);
                     if (!walk.Visited.Contains(far))
                     {
@@ -290,6 +297,11 @@ internal sealed class GraphStore(DbSession db)
             foreach (var (id, edge) in newEdges)
             {
                 edges[id] = edge;
+            }
+
+            foreach (var id in readByDependents)
+            {
+                edges[id] = edges[id] with { Dependents = true };
             }
 
             groups.AddRange(newGroups);
@@ -383,7 +395,8 @@ internal sealed class GraphStore(DbSession db)
     /// <summary>
     /// DEC-046 item 4: for each relationship the dependents walk reached a drawn dependent through that has a redundancy
     /// group, the dependent's other relationships in the same group, with their far ends at one hop past the dependent,
-    /// drawn (one that was in a group leaves it). False when they would take the graph past the limit; nothing is added then. The dependents'
+    /// drawn (one that was in a group leaves it), also when the graph already holds the relationship (a loop: owner,
+    /// 2026-11-15). False when they would take the graph past the limit; nothing is added then. The dependents'
     /// relationships in any group are read page by page, so those already in the graph and those in other groups never
     /// count toward the limit (the texts are matched here, not in SQL).
     /// </summary>
@@ -398,11 +411,16 @@ internal sealed class GraphStore(DbSession db)
         var groupsOf = reachedThrough.ToLookup(e => e.Row.FromCiId, e => e.Row.RedundancyGroup);
         var dependents = groupsOf.Select(g => g.Key).ToList();
         var members = new List<HopRow>();
+        var held = new List<HopRow>();
         Guid? after = null;
         while (true)
         {
             var rows = await MembersAsync(dependents, filter, after);
-            members.AddRange(rows.Where(r => !edges.ContainsKey(r.Id) && groupsOf[r.FromCiId].Contains(r.RedundancyGroup, RedundancyGroups.Comparer)));
+            foreach (var row in rows.Where(r => groupsOf[r.FromCiId].Contains(r.RedundancyGroup, RedundancyGroups.Comparer)))
+            {
+                (edges.ContainsKey(row.Id) ? held : members).Add(row);
+            }
+
             if (edges.Count + members.Count > MaxRelationships)
             {
                 return false;
@@ -416,9 +434,9 @@ internal sealed class GraphStore(DbSession db)
             after = rows[^1].Id;
         }
 
-        foreach (var row in members)
+        foreach (var row in members.Concat(held))
         {
-            edges[row.Id] = new Edge(row, Dependents: false);
+            edges.TryAdd(row.Id, new Edge(row, Dependents: false));
             hops[row.ToCiId] = Math.Min(hops.GetValueOrDefault(row.ToCiId, int.MaxValue), hops[row.FromCiId] + 1);
             drawn.Add(row.ToCiId);
         }
