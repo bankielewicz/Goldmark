@@ -1,7 +1,9 @@
 using System.Net;
 using System.Text.Json;
 using Goldmark.Api.IntegrationTests.Infrastructure;
+using Goldmark.Api.Inventory;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Goldmark.Api.IntegrationTests;
 
@@ -619,6 +621,44 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
     /// The owner's rule for the graph (2026-11-05): each CI once, on its own or in one group; each relationship once;
     /// a group's relationships as many as its count; and the counts per hop one for each drawn CI and each group.
     /// </summary>
+    [Fact]
+    public async Task Types_added_after_a_request_read_the_types_keep_their_names_in_its_graph()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var host = await CiAsync(editor, "HypervisorHost", "esx-mx-014");
+
+        // What a request holds from its start: the types as they were before the Admin added two and an Editor used them.
+        await using var scope = scenario.App.Services.CreateAsyncScope();
+        var catalog = scope.ServiceProvider.GetRequiredService<CiTypeCatalog>();
+        var types = await catalog.ListAsync();
+        var relationshipTypes = await catalog.RelationshipTypesAsync();
+        Assert.True((await admin.PostAsync("/api/v1/types", new { name = "Printer", category = "Network" })).Status == HttpStatusCode.Created);
+        Assert.True((await admin.PostAsync("/api/v1/relationship-types", new { name = "prints_for", from = "Printer", impact = "None" })).Status
+            == HttpStatusCode.Created);
+        for (var i = 1; i <= GraphQuery.GroupAbove + 1; i++)
+        {
+            await RelateAsync(editor, "prints_for", await CiAsync(editor, "Printer", $"prn-{i:00}"), host);
+        }
+
+        var store = scope.ServiceProvider.GetRequiredService<GraphStore>();
+        var graph = await store.WalkAsync(new GraphQuery(Guid.Parse(host), 3, GraphQuery.Both, [], [], Retired: false, Group: true), types, relationshipTypes);
+
+        Assert.NotNull(graph);
+        Assert.Equal(GraphQuery.GroupAbove + 2, graph.Nodes.Count);
+        Assert.All(graph.Nodes.Where(n => n.Name.StartsWith("prn-", StringComparison.Ordinal)), n => Assert.Equal("Printer", n.Type));
+        Assert.Equal(GraphQuery.GroupAbove + 1, graph.Relationships.Count(r => r.Type == "prints_for"));
+        var group = Assert.Single(graph.Groups);
+        Assert.Equal(("prints_for", "Printer", GraphQuery.GroupAbove + 1), (group.RelationshipType, group.CiType, group.Count));
+
+        // Drawn one by one, the same names.
+        var flat = await store.WalkAsync(new GraphQuery(Guid.Parse(host), 1, GraphQuery.Both, [], [], Retired: false, Group: false), types, relationshipTypes);
+        Assert.NotNull(flat);
+        Assert.Equal(GraphQuery.GroupAbove + 1, flat.Nodes.Count(n => n.Type == "Printer" && !n.Grouped));
+        Assert.All(flat.Relationships, r => Assert.Equal("prints_for", r.Type));
+    }
+
     private static JsonElement DrawnOnce(JsonElement graph)
     {
         var nodes = graph.GetProperty("nodes").EnumerateArray().ToList();

@@ -1183,6 +1183,7 @@ function FocusPicker({
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<CiSummary[]>([]);
   const [searching, setSearching] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const request = useRef(0);
 
   useEffect(() => {
@@ -1193,10 +1194,14 @@ function FocusPicker({
       setSearching(true);
       api<CiPageData>('GET', `/api/v1/cis?${query.toString()}`)
         .then(({ data }) => {
-          if (request.current === current) setOptions(data.items);
+          if (request.current !== current) return;
+          setOptions(data.items);
+          setSearchFailed(false);
         })
         .catch(() => {
-          if (request.current === current) setOptions([]);
+          if (request.current !== current) return;
+          setOptions([]);
+          setSearchFailed(true);
         })
         .finally(() => {
           if (request.current === current) setSearching(false);
@@ -1225,7 +1230,11 @@ function FocusPicker({
       >
         {options.length === 0 ? (
           <Option disabled value="" text="">
-            {searching ? 'Searching…' : 'No matching CIs'}
+            {searching
+              ? 'Searching…'
+              : searchFailed
+                ? 'Couldn’t search the CIs. Type again to retry.'
+                : 'No matching CIs'}
           </Option>
         ) : (
           options.map((o) => (

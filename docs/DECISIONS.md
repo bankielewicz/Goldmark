@@ -2297,6 +2297,23 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       an add that sorts into the first 50 drops the old row 50. A page is now added only when the list's cursor is
       still the one it was asked with (the cursor is the last row's type, name and ID). "Merge stays on the owner's
       word after green CI; anything further Codex finds goes to issues."
+  18. **The `/code-review` of the PR at `bffd760`, after both rounds: three fixed, four issues** (owner, 2026-11-16;
+      seven findings, all new in this PR, found by reading). (1) "Graph 500 on type change", fix now: "return the
+      real type name, not a placeholder. Add a failing test that passes a stale type list to WalkAsync." The walk
+      looked type names up in the lists the request read before it, so a type added and used meanwhile threw
+      (`KeyNotFoundException`, a 500 on the read and on the audited export). Each name is now read with its row
+      (the hop SQL joins the relationship type, the node SQL the CI type); the request's lists only resolve the
+      filters. (2) "Wrong CI blamed in Add", fix now: a 400 about the page's own CI (retired meanwhile) was shown
+      against every CI chosen ("Choose another"). No board has the message; the owner's text: "app-erp-db01 was
+      retired meanwhile, so nothing can be added to it. Restore it to add relationships." "Also: after this error,
+      disable Add (keep Cancel), since a retry can't succeed until the CI is restored. The page behind should also
+      show the CI as retired once the panel closes." The rest of the chosen CIs aren't sent, and Cancel closes
+      without the discard question. (3) The Focus CI picker: "Fix only the Focus CI picker's failure text now,
+      inline, with the wording the other two pickers use ('Couldn't search the CIs. Type again to retry.')".
+      Issues (`deferred`): #70 the selection's highlight lost when the types arrive after the graph, #71 the Depth
+      slider reads on every step, #72 the layout runs twice on every load, #73 one CI search hook for the three
+      pickers. Dropped: the policy checker ignoring `resolutions` and `pnpm.overrides` in `package.json`; the owner
+      measured that pnpm 11.28.5 reads neither ("The checker misses nothing").
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.

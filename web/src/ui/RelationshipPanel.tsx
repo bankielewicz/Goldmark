@@ -145,6 +145,7 @@ export function RelationshipPanel({
   types,
   relationshipTypes,
   onClose,
+  onCiRetired,
   onAdded,
   onSaved,
 }: {
@@ -153,6 +154,8 @@ export function RelationshipPanel({
   types: CiType[] | null;
   relationshipTypes: RelationshipType[];
   onClose: () => void;
+  /** This CI was retired while the panel was open: called as the panel closes, so the page reads it again. */
+  onCiRetired: () => void;
   /** Some relationships were added (the tab reloads); `done` when the panel closed with every one added. */
   onAdded: (count: number, done: boolean) => void;
   onSaved: (changed: boolean) => void;
@@ -179,6 +182,8 @@ export function RelationshipPanel({
   const [errors, setErrors] = useState<FieldErrors>({});
   const [partial, setPartial] = useState<{ added: string[]; failed: { name: string; message: string }[] } | null>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
+  // This CI was retired meanwhile: nothing more can be added until it is restored, so Add stays off.
+  const [ownRetired, setOwnRetired] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [conflict, setConflict] = useState<Relationship | null>(null);
@@ -207,6 +212,11 @@ export function RelationshipPanel({
 
   const requestClose = () => {
     if (saving) return;
+    if (ownRetired) {
+      onCiRetired();
+      onClose();
+      return;
+    }
     if (dirty && !partial) setConfirmDiscard(true);
     else onClose();
   };
@@ -225,6 +235,7 @@ export function RelationshipPanel({
     const added: Chosen[] = [];
     const failed: Chosen[] = [];
     let stop = false;
+    const [ownEnd, otherEnd] = side === 'dependent' ? (['from', 'to'] as const) : (['to', 'from'] as const);
     for (const other of chosen) {
       if (stop) {
         failed.push(other);
@@ -251,11 +262,13 @@ export function RelationshipPanel({
           });
           failed.push(other);
           stop = true;
-        } else if (problem.status === 400) {
-          const code =
-            (problem.fieldErrors[side === 'dependent' ? 'to' : 'from'] ??
-              problem.fieldErrors.to ??
-              problem.fieldErrors.from ?? [''])[0] ?? '';
+        } else if (problem.status === 400 && problem.fieldErrors[ownEnd]?.[0] === 'CiRetired') {
+          // About this CI, not the one chosen: no other choice helps, so the rest aren't sent.
+          setOwnRetired(true);
+          failed.push(other);
+          stop = true;
+        } else if (problem.status === 400 && problem.fieldErrors[otherEnd]) {
+          const code = problem.fieldErrors[otherEnd][0] ?? '';
           failed.push({ ...other, failed: lowerFirst(relationshipMessage(code, others)) });
         } else {
           setFailure(problem);
@@ -397,6 +410,11 @@ export function RelationshipPanel({
           {deleted ? (
             <Notice intent="warning">
               This relationship was deleted while you were editing, so it can’t be saved.
+            </Notice>
+          ) : null}
+          {ownRetired ? (
+            <Notice intent="error">
+              {ci.name} was retired meanwhile, so nothing can be added to it. Restore it to add relationships.
             </Notice>
           ) : null}
           {failure ? <ErrorBar error={failure} onRetry={() => void (editing ? save() : add())} /> : null}
@@ -601,7 +619,11 @@ export function RelationshipPanel({
           </div>
         </DrawerBody>
         <DrawerFooter>
-          <Button appearance="primary" disabled={saving || deleted} onClick={() => void (editing ? save() : add())}>
+          <Button
+            appearance="primary"
+            disabled={saving || deleted || ownRetired}
+            onClick={() => void (editing ? save() : add())}
+          >
             {saving ? <Spinner size="tiny" aria-label={editing ? 'Saving' : 'Adding'} /> : null}
             {editing ? 'Save' : 'Add'}
           </Button>

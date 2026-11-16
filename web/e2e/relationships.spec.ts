@@ -397,4 +397,41 @@ test.describe('slice 6 screens', () => {
     expect(new Set(shown).size).toBe(50);
     await page.unroute(list);
   });
+
+  test('a CI retired while its Add panel is open: the panel says so, Add goes off, the page then shows it retired', async ({
+    page,
+  }) => {
+    await recordViolations(page);
+    await signIn(page);
+    const host = await post(page, '/api/v1/cis', { type: 'HypervisorHost', name: 'esx-gone-01' });
+    await post(page, '/api/v1/cis', { type: 'NetworkDevice', name: 'sw-gone-01' });
+    await page.goto(`/ci/${host}?tab=relationships`);
+    await page.getByRole('button', { name: 'Add relationship' }).click();
+    const add = page.getByRole('dialog', { name: 'Add relationship to esx-gone-01' });
+    await add.getByRole('combobox', { name: /^Relationship type/ }).click();
+    await page.getByRole('option', { name: /^uplinks_to/ }).click();
+    const picker = add.getByRole('combobox', { name: /^Depends on/ });
+    await picker.click();
+    await picker.pressSequentially('sw-gone-01');
+    await page.getByRole('option', { name: /^sw-gone-01/ }).click();
+
+    // Someone else retires the page's CI meanwhile (owner, 2026-11-16): the error is about it, not the CI chosen.
+    const ci = await call(page, 'GET', `/api/v1/cis/${host}`);
+    expect((await call(page, 'POST', `/api/v1/cis/${host}/retire`, {}, ci.etag ?? '')).status).toBe(200);
+    await add.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(
+      add.getByText(
+        'esx-gone-01 was retired meanwhile, so nothing can be added to it. Restore it to add relationships.',
+      ),
+    ).toBeVisible();
+    await expect(add.getByText('Choose another', { exact: false })).toHaveCount(0);
+    await expect(add.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+    await expectAccessible(page, 'Add relationship panel, CI retired meanwhile');
+    await shot(page, 'add-own-retired');
+
+    // Cancel closes without asking, and the page reads the CI again.
+    await add.getByRole('button', { name: 'Cancel' }).click();
+    await expect(add).toHaveCount(0);
+    await expect(page.getByText(/Retired on \d{4}-\d{2}-\d{2} by /)).toBeVisible();
+  });
 });

@@ -155,8 +155,10 @@ internal sealed class GraphStore(DbSession db)
     public const int MaxRelationships = 25_000;
 
     private const string HopColumns = """
-        SELECT TOP (@take) r.Id, r.FromCiId, r.ToCiId, r.RelationshipTypeId, r.RedundancyGroup, c.CiTypeId AS FarTypeId
+        SELECT TOP (@take) r.Id, r.FromCiId, r.ToCiId, r.RelationshipTypeId, r.RedundancyGroup, c.CiTypeId AS FarTypeId,
+            rt.Name AS RelationshipTypeName
         FROM cmdb.Relationship AS r
+        JOIN cmdb.RelationshipType AS rt ON rt.Id = r.RelationshipTypeId
         """;
 
     private const string HopFilters = """
@@ -193,12 +195,17 @@ internal sealed class GraphStore(DbSession db)
         """;
 
     private const string NodesSql = """
-        SELECT c.Id, c.Name, c.CiTypeId, c.LifecycleState
+        SELECT c.Id, c.Name, c.CiTypeId, c.LifecycleState, t.Name AS TypeName
         FROM cmdb.Ci AS c
+        JOIN cmdb.CiType AS t ON t.Id = c.CiTypeId
         WHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
         """;
 
-    /// <summary>The graph, or null when the focus CI doesn't exist.</summary>
+    /// <summary>
+    /// The graph, or null when the focus CI doesn't exist. The lists are the request's, read before the walk, and only
+    /// resolve the filters' names: each type's name in the answer is read with the row that has it, so a type added and
+    /// used after the lists were read has its name too.
+    /// </summary>
     public async Task<GraphResult?> WalkAsync(GraphQuery query, IReadOnlyList<CiTypeInfo> types, IReadOnlyList<RelationshipTypeInfo> relationshipTypes)
     {
         var filter = new Filter(
@@ -221,8 +228,6 @@ internal sealed class GraphStore(DbSession db)
             walks.Add(new Walk(Forward: false, query.Ci));
         }
 
-        var relationshipTypeNames = relationshipTypes.ToDictionary(r => r.Id, r => r.Name);
-        var typeNames = types.ToDictionary(t => t.Id, t => t.Name);
         var truncated = false;
         for (var hop = 1; hop <= query.Depth && !truncated && walks.Any(w => w.Frontier.Count > 0); hop++)
         {
@@ -334,6 +339,19 @@ internal sealed class GraphStore(DbSession db)
             return null;
         }
 
+        // A group's members are nodes and its relationships are among the graph's, so their rows name its types.
+        var typeNames = new Dictionary<int, string>();
+        foreach (var node in nodes.Values)
+        {
+            typeNames[node.CiTypeId] = node.TypeName;
+        }
+
+        var relationshipTypeNames = new Dictionary<int, string>();
+        foreach (var edge in edges.Values)
+        {
+            relationshipTypeNames[edge.Row.RelationshipTypeId] = edge.Row.RelationshipTypeName;
+        }
+
         // The groups as drawn: a CI another path draws leaves its group, one two groups took stays in the first (in a
         // fixed order: hop, dependencies first, hub, relationship type, CI type), and an empty group goes.
         var final = new List<(Group Group, string Id, List<Guid> Members)>();
@@ -379,8 +397,8 @@ internal sealed class GraphStore(DbSession db)
         return new GraphResult(query.Ci, query.Depth, query.Direction,
             [.. hops.Select(h => (Node: nodes[h.Key], Hops: h.Value))
                 .OrderBy(n => n.Hops).ThenBy(n => n.Node.Name, StringComparer.OrdinalIgnoreCase).ThenBy(n => n.Node.Id)
-                .Select(n => new GraphNode(n.Node.Id, n.Node.Name, typeNames[n.Node.CiTypeId], n.Node.LifecycleState, n.Hops, !drawn.Contains(n.Node.Id)))],
-            [.. edges.Values.Select(e => new GraphRelationship(e.Row.Id, relationshipTypeNames[e.Row.RelationshipTypeId], e.Row.FromCiId, e.Row.ToCiId,
+                .Select(n => new GraphNode(n.Node.Id, n.Node.Name, n.Node.TypeName, n.Node.LifecycleState, n.Hops, !drawn.Contains(n.Node.Id)))],
+            [.. edges.Values.Select(e => new GraphRelationship(e.Row.Id, e.Row.RelationshipTypeName, e.Row.FromCiId, e.Row.ToCiId,
                     e.Row.RedundancyGroup, Math.Max(hops[e.Row.FromCiId], hops[e.Row.ToCiId]), GroupOf(e.Row)))
                 .OrderBy(r => r.Hops).ThenBy(r => r.Type, StringComparer.Ordinal).ThenBy(r => r.Id)],
             [.. final.Select(f => new GraphGroup(f.Id, f.Group.Hub,
@@ -495,7 +513,7 @@ internal sealed class GraphStore(DbSession db)
     /// <summary>A group as the walk formed it: its hub, its direction, the relationship type and CI type, the CIs it took.</summary>
     private sealed record Group(Guid Hub, bool Forward, int RelationshipTypeId, int CiTypeId, int Hops, IReadOnlyList<Guid> Members);
 
-    private sealed record HopRow(Guid Id, Guid FromCiId, Guid ToCiId, int RelationshipTypeId, string? RedundancyGroup, int FarTypeId);
+    private sealed record HopRow(Guid Id, Guid FromCiId, Guid ToCiId, int RelationshipTypeId, string? RedundancyGroup, int FarTypeId, string RelationshipTypeName);
 
-    private sealed record NodeRow(Guid Id, string Name, int CiTypeId, string LifecycleState);
+    private sealed record NodeRow(Guid Id, string Name, int CiTypeId, string LifecycleState, string TypeName);
 }

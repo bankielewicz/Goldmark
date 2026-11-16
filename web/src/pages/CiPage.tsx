@@ -462,6 +462,7 @@ function CiView({ id }: { id: string }) {
           types={types}
           relationshipTypes={relationshipTypes}
           onClose={() => setRelationshipPanel(null)}
+          onCiRetired={() => void load()}
           onAdded={(count, done) => {
             void relationships.reload();
             if (done)
