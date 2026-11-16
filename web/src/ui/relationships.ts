@@ -110,8 +110,10 @@ export function useRelationships(ciId: string): {
           `/api/v1/cis/${ciId}/relationships?${query.toString()}`,
         );
         if (request.current !== current) return;
+        // Added only where it continues the list on screen: a reload that landed meanwhile may end elsewhere (a row
+        // deleted or added before the cursor), and the page would then repeat or skip rows.
         setData((d) =>
-          d
+          d && d[direction].next === section.next
             ? {
                 ...d,
                 [direction]: {

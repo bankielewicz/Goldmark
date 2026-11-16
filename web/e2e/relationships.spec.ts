@@ -374,5 +374,27 @@ test.describe('slice 6 screens', () => {
     await page.getByRole('button', { name: 'Retry' }).click();
     await expect(page.getByRole('region', { name: 'Depends on (50)' })).toBeVisible();
     await expect(page.getByText('Couldn’t refresh the relationships', { exact: false })).toHaveCount(0);
+
+    // A page asked for while a reload is on its way (Codex on b013595): a first-page row is deleted, Show more is
+    // pressed before the reload lands, and the reload lands first (the cursor requests still answer after 2.5 s).
+    // The late page no longer continues the list, so it isn't added: every name once, none twice.
+    await page.route(list, async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1_200));
+      await route.continue();
+    });
+    const late = page.waitForResponse((response) => response.url().includes('cursor='));
+    await page.getByRole('button', { name: 'Delete pager-svc-01 depends_on pager' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Delete pager-svc-01 depends_on pager?' })
+      .getByRole('button', { name: 'Delete', exact: true })
+      .click();
+    await dependents.getByRole('button', { name: /Show 1 more/ }).click();
+    await late;
+    const after = page.getByRole('region', { name: 'Depended on by (50)' });
+    await expect(after.getByRole('button', { name: /more/ })).toHaveCount(0);
+    await expect(after.getByRole('row')).toHaveCount(51);
+    const shown = await after.getByRole('link').allTextContents();
+    expect(new Set(shown).size).toBe(50);
+    await page.unroute(list);
   });
 });

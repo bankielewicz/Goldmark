@@ -2290,6 +2290,13 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       date: something went wrong on the server." for a server error, with Retry, above the rows from before.
       Rejected: B, the board's "Couldn’t load the relationships" over rows that did load; C, an issue. The Notes
       board says so.
+      (3) Codex on that push (`b013595`): "Paging gap: A, fix now" (owner, 2026-11-15, relayed the same way). A
+      page asked for while a reload was on its way was added to the reloaded list although it no longer continued
+      it. The reach, as the owner's note says, is any section with a next page, not only more than 250 rows: with
+      51 rows, delete one of the first 50 and press "Show 1 more" before the reload lands, and row 51 shows twice;
+      an add that sorts into the first 50 drops the old row 50. A page is now added only when the list's cursor is
+      still the one it was asked with (the cursor is the last row's type, name and ID). "Merge stays on the owner's
+      word after green CI; anything further Codex finds goes to issues."
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.
