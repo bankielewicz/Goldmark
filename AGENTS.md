@@ -6,7 +6,7 @@ Start with `docs/HANDOFF.md` for slice status and owner rules. Follow `docs/DECI
 
 ## Project structure
 
-- `src/Goldmark.Api/` holds the ASP.NET Core API. Its `Inventory/` directory implements configuration items, types and attributes.
+- `src/Goldmark.Api/` holds the ASP.NET Core API. Its `Inventory/` directory implements configuration items, types and relationships.
 - `web/src/` holds the React, TypeScript and Fluent UI SPA. Use the approved design assets in `docs/design/system/`.
 - Add forward-only SQL scripts under `db/migrations/` as `NNNN_lower_snake.sql` and append their hashes to `db/migrations.sha256`.
 - `deploy/` contains Compose and Windows service distributions. Support both when changing configuration or startup.
