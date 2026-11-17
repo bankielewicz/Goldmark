@@ -132,7 +132,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 ## 3. Next slice: notes
 
 Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in review** (PR #59), with its approved screens in
-`docs/design/screens/slice-6/` (canvas version `1794767106-ecfd`). The decisions are DEC-046 items 1 to 18, with the
+`docs/design/screens/slice-6/` (canvas version `1794767106-ecfd`). The decisions are DEC-046 items 1 to 19, with the
 owner's words.
 
 **What it adds:**
@@ -521,6 +521,7 @@ And for slice 24:
 | #57 relationship types: a phrase for each direction ("runs on" / "hosts"), on screen 14 and the CI page's tab | the next slice that touches screen 14 (owner, 2026-10-25, DEC-046 item 8) |
 | #58 graph explorer: keyboard selection on the canvas (the table view is the equivalent meanwhile) | unplaced: an accessibility pass (owner, 2026-10-25, DEC-046 item 9) |
 | #70 graph explorer: the selection's highlight is lost when the types arrive after the graph; #71 the Depth slider starts a graph read on every step; #72 the layout runs twice on every load; #73 one CI search hook for the three CI pickers, one icon key helper | unplaced (`deferred`, owner, 2026-11-16, the `/code-review` of PR #59 after both rounds; DEC-046 item 18) |
+| #76 graph explorer: "Set depth to N" can offer a depth that redundancy-group members keep too large to draw | unplaced (`deferred`, owner, 2026-11-17, Codex's review of PR #59 at `3ecc64d`; DEC-046 item 19) |
 | Dependabot PRs #8 + #10 (`github/codeql-action` init/analyze 4.38.1 → 4.38.3): each fails alone | replaced by PR #28, merged: both bumps and a Dependabot group (owner, 2026-10-20: "A. One combined PR"); close #8 and #10 if still open |
 | Dependabot PR #9: TypeScript 7 (typescript-eslint doesn't support it) and `@types/node` 26 (Node is 24) broke the Web job | closed (owner, 2026-10-20: "A. Close, add ignore rules"); Dependabot ignores both majors; #27 tracks TypeScript 7 |
 | Dependabot PRs #42 (axe 4.14, Playwright 1.64.1) and #43 (React 19.3.1 without React DOM): axe 4.14 enables Label in Name, which the account button failed; React DOM throws error 527 for any other React version. With them, `RightsAtStartTests` raced on fast runners (main red after #44) | replaced by PR #50, merged as `53d65b4` (owner, 2026-10-23, all "A"): both bumps, the `react` Dependabot group, the account button named "AP, Account: …", the test fixed |

@@ -2314,6 +2314,17 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       slider reads on every step, #72 the layout runs twice on every load, #73 one CI search hook for the three
       pickers. Dropped: the policy checker ignoring `resolutions` and `pnpm.overrides` in `package.json`; the owner
       measured that pnpm 11.28.5 reads neither ("The checker misses nothing").
+  19. **Codex's review at `3ecc64d`: one fixed, one issue** (owner, 2026-11-17, with Codex's recommendation relayed
+      by the owner: "as per codex"). (1) The members pass compared each member row with every group text its dependent
+      was reached through, so a dependent with many distinct groups made one graph read do work that grew with the
+      square of their number (a security review finding). Codex advised a public issue; `SECURITY.md` says "Do not
+      open a public issue, pull request or discussion for a security problem", and the code was only on this branch,
+      so the owner chose "A. Fix now, then merge (Recommended)": each dependent's texts go in a set under
+      `RedundancyGroups.Comparer`, one lookup a row. Rejected: B, merging and tracking it in a private advisory; C, a
+      public issue. The finding was already public: Codex's automatic security review posts on the pull request, and
+      the repository is public (a side agent's note, 2026-11-17), so only a fix before the merge kept the code out of
+      `main`. (2) "Set depth to N" can offer a depth that redundancy-group members keep too large to draw:
+      #76 (`deferred`), under the rule "anything further Codex finds goes to issues" (item 17).
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.

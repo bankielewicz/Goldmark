@@ -426,15 +426,27 @@ internal sealed class GraphStore(DbSession db)
             return true;
         }
 
-        var groupsOf = reachedThrough.ToLookup(e => e.Row.FromCiId, e => e.Row.RedundancyGroup);
-        var dependents = groupsOf.Select(g => g.Key).ToList();
+        // Each dependent's group texts in a set under RedundancyGroups.Comparer: a member row is one lookup, so the pass
+        // stays linear however many groups a dependent has.
+        var groupsOf = new Dictionary<Guid, HashSet<string>>();
+        foreach (var edge in reachedThrough)
+        {
+            if (!groupsOf.TryGetValue(edge.Row.FromCiId, out var texts))
+            {
+                groupsOf[edge.Row.FromCiId] = texts = new HashSet<string>(RedundancyGroups.Comparer);
+            }
+
+            texts.Add(edge.Row.RedundancyGroup!);
+        }
+
+        var dependents = groupsOf.Keys.ToList();
         var members = new List<HopRow>();
         var held = new List<HopRow>();
         Guid? after = null;
         while (true)
         {
             var rows = await MembersAsync(dependents, filter, after);
-            foreach (var row in rows.Where(r => groupsOf[r.FromCiId].Contains(r.RedundancyGroup, RedundancyGroups.Comparer)))
+            foreach (var row in rows.Where(r => r.RedundancyGroup is not null && groupsOf[r.FromCiId].Contains(r.RedundancyGroup)))
             {
                 (edges.ContainsKey(row.Id) ? held : members).Add(row);
             }

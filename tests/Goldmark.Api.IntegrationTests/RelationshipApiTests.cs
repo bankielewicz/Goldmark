@@ -588,6 +588,38 @@ public sealed class RelationshipApiTests(SqlServerFixture sql)
     }
 
     [Fact]
+    public async Task A_dependent_with_ten_thousand_redundancy_groups_reads_whole()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        // Codex on PR #59 (3ecc64d): 10,000 services depend on a hub, and one CI depends on each of them, each in its
+        // own redundancy group of 200 characters that differ only at the end. The members pass now looks each row up in
+        // the dependent's set of group texts (DEC-046 item 19); the answer is the same, every relationship once.
+        var hub = await CiAsync(editor, "BusinessService", "hub");
+        var f = await CiAsync(editor, "BusinessService", "f");
+        await scenario.Sql.AsAdminAsync(scenario.Installation.Database, $$"""
+            WITH n AS (SELECT TOP (10000) ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) AS i FROM sys.all_objects AS a CROSS JOIN sys.all_objects AS b)
+            INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', (SELECT Id FROM cmdb.CiType WHERE Name = N'BusinessService'),
+                CONCAT(N't-', FORMAT(i, '00000')), 'Active', '{}', 'test'
+            FROM n;
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', t.Id, '{{hub}}', (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'depends_on'), 'test'
+            FROM cmdb.Ci AS t WHERE t.Name LIKE N't-%';
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', '{{f}}', t.Id, (SELECT Id FROM cmdb.RelationshipType WHERE Name = N'depends_on'),
+                CONCAT(REPLICATE(N'g', 194), RIGHT(t.Name, 5), N'x'), 'test'
+            FROM cmdb.Ci AS t WHERE t.Name LIKE N't-%';
+            """);
+
+        var graph = DrawnOnce(AuthScenario.Ok(await editor.GetAsync($"/api/v1/graph?ci={hub}&direction=dependents&depth=2&group=false")).Body);
+        Assert.False(graph.GetProperty("truncated").GetBoolean());
+        Assert.Equal(20_000, graph.GetProperty("relationships").GetArrayLength());
+        Assert.Equal([1, 10_000, 1], graph.GetProperty("countsByHop").EnumerateArray().Select(c => c.GetInt32()));
+    }
+
+    [Fact]
     public async Task Relationships_read_again_through_a_loop_never_count_toward_the_limit()
     {
         await using var scenario = await AuthScenario.StartAsync(sql);
