@@ -12,7 +12,8 @@
 //   - an override forces a package that dependency-allowlist.json doesn't list
 //     under "overrides", or to another version than the exact one listed there;
 //   - an audit exception ("auditIgnores") lacks a reason or a removal condition,
-//     or the lockfile no longer holds its package at exactly the version listed;
+//     its review date has passed or is more than 30 days away, or the lockfile
+//     no longer holds its package at exactly the version listed;
 //   - package.json declares install lifecycle scripts.
 //
 // Usage: node scripts/check-dependency-policy.mjs [webDir]
@@ -412,7 +413,10 @@ function checkForbidden(name, where, errors) {
 }
 
 /** Returns a list of policy violations for the web project in `webDir`. */
-export function checkPolicy(webDir) {
+/** How far ahead an audit exception's review date may be (owner, 2026-11-18). */
+export const AUDIT_REVIEW_DAYS = 30;
+
+export function checkPolicy(webDir, { now = new Date() } = {}) {
   const errors = [];
   const pkgPath = join(webDir, 'package.json');
   const allowPath = join(webDir, 'dependency-allowlist.json');
@@ -493,6 +497,22 @@ export function checkPolicy(webDir) {
       if (typeof entry?.[field] !== 'string' || entry[field].trim().length < 10) {
         errors.push(`dependency-allowlist.json: audit exception "${id}" needs "${field}"`);
       }
+    }
+    // A fix published on npm doesn't move the lockfile, so each exception is re-checked by a date: past it the check
+    // fails (and CI's weekly run on main with it) until the entry is removed or given a new date.
+    const today = now.toISOString().slice(0, 10);
+    const latest = new Date(now.getTime() + AUDIT_REVIEW_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const reviewBy = entry?.reviewBy;
+    if (typeof reviewBy !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(reviewBy)) {
+      errors.push(`dependency-allowlist.json: audit exception "${id}" needs "reviewBy", a date (YYYY-MM-DD)`);
+    } else if (reviewBy < today) {
+      errors.push(
+        `dependency-allowlist.json: audit exception "${id}" was to be reviewed by ${reviewBy}; re-check the advisory, then remove the entry or give it a new date at most ${AUDIT_REVIEW_DAYS} days away`,
+      );
+    } else if (reviewBy > latest) {
+      errors.push(
+        `dependency-allowlist.json: audit exception "${id}" is to be reviewed by ${reviewBy}, more than ${AUDIT_REVIEW_DAYS} days away`,
+      );
     }
   }
 

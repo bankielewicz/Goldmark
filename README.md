@@ -265,9 +265,11 @@ it, and ask first if the PRD did not anticipate it.
   `overrides` in the allow-list (exact version, why, and when to remove it) and
   in `pnpm-workspace.yaml`'s `overrides`, then `pnpm install` (DEC-011). An
   advisory with no fix yet that only reaches tooling can be skipped by the audit:
-  list it under `auditIgnores` (package, exact version, why, when to remove it)
-  and, by hand, in `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`; don't use
-  `pnpm audit --ignore`, which rewrites that file (DEC-011).
+  list it under `auditIgnores` (package, exact version, why, when to remove it,
+  and a `reviewBy` date at most 30 days away) and, by hand, in
+  `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`; don't use
+  `pnpm audit --ignore`, which rewrites that file. Past the date, CI fails until
+  the advisory is re-checked (DEC-011).
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
   `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and

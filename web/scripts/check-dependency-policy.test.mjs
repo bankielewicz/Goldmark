@@ -301,6 +301,24 @@ describe('audit exceptions', () => {
     assert.ok(checkPolicy(dir).some((e) => e.includes('is for left-pad 4.0.6, but the lockfile has none')));
   });
 
+  it('fails once the review date has passed, and on a date more than 30 days away or missing', () => {
+    const reviewBy = JSON.parse(readFileSync(join(dir, 'dependency-allowlist.json'), 'utf8')).auditIgnores[
+      'GHSA-fc5q-39xc-vjpf'
+    ].reviewBy;
+    const day = (offset) => new Date(Date.parse(`${reviewBy}T12:00:00Z`) + offset * 86_400_000);
+    assert.ok(!checkPolicy(dir, { now: day(0) }).some((e) => e.includes('reviewed by')));
+    assert.ok(
+      checkPolicy(dir, { now: day(1) }).some((e) =>
+        e.includes(`"GHSA-fc5q-39xc-vjpf" was to be reviewed by ${reviewBy}; re-check the advisory`),
+      ),
+    );
+    assert.ok(checkPolicy(dir, { now: day(-31) }).some((e) => e.includes('more than 30 days away')));
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy;
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "reviewBy"')));
+  });
+
   it('fails on any other audit setting', () => {
     editText(dir, 'pnpm-workspace.yaml', (t) =>
       t.replace('auditConfig:\n', 'auditConfig:\n  ignoreCves:\n    - CVE-2026-112366\n'),

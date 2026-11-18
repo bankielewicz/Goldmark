@@ -278,9 +278,15 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   (pnpm's own setting; nothing else under `auditConfig`) only for advisories
   listed under `auditIgnores` in `dependency-allowlist.json`, each with the
   package, its exact version, why and when to remove it, and the check fails
-  once the lockfile holds that package at any other version, so an exception
-  can't outlive the fix it waits for. Rejected: B, an `--ignore` flag in CI
-  only; C, waiting with every branch red. Building it showed that
+  once the lockfile holds that package at any other version. Rejected: B, an
+  `--ignore` flag in CI only; C, waiting with every branch red. A fix published
+  on npm doesn't move the lockfile, so that alone could let an exception outlive
+  its fix (a side agent's note, 2026-11-18); the owner chose "A. Add a review-by
+  date (Recommended)": each entry has `reviewBy`, at most 30 days away, and past
+  it the check fails, and CI's weekly run on `main` with it, until the entry is
+  removed or given a new date. Rejected: B, asking GitHub's advisory database on
+  every run (a network call, rate-limited or needing CI's token, against
+  DEC-018); C, the lockfile alone. Building it showed that
   `pnpm audit --ignore <GHSA>` rewrites `pnpm-workspace.yaml` (it dropped
   `allowBuilds`), so the setting is written by hand and CI's
   `pnpm audit --audit-level low` is unchanged.
