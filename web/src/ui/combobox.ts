@@ -1,5 +1,6 @@
-// Every Combobox in the app passes this as its `expandIcon` (tests/combobox-expand-icon.test.mjs
-// checks that): the arrow at the right of the field stays out of the Tab order.
+// Every Combobox in the app passes this as its `expandIcon`: the arrow at the right of the field
+// stays out of the Tab order. tests/combobox-expand-icon.test.mjs checks the source (the first
+// property of each), and the browser tests check the rendered arrows on the screens they visit.
 //
 // Fluent UI 9.75 (react-combobox 9.17.8) made that arrow a keyboard stop of its own, labelled "Open"
 // in English only. Goldmark keeps the behaviour its screens were approved with (owner, 2026-11-18,

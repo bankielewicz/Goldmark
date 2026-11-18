@@ -53,9 +53,19 @@ export async function recordViolations(page: Page) {
   });
 }
 
+/** The arrow at the right of a Fluent Combobox (the class Fluent gives its `expandIcon` slot). */
+export const COMBOBOX_ARROW = '.fui-Combobox__expandIcon';
+
 export async function expectAccessible(page: Page, what: string) {
   // Measure the settled page: Fluent's drawers and dialogs fade in (Web Animations).
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+  // No Combobox arrow on the screen is a Tab stop (DEC-040, src/ui/combobox.ts). This reads the
+  // rendered attribute, so it also sees what the source check (tests/combobox-expand-icon.test.mjs)
+  // can't: a later property that overrides the first. auth.spec.ts checks that the class still exists.
+  expect(
+    await page.locator(`${COMBOBOX_ARROW}:not([tabindex="-1"])`).count(),
+    `${what}: Combobox arrows in the Tab order`,
+  ).toBe(0);
   const results = await new AxeBuilder({ page })
     // Fluent's focus management (Tabster) adds focus sentinels: <i tabindex="0" role="none"
     // aria-hidden="true" data-tabster-dummy> elements that hand focus on at once. Only they are excluded.

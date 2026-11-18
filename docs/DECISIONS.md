@@ -311,7 +311,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   `pnpm audit --ignore <GHSA>` rewrites `pnpm-workspace.yaml` (it dropped
   `allowBuilds`), so the setting is written by hand and CI's
   `pnpm audit --audit-level low` is unchanged.
-- **One copy of each package (owner, 2026-11-18, AskUserQuestion):** Dependabot's
+- **Deduplicable dependencies (owner, 2026-11-18, AskUserQuestion):** Dependabot's
   update of `@fluentui/react-components` to 9.75.2 kept the old and the new
   version of 16 `@fluentui` packages side by side in `pnpm-lock.yaml`: the
   versions already locked still satisfied the ranges of the packages around the
@@ -327,7 +327,11 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   a copy. The fix is `pnpm dedupe` and committing the lockfile (on 2026-11-18 it
   removed 16 packages and added none; `main`'s lockfile passed the check; the
   check was run with `CI=true` both ways: exit 0 on the deduplicated lockfile,
-  exit 1 on Dependabot's). It asks the registry, as the install
+  exit 1 on Dependabot's). A pass means pnpm finds nothing to merge, not one
+  version of everything: the passing lockfile still holds two versions each of
+  `eslint-visitor-keys`, `hookified` and `ignore`, which their dependents need
+  side by side (a review relayed by the owner, 2026-11-18; the step is named
+  "Check for deduplicable dependencies"). It asks the registry, as the install
   before it does, so it is not part of the policy job that runs before any
   install. Rejected: B, relying on the smoke alone (it caught this, slowly and
   unreadably).
@@ -1405,8 +1409,13 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   own (`tabIndex` 0, announced as "Open", English only). Example: on the audit log, Tab in the Actor
   filter then landed on its arrow before the next filter. The owner chose "A. Keep it out of Tab order
   (Recommended)": every Combobox passes `expandIcon={comboboxExpandIcon}` (`tabIndex: -1`,
-  `web/src/ui/combobox.ts`; `web/tests/combobox-expand-icon.test.mjs` checks all of them and that the
-  installed Fluent still honours it). Tab moves from field to field as on the approved boards, the
+  `web/src/ui/combobox.ts`). Two checks, each with its limit: `web/tests/combobox-expand-icon.test.mjs`
+  reads the source (every Combobox's first property, and that the installed Fluent still lets it
+  decide), so it covers all of them but can't see a later property that overrides the first; the
+  browser tests read what is rendered (`expectAccessible` refuses any Combobox arrow in the Tab order,
+  and on the audit log Tab must go from Actor straight to Action), so they see an override, but only
+  on the screens and states they visit (a review relayed by the owner, 2026-11-18, showed the source
+  check alone passing with the arrow a tab stop again). Tab moves from field to field as on the approved boards, the
   keyboard opens the list from the field (typing, the arrow keys), and the arrow stays a pointer
   shortcut. The WAI-ARIA combobox examples do the same: their button has `tabindex="-1"`, which
   "removes the button from the tab sequence of the page because its function is redundant with the

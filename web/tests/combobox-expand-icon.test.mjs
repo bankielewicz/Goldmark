@@ -2,7 +2,9 @@
 // the Tab order (src/ui/combobox.ts says why). The arrow is a default of every Combobox, so a new one
 // that forgets the property brings the stop back on its screen only. This test reads the source: every
 // Combobox in src/ passes `expandIcon={comboboxExpandIcon}` as its first property, and the installed
-// Fluent still lets that property decide the arrow's tabIndex.
+// Fluent still lets that property decide the arrow's tabIndex. It can't see a later property that
+// overrides the first; the browser tests check the rendered arrows (expectAccessible in
+// e2e/session.ts, and the audit log's Tab from Actor to Action in e2e/auth.spec.ts).
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
