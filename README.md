@@ -182,7 +182,7 @@ Pinned toolchain (CI and the Dockerfile use exactly these):
 
 | Tool | Version | Pinned in |
 |---|---|---|
-| .NET SDK | 10.0.402 | `global.json` |
+| .NET SDK | 10.0.404 | `global.json` (and the Dockerfile's SDK image: `tests/toolchain/check-sdk-pins.sh`) |
 | Node.js | 24.21.0 | `.node-version`, `web/package.json` `engines` |
 | pnpm | 11.28.5 | `web/package.json` `packageManager` (enable with `corepack enable pnpm`) |
 
