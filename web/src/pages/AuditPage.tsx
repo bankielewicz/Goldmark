@@ -56,6 +56,7 @@ import { followLink, navigate, useLocation } from '../router';
 import { isAdmin, useSession } from '../session';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
+import { comboboxExpandIcon } from '../ui/combobox';
 import { downloadBlob, ErrorBar } from '../ui/common';
 import { TypeIcon } from '../ui/inventory';
 
@@ -1480,6 +1481,7 @@ function PersonPicker({
   const shown = typed === null ? options : options.filter((o) => o.text.toLowerCase().includes(typed.toLowerCase()));
   return (
     <Combobox
+      expandIcon={comboboxExpandIcon}
       className={className}
       clearable
       placeholder={placeholder}

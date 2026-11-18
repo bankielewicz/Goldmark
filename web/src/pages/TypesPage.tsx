@@ -60,6 +60,7 @@ import { api, ApiError } from '../api';
 import { followLink, navigate, useLocation } from '../router';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
+import { comboboxExpandIcon } from '../ui/combobox';
 import { ErrorBar, Notice } from '../ui/common';
 import {
   asApiError,
@@ -646,6 +647,7 @@ function TypeCombobox({
   return (
     <Field label="CI type" className={styles.narrowField}>
       <Combobox
+        expandIcon={comboboxExpandIcon}
         value={typed ?? selected ?? ''}
         selectedOptions={selected ? [selected] : []}
         onChange={(event) => setTyped(event.target.value)}

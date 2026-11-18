@@ -31,6 +31,7 @@ import { useEffect, useMemo, useRef, useState, type ReactElement, type Ref } fro
 import { api, ApiError } from '../api';
 import { formatUtcTime } from '../format';
 import { navigate } from '../router';
+import { comboboxExpandIcon } from './combobox';
 import { ErrorBar, Notice } from './common';
 import {
   asApiError,
@@ -603,6 +604,7 @@ function TypePicker({
       {...(error ? { validationState: 'error' as const, validationMessage: error } : {})}
     >
       <Combobox
+        expandIcon={comboboxExpandIcon}
         input={{ ref: inputRef }}
         placeholder="Choose a type"
         value={typed ?? value}
@@ -773,6 +775,7 @@ function LinkPicker({
 
   return (
     <Combobox
+      expandIcon={comboboxExpandIcon}
       clearable
       placeholder={attribute.refType ? `Search ${attribute.refType} CIs` : 'Search CIs'}
       value={typed ?? value?.name ?? ''}

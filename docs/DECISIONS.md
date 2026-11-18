@@ -311,6 +311,23 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   `pnpm audit --ignore <GHSA>` rewrites `pnpm-workspace.yaml` (it dropped
   `allowBuilds`), so the setting is written by hand and CI's
   `pnpm audit --audit-level low` is unchanged.
+- **One copy of each package (owner, 2026-11-18, AskUserQuestion):** Dependabot's
+  update of `@fluentui/react-components` to 9.75.2 kept the old and the new
+  version of 16 `@fluentui` packages side by side in `pnpm-lock.yaml` (Fluent's
+  packages ask for each other with `*`, so the versions already locked still
+  satisfied the ones it didn't touch). The bundle then held two copies of
+  `@fluentui/react-motion`, and every Dialog threw "presenceFn is not a function"
+  when it opened. Lint, typecheck, build and the unit tests passed; only the
+  Compose smoke's browser tests failed, minutes in, as a dialog that never
+  appeared and a page that hung. The owner chose "A. Add it to the Web job
+  (Recommended)": CI's Web job runs `pnpm dedupe --check` (`pnpm run
+  policy:dedupe`) after the install, and it fails when `pnpm dedupe` would remove
+  a copy. The fix is `pnpm dedupe` and committing the lockfile; it adds no
+  package and no newer version (on 2026-11-18 it removed 16 and added none, and
+  `main`'s lockfile passed the check). It asks the registry, as the install
+  before it does, so it is not part of the policy job that runs before any
+  install. Rejected: B, relying on the smoke alone (it caught this, slowly and
+  unreadably).
 
 ## DEC-012 Front-end tooling choices
 
@@ -1380,6 +1397,25 @@ private, the agent's GitHub API token could not see it (public-repository scope 
 - **Dependencies:** Dapper 2.1.89 (published 2026-09-23, no dependencies on net10.0) and
   Net.Codecrete.QrCodeGenerator 3.2.1, both in DEC-038. The integration tests now also reference
   `Microsoft.AspNetCore.Mvc.Testing`, already pinned for the in-process tests. No other package.
+- **Combobox arrows stay out of the Tab order (owner, 2026-11-18, with Fluent UI 9.75.2, AskUserQuestion):**
+  `@fluentui/react-combobox` 9.17.8 made the arrow at the right of a Combobox a keyboard stop of its
+  own (`tabIndex` 0, announced as "Open", English only). Example: on the audit log, Tab in the Actor
+  filter then landed on its arrow before the next filter. The owner chose "A. Keep it out of Tab order
+  (Recommended)": every Combobox passes `expandIcon={comboboxExpandIcon}` (`tabIndex: -1`,
+  `web/src/ui/combobox.ts`; `web/tests/combobox-expand-icon.test.mjs` checks all of them and that the
+  installed Fluent still honours it). Tab moves from field to field as on the approved boards, the
+  keyboard opens the list from the field (typing, the arrow keys), and the arrow stays a pointer
+  shortcut, as in the WAI-ARIA combobox pattern's examples. Rejected: B, keeping the stop and making
+  the arrow 24 px (a visible difference from the boards and one more Tab press per Combobox).
+  **What this does not claim:** the arrow is not 24 px. It is the size it was before the update, under
+  WCAG 2.2's target size (2.5.8). axe's `target-size` rule fails an undersized target only when Tab
+  can reach it: as a tab stop the two arrows of the audit log's filters failed; out of the Tab order
+  axe reports them as "needs review", which the browser tests (serious and critical violations only)
+  don't count; before 9.17.8 the arrow wasn't focusable and axe didn't look at it. The arrow is
+  acceptable under 2.5.8's "equivalent" exception: a click anywhere in the field opens the same list
+  (Fluent's trigger toggles the list on click; the browser tests open Comboboxes that way), and the
+  field is a full-size target. A design that drops that equivalence (a field that no longer opens on
+  click) must make the arrow 24 px.
 
 ## DEC-041 Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited
 

@@ -61,6 +61,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify the installed tree from pnpm's own resolution (before any tool runs)
         run: pnpm run policy:installed
+      # Two versions of one package side by side broke every Dialog once (DEC-011); the fix is `pnpm dedupe`.
+      - name: The lockfile holds one copy of each package (pnpm dedupe --check)
+        run: pnpm run policy:dedupe
       - run: pnpm run lint
       - run: pnpm run typecheck
       - run: pnpm run format:check

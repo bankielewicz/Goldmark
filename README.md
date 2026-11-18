@@ -270,6 +270,9 @@ it, and ask first if the PRD did not anticipate it.
   `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`; don't use
   `pnpm audit --ignore`, which rewrites that file. Past the date, the policy check
   and CI fail until the advisory is re-checked; the image build doesn't (DEC-011).
+  After any update, `pnpm run policy:dedupe` must pass: the lockfile holds one
+  copy of each package, and `pnpm dedupe` removes the older copies an update
+  (Dependabot's included) can leave behind (DEC-011).
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
   `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and
