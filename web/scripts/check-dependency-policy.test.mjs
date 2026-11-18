@@ -237,6 +237,78 @@ describe('overrides', () => {
   });
 });
 
+describe('audit exceptions', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fixture();
+  });
+  const ignored = '    - GHSA-fc5q-39xc-vjpf';
+
+  it('fails when an advisory is ignored without an allow-list entry', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(ignored, `${ignored}\n    - GHSA-g3hv-75wg-m249`));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes('audit exception "GHSA-g3hv-75wg-m249" is not in dependency-allowlist.json "auditIgnores"'),
+      ),
+    );
+  });
+
+  it('fails when an allow-listed exception is no longer ignored', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(`\n${ignored}`, ''));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes('"GHSA-fc5q-39xc-vjpf" isn\'t in pnpm-workspace.yaml auditConfig.ignoreGhsas'),
+      ),
+    );
+  });
+
+  it('fails when an exception has no reason or no removal condition', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].remove;
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].justification = '';
+    });
+    const errors = checkPolicy(dir);
+    assert.ok(errors.some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "remove"')));
+    assert.ok(errors.some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "justification"')));
+  });
+
+  it('fails on an ID that is not a GitHub advisory ID', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['CVE-2026-112366'] = a.auditIgnores['GHSA-fc5q-39xc-vjpf'];
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"CVE-2026-112366" must be a GitHub advisory ID')));
+  });
+
+  it('fails once the lockfile holds the package at another version', () => {
+    editText(dir, 'pnpm-lock.yaml', (t) => t.replaceAll('picomatch@4.0.7', 'picomatch@4.0.8'));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes(
+          'is for picomatch 4.0.7, but the lockfile has 4.0.8; re-check the advisory, then remove or update the entry',
+        ),
+      ),
+    );
+  });
+
+  it('fails when the entry names a version or a package the lockfile does not have', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].version = '4.0.6';
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('is for picomatch 4.0.6, but the lockfile has 4.0.7')));
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].package = 'left-pad';
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('is for left-pad 4.0.6, but the lockfile has none')));
+  });
+
+  it('fails on any other audit setting', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) =>
+      t.replace('auditConfig:\n', 'auditConfig:\n  ignoreCves:\n    - CVE-2026-112366\n'),
+    );
+    assert.ok(checkPolicy(dir).some((e) => e.includes('auditConfig may hold only "ignoreGhsas"')));
+  });
+});
+
 describe('lockfile', () => {
   const lockPath = join(webDir, 'pnpm-lock.yaml');
   const committed = readFileSync(lockPath, 'utf8');
@@ -358,5 +430,14 @@ describe('workspace yaml reader', () => {
     assert.deepEqual(settings.allowBuilds, { esbuild: 'false' });
     assert.equal(settings.savePrefix, '');
     assert.deepEqual(settings.empty, {});
+  });
+
+  it('reads a list in a block map', () => {
+    const { settings, errors } = parseWorkspaceYaml(
+      "auditConfig:\n  ignoreGhsas:\n    - GHSA-fc5q-39xc-vjpf\nsavePrefix: ''\n",
+    );
+    assert.deepEqual(errors, []);
+    assert.deepEqual(settings.auditConfig, { ignoreGhsas: ['GHSA-fc5q-39xc-vjpf'] });
+    assert.equal(settings.savePrefix, '');
   });
 });

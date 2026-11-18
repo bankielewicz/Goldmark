@@ -1,5 +1,5 @@
 {
-  "$comment": "Approved direct npm dependencies for web/ (NFR-SEC-9). Adding, removing or re-classifying an entry requires a reviewed PR. scripts/check-dependency-policy.mjs enforces this file in CI before any install runs. 'runtime' entries ship to browsers; 'dev' entries are build/test tooling only and never reach the bundle or the runtime image. 'overrides' entries force a transitive package to an exact version (pnpm-workspace.yaml overrides), each with why and when to remove it; the check refuses any other override.",
+  "$comment": "Approved direct npm dependencies for web/ (NFR-SEC-9). Adding, removing or re-classifying an entry requires a reviewed PR. scripts/check-dependency-policy.mjs enforces this file in CI before any install runs. 'runtime' entries ship to browsers; 'dev' entries are build/test tooling only and never reach the bundle or the runtime image. 'overrides' entries force a transitive package to an exact version (pnpm-workspace.yaml overrides), each with why and when to remove it; the check refuses any other override. 'auditIgnores' entries let pnpm audit skip one advisory that has no fix yet (pnpm-workspace.yaml auditConfig.ignoreGhsas), for one package at one version, with why and when to remove it; the check refuses an entry once the lockfile moves that package.",
   "runtime": {
     "react": {
       "justification": "UI library chosen by D1 (ADR-0001).",
@@ -79,6 +79,15 @@
       "justification": "GHSA-g3hv-75wg-m249 (moderate, published 2026-10-27): minimatch 7.0.0 up to 11.0.1 can be slowed by a crafted glob pattern, and pnpm audit fails CI. Only ESLint uses it (eslint, @eslint/config-array, @typescript-eslint/typescript-estree: dev tooling, never in the bundle). 11.0.1 is the first fix and no ESLint release depends on 11 yet; ESLint calls Minimatch.match and .pattern, which 11 keeps, and the files ESLint checks were compared before and after. 11.0.3 adds @isaacs/nonrecursive-glob-match from the same author.",
       "remove": "When eslint, @eslint/config-array and @typescript-eslint/typescript-estree depend on minimatch 11.0.1 or later: delete this entry and the override in pnpm-workspace.yaml, then reinstall.",
       "approvedBy": "Owner, 2026-11-05 (PR #59: \"B. Force 11.0.3 inside #59\", \"A. Allow named, pinned overrides\")"
+    }
+  },
+  "auditIgnores": {
+    "GHSA-fc5q-39xc-vjpf": {
+      "package": "picomatch",
+      "version": "4.0.7",
+      "justification": "GHSA-fc5q-39xc-vjpf (high, published 2026-10-19, reviewed 2026-11-17): a crafted glob pattern can make picomatch 4.0.7 and earlier backtrack exponentially. No fixed version exists. Only development tools use it (typescript-eslint through tinyglobby, and Vite), on this repository's own patterns; it is not in the browser bundle.",
+      "remove": "When picomatch ships a fixed version: the policy check fails as soon as the lockfile holds picomatch at another version; then delete this entry (or force the fix with an override if its dependents lag).",
+      "approvedBy": "Owner, 2026-11-17 (PR #59: \"A. Listed, self-expiring (Recommended)\", after the advisor's review)"
     }
   }
 }

@@ -266,6 +266,24 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   match; anything else is still refused. Rejected: B, the key with no per-entry
   rules; C, exempting the advisory; D, waiting for ESLint. The files ESLint
   checks were compared before and after (the same 67), as a side agent asked.
+- **Audit exceptions (owner, 2026-11-17, PR #59, AskUserQuestion):**
+  GHSA-fc5q-39xc-vjpf (high) failed CI's audit on picomatch 4.0.7, which only
+  development tools use (typescript-eslint through tinyglobby, and Vite, on the
+  repository's own patterns; not in the browser bundle), and no fixed version
+  exists. Asked to weigh it against debt and the specification, the advisor
+  noted that NFR-SEC-9 doesn't name the audit (DEC-018 added it) and that
+  dependency review, which it does name, still fails a PR that brings in a
+  vulnerable package. The owner chose "A. Listed, self-expiring
+  (Recommended)": `pnpm-workspace.yaml` may hold `auditConfig.ignoreGhsas`
+  (pnpm's own setting; nothing else under `auditConfig`) only for advisories
+  listed under `auditIgnores` in `dependency-allowlist.json`, each with the
+  package, its exact version, why and when to remove it, and the check fails
+  once the lockfile holds that package at any other version, so an exception
+  can't outlive the fix it waits for. Rejected: B, an `--ignore` flag in CI
+  only; C, waiting with every branch red. Building it showed that
+  `pnpm audit --ignore <GHSA>` rewrites `pnpm-workspace.yaml` (it dropped
+  `allowBuilds`), so the setting is written by hand and CI's
+  `pnpm audit --audit-level low` is unchanged.
 
 ## DEC-012 Front-end tooling choices
 
@@ -2323,7 +2341,10 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
       `RedundancyGroups.Comparer`, one lookup a row. Rejected: B, merging and tracking it in a private advisory; C, a
       public issue. The finding was already public: Codex's automatic security review posts on the pull request, and
       the repository is public (a side agent's note, 2026-11-17), so only a fix before the merge kept the code out of
-      `main`. (2) "Set depth to N" can offer a depth that redundancy-group members keep too large to draw:
+      `main`. Whether those automatic reviews should keep posting on a public repository: "C. Keep it as is" (owner,
+      2026-11-17), a known exception to `SECURITY.md`'s rule; rejected: A, an issue to decide before the first
+      release; B, turning the review's posting off. (3) Codex at `6fdd31a`: a relationship deleted while its Edit
+      panel is open stays listed after the panel closes: #77 (`deferred`). (2) "Set depth to N" can offer a depth that redundancy-group members keep too large to draw:
       #76 (`deferred`), under the rule "anything further Codex finds goes to issues" (item 17).
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not

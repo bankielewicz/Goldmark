@@ -34,3 +34,12 @@ savePrefix: ''
 # dependency-allowlist.json at this exact version, with why and when to remove it.
 overrides:
   minimatch: 11.0.3
+
+# Advisories that pnpm audit skips because no fix exists yet. Each one must be
+# listed under "auditIgnores" in dependency-allowlist.json, for one package at
+# one version, with why and when to remove it; the policy check refuses the
+# entry once the lockfile holds that package at another version. Edit this by
+# hand: `pnpm audit --ignore` rewrites the whole file.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

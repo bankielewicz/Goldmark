@@ -263,7 +263,11 @@ it, and ask first if the PRD did not anticipate it.
   anything not on the allow-list and any SSR/RSC package. To force a transitive
   package to a patched version until its dependents move on, list it under
   `overrides` in the allow-list (exact version, why, and when to remove it) and
-  in `pnpm-workspace.yaml`'s `overrides`, then `pnpm install` (DEC-011).
+  in `pnpm-workspace.yaml`'s `overrides`, then `pnpm install` (DEC-011). An
+  advisory with no fix yet that only reaches tooling can be skipped by the audit:
+  list it under `auditIgnores` (package, exact version, why, when to remove it)
+  and, by hand, in `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`; don't use
+  `pnpm audit --ignore`, which rewrites that file (DEC-011).
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
   `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and
