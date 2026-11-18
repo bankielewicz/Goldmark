@@ -268,8 +268,8 @@ it, and ask first if the PRD did not anticipate it.
   list it under `auditIgnores` (package, exact version, why, when to remove it,
   and a `reviewBy` date at most 30 days away) and, by hand, in
   `pnpm-workspace.yaml`'s `auditConfig.ignoreGhsas`; don't use
-  `pnpm audit --ignore`, which rewrites that file. Past the date, CI fails until
-  the advisory is re-checked (DEC-011).
+  `pnpm audit --ignore`, which rewrites that file. Past the date, CI's policy job
+  fails until the advisory is re-checked; builds don't (DEC-011).
 - **NuGet:** add a `PackageVersion` to `Directory.Packages.props` and a
   versionless `PackageReference` to the project, then
   `dotnet restore Goldmark.slnx -p:RestoreLockedMode=false --force-evaluate`, and

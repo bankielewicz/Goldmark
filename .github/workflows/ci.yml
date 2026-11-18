@@ -35,8 +35,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
-      - name: Check allow-list, banned SSR/RSC packages, pnpm/npm settings, lockfile sources
-        run: node web/scripts/check-dependency-policy.mjs web
+      - name: Check allow-list, banned SSR/RSC packages, pnpm/npm settings, lockfile sources, audit exceptions' review dates
+        run: node web/scripts/check-dependency-policy.mjs web --review-dates
       - name: Policy checker tests
         run: node --test "web/scripts/*.test.mjs"
 

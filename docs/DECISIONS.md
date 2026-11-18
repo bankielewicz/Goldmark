@@ -286,7 +286,11 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   it the check fails, and CI's weekly run on `main` with it, until the entry is
   removed or given a new date. Rejected: B, asking GitHub's advisory database on
   every run (a network call, rate-limited or needing CI's token, against
-  DEC-018); C, the lockfile alone. Building it showed that
+  DEC-018); C, the lockfile alone. Only CI's dependency-policy job checks that a
+  date has passed (`--review-dates`): the image build and `pnpm test` run the
+  same check without it, so a commit, an old one included, still builds after
+  its date (a side agent's note, 2026-11-18; settled, open to veto). A date that
+  is missing, not a real day or more than 30 days away fails everywhere. Building it showed that
   `pnpm audit --ignore <GHSA>` rewrites `pnpm-workspace.yaml` (it dropped
   `allowBuilds`), so the setting is written by hand and CI's
   `pnpm audit --audit-level low` is unchanged.

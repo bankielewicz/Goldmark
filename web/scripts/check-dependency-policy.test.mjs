@@ -1,5 +1,6 @@
 // Tests for the dependency policy check. Run: node --test scripts/
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -306,12 +307,14 @@ describe('audit exceptions', () => {
       'GHSA-fc5q-39xc-vjpf'
     ].reviewBy;
     const day = (offset) => new Date(Date.parse(`${reviewBy}T12:00:00Z`) + offset * 86_400_000);
-    assert.ok(!checkPolicy(dir, { now: day(0) }).some((e) => e.includes('reviewed by')));
+    assert.ok(!checkPolicy(dir, { now: day(0), reviewDates: true }).some((e) => e.includes('reviewed by')));
     assert.ok(
-      checkPolicy(dir, { now: day(1) }).some((e) =>
+      checkPolicy(dir, { now: day(1), reviewDates: true }).some((e) =>
         e.includes(`"GHSA-fc5q-39xc-vjpf" was to be reviewed by ${reviewBy}; re-check the advisory`),
       ),
     );
+    // Only CI's policy job checks the date: the image build and the tests still pass after it.
+    assert.ok(!checkPolicy(dir, { now: day(1) }).some((e) => e.includes('reviewed by')));
     assert.ok(checkPolicy(dir, { now: day(-31) }).some((e) => e.includes('more than 30 days away')));
     editJson(dir, 'dependency-allowlist.json', (a) => {
       delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy;
@@ -329,6 +332,20 @@ describe('audit exceptions', () => {
         bad,
       );
     }
+  });
+
+  it('checks a passed review date only with --review-dates, as the CI policy job runs it', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy = '2026-01-05';
+    });
+    const run = (...flags) =>
+      spawnSync(process.execPath, [join(webDir, 'scripts', 'check-dependency-policy.mjs'), dir, ...flags], {
+        encoding: 'utf8',
+      });
+    assert.equal(run().status, 0);
+    const ci = run('--review-dates');
+    assert.equal(ci.status, 1);
+    assert.match(ci.stderr, /was to be reviewed by 2026-01-05/);
   });
 
   it('fails on any other audit setting', () => {
