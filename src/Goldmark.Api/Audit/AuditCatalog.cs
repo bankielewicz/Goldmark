@@ -74,6 +74,11 @@ internal static class AuditCatalog
         new(AuditActions.RelationshipTypeAdded, "Types & attributes", "Relationship type added", Succeeded),
         new(AuditActions.RelationshipTypeChanged, "Types & attributes", "Relationship type changed", Succeeded),
         new(AuditActions.RelationshipTypeDeleted, "Types & attributes", "Relationship type deleted", Succeeded),
+
+        new(AuditActions.RelationshipAdded, "Relationships", "Relationship added", Succeeded),
+        new(AuditActions.RelationshipChanged, "Relationships", "Relationship changed", Succeeded),
+        new(AuditActions.RelationshipDeleted, "Relationships", "Relationship deleted", Succeeded),
+        new(AuditActions.RelationshipsExported, "Relationships", "Relationships exported", Succeeded),
     ];
 
     private static readonly Dictionary<string, AuditActionInfo> ByCode = Actions.ToDictionary(a => a.Code, StringComparer.Ordinal);

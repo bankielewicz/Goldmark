@@ -30,8 +30,8 @@ internal sealed class RuntimeRights
 /// layer finds nothing (accepted findings: <c>Goldmark:Bootstrap:AcceptedFindings</c>). Only the service's
 /// own token shows rights it gets through Windows groups; an administrator's impersonation does not. Readiness
 /// fails until the check passes; it waits for SQL Server and the expected schema version. If the login holds
-/// more, Goldmark logs why and stops (exit code 3), and as a Windows service writes the reason to the
-/// Application log.
+/// more, Goldmark logs why and, once the host has started, stops (exit code 3), and as a Windows service writes the
+/// reason to the Application log.
 /// </summary>
 internal sealed partial class RuntimeRightsCheck(
     IOptions<DatabaseOptions> database,
@@ -85,6 +85,10 @@ internal sealed partial class RuntimeRightsCheck(
                 }
 
                 rights.Refuse();
+                // The stop waits for the host to have started: the host cancels its start when a stop is asked for
+                // during it, and the start then throws out of RunAsync, which a Windows service ends as a crash
+                // (exit code 1067, restarted by its recovery actions) instead of this refusal (CI on PR #59, 2026-11-05).
+                await StartedAsync(stoppingToken);
                 lifetime.StopApplication();
                 return;
             }
@@ -93,6 +97,16 @@ internal sealed partial class RuntimeRightsCheck(
                 LogWaiting(logger, ex.GetType().Name, (ex as SqlException)?.Number ?? 0);
                 await Task.Delay(Retry, stoppingToken);
             }
+        }
+    }
+
+    /// <summary>Completes once the host has started (at once if it already has).</summary>
+    private async Task StartedAsync(CancellationToken stoppingToken)
+    {
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using (lifetime.ApplicationStarted.Register(() => started.TrySetResult()))
+        {
+            await started.Task.WaitAsync(stoppingToken);
         }
     }
 

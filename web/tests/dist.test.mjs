@@ -44,7 +44,8 @@ describe('production build', { skip: !existsSync(indexPath) && 'dist/ not built;
       `no hashed JS entry in ${assets.join(', ')}`,
     );
     for (const file of assets) {
-      assert.match(file, /-[\w-]{8,}\.(js|css)$/, `unexpected unhashed asset ${file}`);
+      // SVG: the graph's type icons, files because the CSP takes only same-origin images (DEC-046 item 3).
+      assert.match(file, /-[\w-]{8,}\.(js|css|svg)$/, `unexpected unhashed asset ${file}`);
     }
   });
 

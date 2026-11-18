@@ -366,8 +366,12 @@ finally {
         Write-Host '== Diagnostics (before cleanup)'
         $service = Get-CimInstance Win32_Service -Filter "Name='Goldmark'" -ErrorAction SilentlyContinue
         if ($service) { Write-Host "service: $($service.State), exit code $($service.ExitCode), as $($service.StartName)" }
-        Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -ErrorAction SilentlyContinue |
-            Where-Object { $_.ProviderName -in 'Goldmark', '.NET Runtime', 'Application Error' } | Select-Object -First 5 |
+        # A crash's .NET Runtime entry names the exception and its stack, so it comes first (PR #59: Goldmark's own
+        # entries filled the first five and hid it).
+        $events = @(Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = $started } -ErrorAction SilentlyContinue)
+        $events | Where-Object { $_.ProviderName -in '.NET Runtime', 'Application Error' -and $_.Message -like '*Goldmark.Api*' } |
+            Select-Object -First 3 | ForEach-Object { Write-Host "Application log, $($_.ProviderName) $($_.Id): $($_.Message)" }
+        $events | Where-Object { $_.ProviderName -eq 'Goldmark' -and $_.Message } | Select-Object -First 5 |
             ForEach-Object { Write-Host "Application log, $($_.ProviderName) $($_.Id): $($_.Message)" }
         foreach ($data in $data1, $data2) {
             Get-ChildItem (Join-Path $data 'logs') -Filter 'goldmark-*.json' -ErrorAction SilentlyContinue | ForEach-Object {

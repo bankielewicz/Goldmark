@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark audit log page, slice 6 entries</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="flex: none; position: relative; z-index: 3">
+    <dc-import name="TopBar" dark="{{dark}}" width="{{width}}" search="box" hint-size="{{width}}px,48px"></dc-import>
+  </div>
+  <div style="flex: 1; min-height: 0; display: flex">
+    <div style="flex: none">
+      <dc-import name="Nav" dark="{{dark}}" width="{{width}}" height="{{bodyHeight}}" current="audit" role="admin" hint-size="260px,{{bodyHeight}}px"></dc-import>
+    </div>
+    <main style="flex: 1; min-width: 0; padding: 32px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; overflow: hidden">
+      <nav aria-label="Breadcrumb" style="display: flex; gap: 6px; color: var(--fg3)"><span style="color: var(--fg2)">Administration</span><span aria-hidden="true">›</span><span aria-current="page" style="color: var(--fg1)">Audit log</span></nav>
+      <div style="display: flex; align-items: center; gap: 12px">
+        <h1 style="margin: 0; flex: 1; font-size: 24px; line-height: 32px; font-weight: 600">Audit log</h1>
+        <button type="button" aria-haspopup="dialog" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M10 3v9M6.5 6.5L10 3l3.5 3.5M4 12v4h12v-4"></path></svg>Export CSV…</button>
+      </div>
+      <div role="search" aria-label="Filter the audit log" style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 2px"><label for="f-time" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Time range (UTC)</label><button id="f-time" type="button" aria-haspopup="listbox" style="width: 150px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">Last 24 hours <span aria-hidden="true">⌄</span></button></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><label for="f-action" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Action</label><button id="f-action" type="button" aria-haspopup="listbox" style="width: 250px; height: 32px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px; color: var(--fg1); font: inherit">Relationships (4 actions) <span aria-hidden="true">⌄</span></button></div>
+        <div style="display: flex; flex-direction: column; gap: 2px"><label for="f-actor" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Actor</label><span style="width: 180px; height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; background: var(--bg1); border: 1px solid var(--st1); border-bottom-color: var(--stacc); border-radius: 4px"><input id="f-actor" role="combobox" aria-expanded="false" placeholder="Any actor" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span></div>
+        <button type="button" style="height: 32px; padding: 0 10px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-weight: 600">Clear filters</button>
+      </div>
+      <div aria-live="polite" style="font-weight: 600">7 entries</div>
+      <div style="flex: 1; min-height: 0; background: var(--bg1); border: 1px solid var(--st2); border-radius: 6px; overflow: auto">
+        <table style="width: 100%; min-width: 1000px; border-collapse: collapse">
+          <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Audit log entries, newest first</caption>
+          <thead>
+            <tr style="text-align: left">
+              <th scope="col" style="width: 44px; height: 44px; border-bottom: 1px solid var(--st1)"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Details</span></th>
+              <th scope="col" aria-sort="descending" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1); white-space: nowrap">Time (UTC) <span aria-hidden="true">↓</span></th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Actor</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Action</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Affected</th>
+              <th scope="col" style="padding: 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1); white-space: nowrap">IP address</th>
+              <th scope="col" style="padding: 0 16px 0 8px; font-weight: 600; border-bottom: 1px solid var(--st1)">Outcome</th>
+            </tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{rows}}" as="r" hint-placeholder-count="7">
+              <tr style="{{r.rowStyle}}">
+                <td style="height: 44px; padding: 0 6px; border-bottom: 1px solid var(--st2); text-align: center"><button type="button" aria-expanded="{{r.ariaExpanded}}" aria-label="Show details for the entry at {{r.clock}}" style="{{r.expandButton}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="{{r.chevron}}"></path></svg></button></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); white-space: nowrap; font-variant-numeric: tabular-nums">{{r.time}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 8px"><span style="display: inline-flex; height: 20px; align-items: center; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">Person</span><span>{{r.actor}} <span style="color: var(--fg3)">·</span> <span style="font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">{{r.user}}</span></span></span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)">{{r.action}}</td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 6px"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{r.icon}}"></path></svg><span>{{r.target}}</span><span style="color: var(--fg3)">· {{r.kind}}</span></span></td>
+                <td style="padding: 0 8px; border-bottom: 1px solid var(--st2); font-family: Consolas, 'Courier New', monospace; color: var(--fg2)">{{r.ip}}</td>
+                <td style="padding: 0 16px 0 8px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--gnbd); background: var(--gnbg); color: var(--gnfg); font-size: 12px; font-weight: 600"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5 8.2l2 2 4-4.4"></path></svg>Succeeded</span></td>
+              </tr>
+              <sc-if value="{{r.expanded}}" hint-placeholder-val="{{false}}">
+                <tr>
+                  <td colspan="7" style="padding: 0; border-bottom: 1px solid var(--st1)">
+                    <div style="padding: 12px 24px 16px 52px; background: var(--bg2); display: flex; flex-direction: column; gap: 12px">
+                      <dl style="margin: 0; display: grid; grid-template-columns: 150px minmax(0, 1fr) 150px minmax(0, 1fr); gap: 8px 16px">
+                        <sc-for list="{{r.fields}}" as="f" hint-placeholder-count="8">
+                          <dt style="color: var(--fg3); font-weight: 600">{{f.k}}</dt>
+                          <dd style="margin: 0">{{f.v}}<sc-if value="{{f.hasCode}}" hint-placeholder-val="{{false}}"> <span style="font-family: Consolas, 'Courier New', monospace; font-size: 13px; color: var(--fg2)">{{f.code}}</span></sc-if></dd>
+                        </sc-for>
+                      </dl>
+                      <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap">
+                        <a href="#" style="color: var(--blink)">Open {{r.fromName}}</a>
+                        <a href="#" style="color: var(--blink)">Open {{r.toName}}</a>
+                        <button type="button" style="height: 28px; padding: 0 8px; border: none; border-radius: 4px; background: transparent; color: var(--fg1); font: inherit; font-weight: 600; display: inline-flex; align-items: center; gap: 6px"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 4h14l-5.5 6.5V16l-3 1.5v-7z"></path></svg>Show all entries about this relationship</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </sc-if>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+      <div style="display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--fg3)"><span>Showing 7 of 7 entries</span><span>Sample data (fictional)</span></div>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"width":{"editor":"int","default":1440},"height":{"editor":"int","default":1000},"expanded":{"editor":"int","default":48761},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg3:#f5f5f5;--sub:#f5f5f5;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--bbg2:#fcefd8;--blink:#7d5200;--fo:#000000;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg3:#141414;--sub:#383838;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--bbg2:#2c1d00;--blink:#c28a2a;--fo:#ffffff;--gnfg:#54b054;--gnbg:#052505;--gnbd:#107c10;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;';
+    const dark = this.props.dark ?? false;
+    const width = this.props.width ?? 1440;
+    const height = this.props.height ?? 1000;
+    const expanded = this.props.expanded ?? 48761;
+    const REL = 'M3 10h12M12 6.5l3.5 3.5-3.5 3.5';
+    // Action codes are samples; the backend names them. [from, from type, relationship, to, to type]
+    const rel = (from, fromType, type, to, toType, group) => ({ from, fromType, type, to, toType, group,
+      details: [['Relationship', type], ['From', from + ' (' + fromType + ')'], ['To', to + ' (' + toType + ')'], ['Redundancy group', group ?? '—']] });
+    const all = [
+      [48761, '2026-10-24 16:05:12', '18:05:12', 'Dana Kowalski', 'dana', 'Relationship deleted', 'relationship.deleted', rel('app-erp-db01', 'VirtualMachine', 'runs_on', 'esx-mx-014', 'HypervisorHost', null), '10.20.4.11'],
+      [48760, '2026-10-24 16:04:55', '18:04:55', 'Dana Kowalski', 'dana', 'Relationship added', 'relationship.added', rel('app-erp-db01', 'VirtualMachine', 'runs_on', 'esx-mx-015', 'HypervisorHost', null), '10.20.4.11'],
+      [48758, '2026-10-24 15:58:40', '17:58:40', 'Sam Rivera', 'sam', 'Relationship changed', 'relationship.changed', rel('AG-ERP', 'SqlAvailabilityGroup', 'replica_on', 'SQLPRD02\\ERP', 'SqlInstance', 'AG-ERP'), '10.20.4.27', [['Changed', 'Redundancy group'], ['Before', '—'], ['After', 'AG-ERP']]],
+      [48755, '2026-10-24 15:57:02', '17:57:02', 'Sam Rivera', 'sam', 'Relationship changed', 'relationship.changed', rel('AG-ERP', 'SqlAvailabilityGroup', 'replica_on', 'SQLPRD01\\ERP', 'SqlInstance', 'AG-ERP'), '10.20.4.27', [['Changed', 'Redundancy group'], ['Before', '—'], ['After', 'AG-ERP']]],
+      [48744, '2026-10-24 15:30:08', '17:30:08', 'Dana Kowalski', 'dana', 'Relationship added', 'relationship.added', rel('ERP Reporting', 'BusinessService', 'depends_on', 'app-erp-db01', 'VirtualMachine', null), '10.20.4.11'],
+      [48739, '2026-10-24 15:12:44', '17:12:44', 'Morgan Okafor', 'morgan', 'Relationship added', 'relationship.added', rel('esx-mx-014', 'HypervisorHost', 'uplinks_to', 'sw-core-02', 'NetworkDevice', 'vSwitch0'), '10.20.4.30'],
+      [48731, '2026-10-24 14:50:21', '16:50:21', 'Morgan Okafor', 'morgan', 'Relationship deleted', 'relationship.deleted', rel('esx-mx-014', 'HypervisorHost', 'uplinks_to', 'sw-old-07', 'NetworkDevice', null), '10.20.4.30']
+    ];
+    const rows = all.map(([id, time, local, actor, user, action, code, r, ip, changed]) => {
+      const target = r.from + ' ' + r.type + ' ' + r.to;
+      const kind = 'Relationship';
+      const icon = REL;
+      const details = changed ? [['Relationship', r.type], ['From', r.from + ' (' + r.fromType + ')'], ['To', r.to + ' (' + r.toType + ')']].concat(changed) : r.details;
+      const fromName = r.from;
+      const toName = r.to;
+      const open = id === expanded;
+      const fields = [
+        { k: 'Entry number', v: String(id), hasCode: false, code: '' },
+        { k: 'Time (UTC)', v: time + ' UTC · local ' + local + ' (UTC+2)', hasCode: false, code: '' },
+        { k: 'Actor', v: 'Person · ' + actor + ' · ' + user, hasCode: false, code: '' },
+        { k: 'Action', v: action, hasCode: true, code: code },
+        { k: 'Affected', v: target + ' (' + kind + ')', hasCode: false, code: '' },
+        { k: 'IP address', v: ip, hasCode: false, code: '' }
+      ].concat(details.map(([k, v]) => ({ k, v, hasCode: false, code: '' })));
+      return {
+        time, actor, user, action, target, kind, icon, ip, fields, fromName, toName,
+        clock: time.slice(11),
+        expanded: open,
+        ariaExpanded: open ? 'true' : 'false',
+        chevron: open ? 'M5 8l5 5 5-5' : 'M8 5l5 5-5 5',
+        rowStyle: open ? 'background: var(--bbg2)' : '',
+        expandButton: 'width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; color: var(--fg2); ' + (open ? 'background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px' : 'background: transparent')
+      };
+    });
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      dark, width,
+      bodyHeight: height - 48,
+      rows
+    };
+  }
+}
+</script>
+</body>
+</html>

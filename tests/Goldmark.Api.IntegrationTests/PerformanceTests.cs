@@ -14,7 +14,7 @@ namespace Goldmark.Api.IntegrationTests;
 /// and search at most 500 ms, of a CI's detail at most 300 ms, measured through the API against SQL
 /// Server 2025 Express. It runs on request only (GOLDMARK_PERF=1; the Performance workflow's "Run
 /// workflow"), not on every PR, and writes its figures to the job summary. The start of NFR-PERF-5's
-/// suite: later slices add relationships, impact and ingest.
+/// suite: slice 6 adds the graph read on synthetic relationships; later slices add impact and ingest.
 /// </summary>
 [Collection(SqlServerTests.Name)]
 public sealed class PerformanceTests(SqlServerFixture sql)
@@ -213,6 +213,92 @@ public sealed class PerformanceTests(SqlServerFixture sql)
                 "SELECT ISNULL(SUM(index_lock_promotion_count), 0) FROM sys.dm_db_index_operational_stats(DB_ID(), OBJECT_ID(N'cmdb.Ci'), NULL, NULL);",
                 connection);
             return Convert.ToInt64(await command.ExecuteScalarAsync(TestContext.Current.CancellationToken), CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>
+    /// The graph read (DEC-046 items 4, 5 and 7) on the synthetic estate with its relationships: depth 6, both ways, from
+    /// a cluster, a storage array, the largest team (about 3,500 CIs are owned_by it) and a typical VM, with grouping on
+    /// (the default) and off. Measured, not budgeted (NFR-PERF-3's impact budget is slice 19's): how many relationships
+    /// each read returns against the 25,000 limit, whether it stopped there (`truncated`), what the graph would draw,
+    /// and the median and longest of five reads after one to warm up. Runs on request only (owner, 2026-10-26: "A.
+    /// Measure now").
+    /// </summary>
+    [Fact]
+    public async Task The_graph_read_at_depth_6_on_the_synthetic_estate()
+    {
+        if (Environment.GetEnvironmentVariable("GOLDMARK_PERF") != "1")
+        {
+            Assert.Skip("On request only: set GOLDMARK_PERF=1 (the Performance workflow does).");
+        }
+
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, adminPerson) = await scenario.SetUpAsync();
+        await SyntheticInventory.SeedAsync(scenario.Sql, scenario.Installation, adminPerson.Id);
+        await SyntheticInventory.SeedRelationshipsAsync(scenario.Sql, scenario.Installation, adminPerson.Id);
+        var database = scenario.Installation.Database;
+        var relationships = await scenario.Sql.AdminScalarAsync<int>(database, "SELECT COUNT(*) FROM cmdb.Relationship;");
+        var largestTeam = await scenario.Sql.AdminScalarAsync<int>(database, """
+            SELECT TOP (1) COUNT(*) FROM cmdb.Relationship AS r JOIN cmdb.RelationshipType AS t ON t.Id = r.RelationshipTypeId
+            WHERE t.Name = N'owned_by' GROUP BY r.ToCiId ORDER BY COUNT(*) DESC;
+            """);
+
+        var foci = new (string What, string Name)[]
+        {
+            ("A cluster", "CL-00001"),
+            ("A storage array", "array-00001"),
+            ("The largest team", "team 00001"),
+            ("A typical VM", "app-erp-00005"),
+        };
+        var rows = new List<string>();
+        foreach (var (what, name) in foci)
+        {
+            var id = await scenario.Sql.AdminScalarAsync<string>(database, $"SELECT CAST(Id AS nvarchar(36)) FROM cmdb.Ci WHERE Name = N'{name}';");
+            foreach (var grouped in new[] { true, false })
+            {
+                var path = $"/api/v1/graph?ci={id}&depth=6{(grouped ? "" : "&group=false")}";
+                var times = new List<double>();
+                Response? last = null;
+                for (var i = 0; i < 6; i++)
+                {
+                    var watch = Stopwatch.StartNew();
+                    last = await admin.GetAsync(path);
+                    watch.Stop();
+                    Assert.True(last.Status == HttpStatusCode.OK, $"{what}: {last}");
+                    if (i > 0)
+                    {
+                        times.Add(watch.Elapsed.TotalMilliseconds);
+                    }
+                }
+
+                times.Sort();
+                var body = last!.Body;
+                var drawn = body.GetProperty("countsByHop").EnumerateArray().Sum(c => c.GetInt32());
+                rows.Add(string.Create(CultureInfo.InvariantCulture,
+                    $"| {what} (`{name}`) | {(grouped ? "on" : "off")} | {body.GetProperty("relationships").GetArrayLength():N0} | {body.GetProperty("nodes").GetArrayLength():N0} | {drawn:N0} | {body.GetProperty("groups").GetArrayLength():N0} | {(body.GetProperty("truncated").GetBoolean() ? "yes" : "no")} | {times[times.Count / 2]:F0} ms | {times[^1]:F0} ms |"));
+            }
+        }
+
+        var summary = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
+                $"### The graph read at depth 6 on {SyntheticInventory.Count:N0} CIs and {relationships:N0} relationships (DEC-046)\n\n"))
+            .AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"Both ways, retired CIs left out; the largest team has {largestTeam:N0} CIs owned_by it. Five reads after one to warm up, through the API, SQL Server 2025 Express. The limit is {25_000:N0} relationships; the graph draws at most 500.\n"))
+            .AppendLine("| Focus | Grouping | Relationships | CIs | Drawn | Groups | Truncated | Median | Longest |")
+            .AppendLine("|---|---|---:|---:|---:|---:|---|---:|---:|");
+        foreach (var row in rows)
+        {
+            summary.AppendLine(row);
+        }
+
+        TestContext.Current.TestOutputHelper?.WriteLine(summary.ToString());
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } file)
+        {
+            await File.AppendAllTextAsync(file, summary.ToString(), TestContext.Current.CancellationToken);
+        }
+
+        if (Environment.GetEnvironmentVariable("GOLDMARK_PERF_OUT") is { Length: > 0 } output)
+        {
+            await File.WriteAllTextAsync(output, summary.ToString(), TestContext.Current.CancellationToken);
         }
     }
 

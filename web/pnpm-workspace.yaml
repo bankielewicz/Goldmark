@@ -28,3 +28,18 @@ engineStrict: true
 
 # Direct dependencies are saved as exact versions.
 savePrefix: ''
+
+# A transitive package forced to a patched version until the packages that use
+# it move on. Each one must be listed under "overrides" in
+# dependency-allowlist.json at this exact version, with why and when to remove it.
+overrides:
+  minimatch: 11.0.3
+
+# Advisories that pnpm audit skips because no fix exists yet. Each one must be
+# listed under "auditIgnores" in dependency-allowlist.json, for one package at
+# one version, with why and when to remove it; the policy check refuses the
+# entry once the lockfile holds that package at another version. Edit this by
+# hand: `pnpm audit --ignore` rewrites the whole file.
+auditConfig:
+  ignoreGhsas:
+    - GHSA-fc5q-39xc-vjpf

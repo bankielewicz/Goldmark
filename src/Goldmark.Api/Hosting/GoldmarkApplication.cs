@@ -70,6 +70,8 @@ internal static class GoldmarkApplication
         builder.Services.AddScoped<AuditLog>();
         builder.Services.AddScoped<CiTypeCatalog>();
         builder.Services.AddScoped<CiStore>();
+        builder.Services.AddScoped<RelationshipStore>();
+        builder.Services.AddScoped<GraphStore>();
         builder.Services.AddHostedService<AuditRetentionJob>();
         builder.Services.AddSingleton<SpaShell>();
         builder.Services.AddGoldmarkHealthChecks();

@@ -1,5 +1,6 @@
 // Tests for the dependency policy check. Run: node --test scripts/
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -142,15 +143,9 @@ describe('pnpm and npm settings', () => {
     );
   });
 
-  it('fails when pnpm-workspace.yaml adds registries or overrides', () => {
-    editText(
-      dir,
-      'pnpm-workspace.yaml',
-      (t) => `${t}\nregistries:\n  '@playwright': https://attacker.example/\noverrides:\n  react: 19.0.0\n`,
-    );
-    const errors = checkPolicy(dir);
-    assert.ok(errors.some((e) => e.includes('"registries" is not on the reviewed settings list')));
-    assert.ok(errors.some((e) => e.includes('"overrides" is not on the reviewed settings list')));
+  it('fails when pnpm-workspace.yaml adds registries', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => `${t}\nregistries:\n  '@playwright': https://attacker.example/\n`);
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"registries" is not on the reviewed settings list')));
   });
 
   it('fails on a scoped registry override in .npmrc', () => {
@@ -190,6 +185,177 @@ describe('pnpm and npm settings', () => {
   });
 });
 
+describe('overrides', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fixture();
+  });
+  const override = '  minimatch: 11.0.3';
+
+  it('fails when an override is not allow-listed', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, `${override}\n  react: 19.0.0`));
+    assert.ok(
+      checkPolicy(dir).some((e) => e.includes('override "react" is not in dependency-allowlist.json "overrides"')),
+    );
+  });
+
+  it('fails when an override is not the exact version the allow-list names', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, '  minimatch: ^11.0.1'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "minimatch" must be the exact version')));
+  });
+
+  it('fails on an override with a selector', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, '  eslint>minimatch: 11.0.3'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "eslint>minimatch" is not in')));
+  });
+
+  it('fails when an allow-listed override is no longer in pnpm-workspace.yaml', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(`overrides:\n${override}`, ''));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('override "minimatch" isn\'t in pnpm-workspace.yaml')));
+  });
+
+  it('fails when an override has no reason or no removal condition', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.overrides.minimatch.remove;
+      a.overrides.minimatch.justification = '';
+    });
+    const errors = checkPolicy(dir);
+    assert.ok(errors.some((e) => e.includes('override "minimatch" needs "remove"')));
+    assert.ok(errors.some((e) => e.includes('override "minimatch" needs "justification"')));
+  });
+
+  it('fails when the lockfile forces something else', () => {
+    editText(dir, 'pnpm-lock.yaml', (t) => t.replace(`overrides:\n${override}`, 'overrides:\n  minimatch: 11.0.2'));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('its "overrides" differ from pnpm-workspace.yaml')));
+  });
+
+  it('fails on a banned package even as an allow-listed override', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.overrides.next = { version: '15.0.0', justification: 'a test of the ban', remove: 'a test of the ban' };
+    });
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(override, `${override}\n  next: 15.0.0`));
+    assert.ok(checkPolicy(dir).some((e) => e.includes('Next.js')));
+  });
+});
+
+describe('audit exceptions', () => {
+  let dir;
+  beforeEach(() => {
+    dir = fixture();
+  });
+  const ignored = '    - GHSA-fc5q-39xc-vjpf';
+
+  it('fails when an advisory is ignored without an allow-list entry', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(ignored, `${ignored}\n    - GHSA-g3hv-75wg-m249`));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes('audit exception "GHSA-g3hv-75wg-m249" is not in dependency-allowlist.json "auditIgnores"'),
+      ),
+    );
+  });
+
+  it('fails when an allow-listed exception is no longer ignored', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) => t.replace(`\n${ignored}`, ''));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes('"GHSA-fc5q-39xc-vjpf" isn\'t in pnpm-workspace.yaml auditConfig.ignoreGhsas'),
+      ),
+    );
+  });
+
+  it('fails when an exception has no reason or no removal condition', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].remove;
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].justification = '';
+    });
+    const errors = checkPolicy(dir);
+    assert.ok(errors.some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "remove"')));
+    assert.ok(errors.some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "justification"')));
+  });
+
+  it('fails on an ID that is not a GitHub advisory ID', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['CVE-2026-112366'] = a.auditIgnores['GHSA-fc5q-39xc-vjpf'];
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"CVE-2026-112366" must be a GitHub advisory ID')));
+  });
+
+  it('fails once the lockfile holds the package at another version', () => {
+    editText(dir, 'pnpm-lock.yaml', (t) => t.replaceAll('picomatch@4.0.7', 'picomatch@4.0.8'));
+    assert.ok(
+      checkPolicy(dir).some((e) =>
+        e.includes(
+          'is for picomatch 4.0.7, but the lockfile has 4.0.8; re-check the advisory, then remove or update the entry',
+        ),
+      ),
+    );
+  });
+
+  it('fails when the entry names a version or a package the lockfile does not have', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].version = '4.0.6';
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('is for picomatch 4.0.6, but the lockfile has 4.0.7')));
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].package = 'left-pad';
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('is for left-pad 4.0.6, but the lockfile has none')));
+  });
+
+  it('fails once the review date has passed, and on a date more than 30 days away or missing', () => {
+    const reviewBy = JSON.parse(readFileSync(join(dir, 'dependency-allowlist.json'), 'utf8')).auditIgnores[
+      'GHSA-fc5q-39xc-vjpf'
+    ].reviewBy;
+    const day = (offset) => new Date(Date.parse(`${reviewBy}T12:00:00Z`) + offset * 86_400_000);
+    assert.ok(!checkPolicy(dir, { now: day(0) }).some((e) => e.includes('reviewed by')));
+    assert.ok(
+      checkPolicy(dir, { now: day(1) }).some((e) =>
+        e.includes(`"GHSA-fc5q-39xc-vjpf" was to be reviewed by ${reviewBy}; re-check the advisory`),
+      ),
+    );
+    // The image build alone skips the passed date, so an image still builds after it.
+    assert.ok(!checkPolicy(dir, { now: day(1), reviewDates: false }).some((e) => e.includes('reviewed by')));
+    assert.ok(checkPolicy(dir, { now: day(-31) }).some((e) => e.includes('more than 30 days away')));
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy;
+    });
+    assert.ok(checkPolicy(dir).some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "reviewBy"')));
+    // A day that doesn't exist is no date, even where it would sort inside the window.
+    for (const bad of ['2026-11-31', '2026-12-00', '2026-02-29', '2026-13-01', '2026-12-1']) {
+      editJson(dir, 'dependency-allowlist.json', (a) => {
+        a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy = bad;
+      });
+      assert.ok(
+        checkPolicy(dir, { now: new Date('2026-11-20T12:00:00Z') }).some((e) =>
+          e.includes('"GHSA-fc5q-39xc-vjpf" needs "reviewBy", a date (YYYY-MM-DD)'),
+        ),
+        bad,
+      );
+    }
+  });
+
+  it('fails on a passed review date, unless run as the image build does', () => {
+    editJson(dir, 'dependency-allowlist.json', (a) => {
+      a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy = '2026-01-05';
+    });
+    const run = (...flags) =>
+      spawnSync(process.execPath, [join(webDir, 'scripts', 'check-dependency-policy.mjs'), dir, ...flags], {
+        encoding: 'utf8',
+      });
+    const standard = run();
+    assert.equal(standard.status, 1);
+    assert.match(standard.stderr, /was to be reviewed by 2026-01-05/);
+    assert.equal(run('--skip-review-dates').status, 0);
+  });
+
+  it('fails on any other audit setting', () => {
+    editText(dir, 'pnpm-workspace.yaml', (t) =>
+      t.replace('auditConfig:\n', 'auditConfig:\n  ignoreCves:\n    - CVE-2026-112366\n'),
+    );
+    assert.ok(checkPolicy(dir).some((e) => e.includes('auditConfig may hold only "ignoreGhsas"')));
+  });
+});
+
 describe('lockfile', () => {
   const lockPath = join(webDir, 'pnpm-lock.yaml');
   const committed = readFileSync(lockPath, 'utf8');
@@ -219,7 +385,11 @@ describe('lockfile', () => {
       (t) => t.replace('\n  acorn@8.19.0: {}', '\n    acorn@8.19.0: {}'),
       'unexpected key',
     ],
-    ['an extra top-level key', (t) => `${t}\noverrides:\n  react: 19.0.0\n`, 'unexpected key "overrides"'],
+    [
+      'an extra top-level key',
+      (t) => `${t}\npatchedDependencies:\n  react: patches/react.patch\n`,
+      'unexpected key "patchedDependencies"',
+    ],
     [
       'a duplicate key',
       (t) => t.replace('\n  acorn@8.19.0: {}', '\n  acorn@8.19.0: {}\n  acorn@8.19.0: {}'),
@@ -307,5 +477,14 @@ describe('workspace yaml reader', () => {
     assert.deepEqual(settings.allowBuilds, { esbuild: 'false' });
     assert.equal(settings.savePrefix, '');
     assert.deepEqual(settings.empty, {});
+  });
+
+  it('reads a list in a block map', () => {
+    const { settings, errors } = parseWorkspaceYaml(
+      "auditConfig:\n  ignoreGhsas:\n    - GHSA-fc5q-39xc-vjpf\nsavePrefix: ''\n",
+    );
+    assert.deepEqual(errors, []);
+    assert.deepEqual(settings.auditConfig, { ignoreGhsas: ['GHSA-fc5q-39xc-vjpf'] });
+    assert.equal(settings.savePrefix, '');
   });
 });

@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark Add relationship and Edit relationship panel</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="{{rootStyle}}">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 16px 16px 8px">
+    <h2 id="panel-title" style="margin: 0; flex: 1; font-size: 20px; line-height: 28px; font-weight: 600; overflow-wrap: anywhere">{{title}}</h2>
+    <button type="button" aria-label="Close" style="width: 32px; height: 32px; border: none; border-radius: 4px; background: transparent; color: var(--fg2); font-size: 16px">✕</button>
+  </div>
+
+  <div style="flex: 1; min-height: 0; overflow: auto; padding: 8px 16px 24px; display: flex; flex-direction: column; gap: 16px">
+    <sc-if value="{{showSummary}}" hint-placeholder-val="{{false}}">
+      <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span><b>The relationship isn’t added yet.</b> Fix the 2 fields marked below.</span></div>
+    </sc-if>
+    <sc-if value="{{showPartial}}" hint-placeholder-val="{{false}}">
+      <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbwrn); border: 1px solid var(--mbwrnbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbwrni)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.8L14.6 13.5H1.4ZM8 6v3.5M8 11.3v.2"></path></svg><span><b>1 of 2 relationships added.</b> sw-core-03 was added. sw-core-02: this relationship already exists. Remove it from the list, or close the panel.</span></div>
+    </sc-if>
+
+    <sc-if value="{{editable}}" hint-placeholder-val="{{true}}">
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <label for="rel-type" style="display: flex; align-items: center; gap: 6px; font-weight: 600">Relationship type<span aria-hidden="true" style="color: var(--rdfg)">*</span></label>
+        <span style="{{controlStyle}}"><input id="rel-type" role="combobox" aria-expanded="false" aria-required="true" aria-describedby="rel-type-desc" value="{{type.name}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 600; outline: none"><span style="font-size: 12px; color: var(--fg3); white-space: nowrap">{{type.ends}}</span><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+        <span id="rel-type-desc" style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{type.description}}</span>
+      </div>
+
+      <sc-if value="{{sideText}}" hint-placeholder-val="{{true}}">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <span id="rel-side-label" style="font-weight: 600">{{ciName}} is the</span>
+          <span aria-labelledby="rel-side-label" style="min-height: 24px; display: flex; align-items: center">dependent (it depends on the other CI)</span>
+          <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{sideHelp}}</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{sideRadio}}" hint-placeholder-val="{{false}}">
+        <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 4px">
+          <legend style="padding: 0; margin-bottom: 4px; font-weight: 600">{{ciName}} is the<span aria-hidden="true" style="color: var(--rdfg)"> *</span></legend>
+          <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 32px"><input type="radio" name="rel-side" style="width: 16px; height: 16px; margin: 0; accent-color: var(--cbrand)">dependent (it depends on the other CI)</label>
+          <label style="display: inline-flex; align-items: center; gap: 8px; min-height: 32px"><input type="radio" name="rel-side" checked style="width: 16px; height: 16px; margin: 0; accent-color: var(--cbrand)">dependency (the other CI depends on it)</label>
+        </fieldset>
+      </sc-if>
+
+      <div style="position: relative; display: flex; flex-direction: column; gap: 4px">
+        <label for="rel-other" style="display: flex; align-items: center; gap: 6px; font-weight: 600">{{otherLabel}}<span aria-hidden="true" style="color: var(--rdfg)">*</span></label>
+        <span style="{{otherStyle}}">
+          <sc-for list="{{others}}" as="o" hint-placeholder-count="1">
+            <span style="{{o.style}}"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{o.icon}}"></path></svg>{{o.name}}<button type="button" aria-label="Remove {{o.name}}" style="width: 20px; height: 20px; border: none; border-radius: 3px; background: transparent; color: var(--fg2); font-size: 11px">✕</button></span>
+          </sc-for>
+          <input id="rel-other" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-required="true" aria-invalid="{{otherInvalid}}" aria-describedby="rel-other-help" placeholder="{{otherPlaceholder}}" style="flex: 1; min-width: 120px; height: 28px; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none">
+        </span>
+        <sc-if value="{{otherError}}" hint-placeholder-val="{{false}}">
+          <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>{{otherErrorText}}</span>
+        </sc-if>
+        <span id="rel-other-help" style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{otherHelpText}}</span>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{readOnly}}" hint-placeholder-val="{{false}}">
+      <div style="display: flex; flex-direction: column; gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="ro-type" style="font-weight: 600">Relationship type</label>
+          <span style="{{roStyle}}"><input id="ro-type" readonly aria-describedby="ro-help" value="runs_on" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 600; outline: none"><span style="font-size: 12px; color: var(--fg3); white-space: nowrap">VirtualMachine → HypervisorHost</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="ro-side" style="font-weight: 600">app-erp-db01 is the</label>
+          <span style="{{roStyle}}"><input id="ro-side" readonly aria-describedby="ro-help" value="dependent (it depends on the other CI)" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 4px">
+          <label for="ro-other" style="font-weight: 600">Depends on</label>
+          <span style="{{roStyle}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M3 4h14v12H3zM3 8h14M3 12h14"></path></svg><input id="ro-other" readonly aria-describedby="ro-help" value="esx-mx-014" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span style="font-size: 12px; color: var(--fg3)">HypervisorHost</span></span>
+        </div>
+        <span id="ro-help" style="font-size: 12px; line-height: 16px; color: var(--fg3)">They can’t change: delete the relationship and add another.</span>
+      </div>
+    </sc-if>
+
+    <div style="position: relative; display: flex; flex-direction: column; gap: 4px">
+      <label for="rel-group" style="font-weight: 600">Redundancy group</label>
+      <span style="{{groupStyle}}"><input id="rel-group" role="combobox" aria-expanded="{{groupExpanded}}" aria-controls="group-list" aria-autocomplete="list" aria-describedby="rel-group-help" aria-invalid="{{groupInvalid}}" value="{{groupValue}}" placeholder="None" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none"><span aria-hidden="true" style="color: var(--fg2)">⌄</span></span>
+      <sc-if value="{{groupError}}" hint-placeholder-val="{{false}}">
+        <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="8" r="6.5"></circle><path d="M5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg>Use up to 200 characters, without line breaks.</span>
+      </sc-if>
+      <span id="rel-group-help" style="font-size: 12px; line-height: 16px; color: var(--fg3)">Impact analysis (a later release) treats a dependent CI’s relationships with the same group as redundant: the dependent is down only when all of them are down. Up to 200 characters.</span>
+      <sc-if value="{{groupOpen}}" hint-placeholder-val="{{false}}">
+        <div id="group-list" role="listbox" aria-label="Redundancy groups" style="position: absolute; left: 0; right: 0; top: 60px; z-index: 2; padding: 4px; background: var(--bg1); border-radius: 6px; box-shadow: var(--sh16); display: flex; flex-direction: column">
+          <div role="presentation" style="padding: 6px 8px 2px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Groups on esx-mx-014’s relationships</div>
+          <div role="option" aria-selected="true" style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 4px; background: var(--sub); outline: 2px solid var(--fo); outline-offset: -2px"><span style="flex: 1">vSwitch0</span><span style="font-size: 12px; color: var(--fg3)">2 relationships</span></div>
+        </div>
+      </sc-if>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px">
+      <span style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">Preview</span>
+      <span>{{preview}}</span>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; padding: 16px; border-top: 1px solid var(--st2)">
+    <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">{{primary}}</button>
+    <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">{{secondary}}</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"height":{"editor":"int","default":852},"mode":{"editor":"enum","options":["add","addGroups","addErrors","addPartial","edit"],"default":"add"},"$preview":{"width":480,"height":852}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--st2:#e0e0e0;--stacc:#616161;--sub:#f5f5f5;--brand:#8a5a00;--blink:#7d5200;--cbrand:#8a5a00;--rdfg:#bc2f32;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;--mbwrn:#fff9f5;--mbwrnbd:#fdcfb4;--mbwrni:#bc4b09;--fo:#000000;--sh16:0 0 2px rgba(0,0,0,.12),0 8px 16px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--st2:#525252;--stacc:#adadad;--sub:#383838;--brand:#7d5200;--blink:#c28a2a;--cbrand:#c28a2a;--rdfg:#e37d80;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;--mbwrn:#4a1e04;--mbwrnbd:#f7630c;--mbwrni:#f98845;--fo:#ffffff;--sh16:0 0 2px rgba(0,0,0,.24),0 8px 16px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    const height = this.props.height ?? 852;
+    const mode = this.props.mode ?? 'add';
+    const control = (state) => 'box-sizing: border-box; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; ' + (state === 'error' ? 'border-bottom: 2px solid var(--rdfg)' : state === 'focus' ? 'border-bottom: 2px solid var(--cbrand)' : 'border-bottom-color: var(--stacc)');
+    const single = (state) => 'height: 32px; padding: 0 10px; display: flex; align-items: center; gap: 8px; ' + control(state);
+    const multi = (state) => 'min-height: 32px; padding: 2px 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; ' + control(state);
+    const HOST = 'M3 4h14v12H3zM3 8h14M3 12h14';
+    const NET = 'M3 8h14v5H3zM6 10.5h.5M9 10.5h.5M12 5l2 3M8 5l-2 3';
+    const SVC = 'M3 7h14v9H3zM7 7V4.5h6V7';
+    const tag = (name, icon, bad) => ({ name, icon, style: 'height: 24px; box-sizing: border-box; padding: 0 2px 0 6px; display: inline-flex; align-items: center; gap: 4px; border-radius: 4px; font-size: 13px; ' + (bad ? 'background: var(--mberr); border: 1px solid var(--rdfg)' : 'background: var(--sub); border: 1px solid var(--st2)') });
+    const UPLINK = { name: 'uplinks_to', ends: 'HypervisorHost → NetworkDevice', description: 'A host’s uplink to a switch. Grouped by virtual switch: the host loses the network only if all its uplinks are down.' };
+    const MODES = {
+      add: {
+        ci: 'app-erp-db01', type: { name: 'runs_on', ends: 'VirtualMachine → HypervisorHost', description: 'A VM runs on a hypervisor host.' },
+        sideHelp: 'With runs_on, a VirtualMachine is always the dependent.', otherLabel: 'Depends on',
+        others: [tag('esx-mx-014', HOST)], help: 'One or more HypervisorHosts that aren’t retired.',
+        group: '', preview: 'app-erp-db01 runs_on esx-mx-014: app-erp-db01 depends on esx-mx-014.'
+      },
+      addGroups: {
+        ci: 'esx-mx-014', type: UPLINK, sideHelp: 'With uplinks_to, a HypervisorHost is always the dependent.', otherLabel: 'Depends on',
+        others: [tag('sw-core-03', NET), tag('sw-core-04', NET)], help: 'One or more NetworkDevices that aren’t retired. The type and group apply to each.',
+        group: 'vs', preview: 'esx-mx-014 uplinks_to 2 CIs: esx-mx-014 depends on sw-core-03 and sw-core-04.'
+      },
+      addErrors: {
+        ci: 'app-erp-db01', type: { name: 'depends_on', ends: 'Any type → Any type', description: 'A general dependency, set by hand.' },
+        sideHelp: '', otherLabel: 'Depended on by',
+        others: [tag('ERP', SVC, true)], help: 'One or more CIs that aren’t retired.', errorText: 'ERP depends_on app-erp-db01 already exists.',
+        group: 'ERP listener, primary and secondary site, reporting replica, the DR copy in the second data centre and the read-only routing list the finance team asked for in the change of 2026-09-02 (CHG-20931), plus the old name kept until the cut-over in November',
+        preview: 'ERP depends_on app-erp-db01: ERP depends on app-erp-db01.'
+      },
+      addPartial: {
+        ci: 'esx-mx-014', type: UPLINK, sideHelp: 'With uplinks_to, a HypervisorHost is always the dependent.', otherLabel: 'Depends on',
+        others: [tag('sw-core-02', NET, true)], help: 'One or more NetworkDevices that aren’t retired. The type and group apply to each.', errorText: 'esx-mx-014 uplinks_to sw-core-02 already exists.',
+        group: 'vSwitch0', preview: 'esx-mx-014 uplinks_to sw-core-02: esx-mx-014 depends on sw-core-02.'
+      },
+      edit: {
+        ci: 'app-erp-db01', type: { name: 'runs_on', ends: '', description: '' }, sideHelp: '', otherLabel: 'Depends on', others: [], help: '',
+        group: '', preview: 'app-erp-db01 runs_on esx-mx-014: app-erp-db01 depends on esx-mx-014.'
+      }
+    };
+    const m = MODES[mode];
+    const errors = mode === 'addErrors';
+    const partial = mode === 'addPartial';
+    const isEdit = mode === 'edit';
+    const groupOpen = mode === 'addGroups';
+    const bad = errors || partial;
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: 480px; height: ' + height + 'px; box-sizing: border-box; display: flex; flex-direction: column; background: var(--bg1); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      title: isEdit ? 'Edit runs_on esx-mx-014' : 'Add relationship to ' + m.ci,
+      primary: isEdit ? 'Save' : 'Add',
+      secondary: partial ? 'Close' : 'Cancel',
+      showSummary: errors,
+      showPartial: partial,
+      editable: !isEdit,
+      readOnly: isEdit,
+      ciName: m.ci,
+      type: m.type,
+      controlStyle: single(''),
+      sideText: !isEdit && !errors,
+      sideRadio: errors,
+      sideHelp: m.sideHelp,
+      otherLabel: m.otherLabel,
+      others: m.others,
+      otherPlaceholder: m.others.length ? 'Add another' : 'Search CIs by name',
+      otherStyle: multi(bad ? 'error' : ''),
+      otherInvalid: bad ? 'true' : 'false',
+      otherError: bad,
+      otherErrorText: m.errorText ?? '',
+      otherHelpText: m.help,
+      roStyle: 'height: 32px; box-sizing: border-box; padding: 0 10px; display: flex; align-items: center; gap: 8px; background: var(--bg2); border: 1px solid var(--st2); border-radius: 4px; color: var(--fg1)',
+      groupStyle: single(errors ? 'error' : groupOpen || isEdit ? 'focus' : ''),
+      groupValue: m.group,
+      groupInvalid: errors ? 'true' : 'false',
+      groupError: errors,
+      groupOpen,
+      groupExpanded: groupOpen ? 'true' : 'false',
+      preview: m.preview
+    };
+  }
+}
+</script>
+</body>
+</html>

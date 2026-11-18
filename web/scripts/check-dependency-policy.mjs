@@ -9,9 +9,15 @@
 //   - a lockfile entry resolves from anywhere other than the registry;
 //   - a pnpm/npm supply-chain setting is missing or weakened, or any setting
 //     outside the reviewed allow-lists appears (e.g. a scoped registry);
+//   - an override forces a package that dependency-allowlist.json doesn't list
+//     under "overrides", or to another version than the exact one listed there;
+//   - an audit exception ("auditIgnores") lacks a reason or a removal condition,
+//     its review date is missing, not a real day, more than 30 days away or past
+//     (the image build alone skips the last, with --skip-review-dates), or the
+//     lockfile no longer holds its package at exactly the version listed;
 //   - package.json declares install lifecycle scripts.
 //
-// Usage: node scripts/check-dependency-policy.mjs [webDir]
+// Usage: node scripts/check-dependency-policy.mjs [webDir] [--skip-review-dates]
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -45,10 +51,18 @@ const REQUIRED_PNPM_SETTINGS = {
 
 /**
  * The only settings pnpm-workspace.yaml may contain. Anything else (registries,
- * overrides, policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or
- * weaken installs and must be reviewed by changing this list.
+ * policy exclusions, dangerouslyAllowAllBuilds, ...) can redirect or weaken
+ * installs and must be reviewed by changing this list. "overrides" may only name
+ * packages that dependency-allowlist.json lists under "overrides", each at the
+ * exact version listed there (owner, 2026-11-05).
  */
-const ALLOWED_PNPM_SETTINGS = new Set([...Object.keys(REQUIRED_PNPM_SETTINGS), 'allowBuilds', 'savePrefix']);
+const ALLOWED_PNPM_SETTINGS = new Set([
+  ...Object.keys(REQUIRED_PNPM_SETTINGS),
+  'allowBuilds',
+  'savePrefix',
+  'overrides',
+  'auditConfig',
+]);
 
 /**
  * The only keys .npmrc may contain, with their required values. Scoped
@@ -75,6 +89,10 @@ const LIFECYCLE_SCRIPTS = [
 ];
 
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+/** A GitHub advisory ID, the only kind of ID pnpm audit may ignore (auditConfig.ignoreGhsas). */
+export const GHSA_ID = /^GHSA(?:-[23456789cfghjmpqrvwx]{4}){3}$/;
+/** A plain package name: an override key with a selector ("a>b", "a@1") is refused. */
+const PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/;
 const PACKAGE_MANAGER_PIN = /^pnpm@\d+\.\d+\.\d+\+sha512\.[0-9a-f]{128}$/;
 
 function stripComment(line) {
@@ -100,19 +118,33 @@ export function parseWorkspaceYaml(text) {
   const settings = {};
   const errors = [];
   let currentMap = null;
+  // A key in a block map with no value holds a list ("auditConfig: ignoreGhsas: - GHSA-..."), the one nesting read.
+  let currentList = null;
   for (const raw of text.split(/\r?\n/)) {
     const line = stripComment(raw);
     if (line.trim() === '') continue;
     const indented = /^\s/.test(line);
     if (indented) {
-      const m = line.match(/^\s+(['"]?)([^'":]+)\1:\s*(.*)$/);
+      const item = line.match(/^\s{4}-\s+(\S+)\s*$/);
+      if (item && currentMap && currentList) {
+        settings[currentMap][currentList].push(unquote(item[1]));
+        continue;
+      }
+      const m = line.match(/^ {2}(['"]?)([^'":\s][^'":]*)\1:\s*(.*)$/);
       if (!currentMap || !m) {
         errors.push(`pnpm-workspace.yaml: unsupported structure near "${raw.trim()}"`);
         continue;
       }
-      settings[currentMap][m[2]] = unquote(m[3]);
+      if (m[3] === '') {
+        settings[currentMap][m[2]] = [];
+        currentList = m[2];
+      } else {
+        settings[currentMap][m[2]] = unquote(m[3]);
+        currentList = null;
+      }
       continue;
     }
+    currentList = null;
     const m = line.match(/^([A-Za-z][A-Za-z0-9]*):\s*(.*)$/);
     if (!m) {
       errors.push(`pnpm-workspace.yaml: unsupported line "${raw.trim()}"`);
@@ -239,7 +271,7 @@ export function parseLockfile(text) {
     }
   };
 
-  onlyKeys(root, ['lockfileVersion', 'settings', 'importers', 'packages', 'snapshots']);
+  onlyKeys(root, ['lockfileVersion', 'settings', 'overrides', 'importers', 'packages', 'snapshots']);
   const section = (key) => root.children.get(key);
   if (section('lockfileVersion')?.value !== "'9.0'") errors.push("pnpm-lock.yaml: lockfileVersion must be '9.0'");
 
@@ -249,6 +281,21 @@ export function parseLockfile(text) {
     onlyKeys(settings, ['autoInstallPeers', 'excludeLinksFromLockfile']);
     for (const s of settings.children.values())
       if (!BOOLEAN.test(s.value ?? '')) fail(s, `"${s.key}" must be true or false`);
+  }
+
+  // pnpm copies pnpm-workspace.yaml's overrides here; checkPolicy compares the two.
+  const overrides = {};
+  const overridesNode = section('overrides');
+  if (overridesNode) {
+    expectBlock(overridesNode);
+    for (const o of overridesNode.children.values()) {
+      if (!PACKAGE_NAME.test(o.key) || !EXACT_VERSION.test(o.value ?? '') || o.children.size > 0)
+        fail(o, `override "${o.key}" must be a package name at an exact version`);
+      else {
+        addName(o.key, o);
+        overrides[o.key] = o.value;
+      }
+    }
   }
 
   const importers = section('importers');
@@ -271,11 +318,16 @@ export function parseLockfile(text) {
     }
   }
 
+  // Each package's versions, for the audit exceptions' check.
+  const versions = new Map();
   const packages = section('packages');
   if (packages) {
     expectBlock(packages);
     for (const entry of packages.children.values()) {
-      addName(nameFromLockKey(entry.key), entry);
+      const name = nameFromLockKey(entry.key);
+      addName(name, entry);
+      if (!versions.has(name)) versions.set(name, new Set());
+      versions.get(name).add(entry.key.slice(name.length + 1));
       expectBlock(entry);
       onlyKeys(entry, [
         'resolution',
@@ -343,7 +395,7 @@ export function parseLockfile(text) {
       }
     }
   }
-  return { errors, names };
+  return { errors, names, overrides, versions };
 }
 
 function readJson(path, errors) {
@@ -362,7 +414,10 @@ function checkForbidden(name, where, errors) {
 }
 
 /** Returns a list of policy violations for the web project in `webDir`. */
-export function checkPolicy(webDir) {
+/** How far ahead an audit exception's review date may be (owner, 2026-11-18). */
+export const AUDIT_REVIEW_DAYS = 30;
+
+export function checkPolicy(webDir, { now = new Date(), reviewDates = true } = {}) {
   const errors = [];
   const pkgPath = join(webDir, 'package.json');
   const allowPath = join(webDir, 'dependency-allowlist.json');
@@ -415,6 +470,59 @@ export function checkPolicy(webDir) {
       }
     }
   }
+  const allowedOverrides = allow.overrides ?? {};
+  for (const [name, entry] of Object.entries(allowedOverrides)) {
+    checkForbidden(name, 'dependency-allowlist.json overrides', errors);
+    if (!PACKAGE_NAME.test(name)) errors.push(`dependency-allowlist.json: override "${name}" must be a package name`);
+    if (!EXACT_VERSION.test(entry?.version ?? '')) {
+      errors.push(`dependency-allowlist.json: override "${name}" needs an exact "version"`);
+    }
+    for (const field of ['justification', 'remove']) {
+      if (typeof entry?.[field] !== 'string' || entry[field].trim().length < 10) {
+        errors.push(`dependency-allowlist.json: override "${name}" needs "${field}"`);
+      }
+    }
+  }
+
+  const auditIgnores = allow.auditIgnores ?? {};
+  for (const [id, entry] of Object.entries(auditIgnores)) {
+    if (!GHSA_ID.test(id))
+      errors.push(`dependency-allowlist.json: audit exception "${id}" must be a GitHub advisory ID`);
+    if (!PACKAGE_NAME.test(entry?.package ?? '')) {
+      errors.push(`dependency-allowlist.json: audit exception "${id}" needs the "package" it is for`);
+    }
+    if (!EXACT_VERSION.test(entry?.version ?? '')) {
+      errors.push(`dependency-allowlist.json: audit exception "${id}" needs the package's exact "version"`);
+    }
+    for (const field of ['justification', 'remove']) {
+      if (typeof entry?.[field] !== 'string' || entry[field].trim().length < 10) {
+        errors.push(`dependency-allowlist.json: audit exception "${id}" needs "${field}"`);
+      }
+    }
+    // A fix published on npm doesn't move the lockfile, so each exception is re-checked by a date: past it the check
+    // fails (CI's weekly run on main with it) until the entry is removed or given a new date. The image build alone
+    // skips that (reviewDates false), so an image, an old commit's included, always builds (owner, 2026-11-18).
+    const today = now.toISOString().slice(0, 10);
+    const latest = new Date(now.getTime() + AUDIT_REVIEW_DAYS * 86_400_000).toISOString().slice(0, 10);
+    const reviewBy = entry?.reviewBy;
+    // A real calendar day: the date read back must be the one written ("2026-11-31" reads back as "2026-12-01").
+    const real =
+      typeof reviewBy === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(reviewBy) &&
+      !Number.isNaN(Date.parse(`${reviewBy}T00:00:00Z`)) &&
+      new Date(`${reviewBy}T00:00:00Z`).toISOString().slice(0, 10) === reviewBy;
+    if (!real) {
+      errors.push(`dependency-allowlist.json: audit exception "${id}" needs "reviewBy", a date (YYYY-MM-DD)`);
+    } else if (reviewDates && reviewBy < today) {
+      errors.push(
+        `dependency-allowlist.json: audit exception "${id}" was to be reviewed by ${reviewBy}; re-check the advisory, then remove the entry or give it a new date at most ${AUDIT_REVIEW_DAYS} days away`,
+      );
+    } else if (reviewBy > latest) {
+      errors.push(
+        `dependency-allowlist.json: audit exception "${id}" is to be reviewed by ${reviewBy}, more than ${AUDIT_REVIEW_DAYS} days away`,
+      );
+    }
+  }
 
   // --- pnpm-workspace.yaml -------------------------------------------------
   const wsPath = join(webDir, 'pnpm-workspace.yaml');
@@ -434,6 +542,57 @@ export function checkPolicy(webDir) {
         errors.push(
           `pnpm-workspace.yaml: "${key}" is not on the reviewed settings list; settings such as registries, overrides or policy exclusions can redirect or weaken installs`,
         );
+      }
+    }
+    const overrides = settings.overrides ?? {};
+    if (typeof overrides !== 'object' || overrides === null) {
+      errors.push('pnpm-workspace.yaml: "overrides" must be a map');
+    } else {
+      for (const [name, version] of Object.entries(overrides)) {
+        const entry = allowedOverrides[name];
+        if (!entry) {
+          errors.push(
+            `pnpm-workspace.yaml: override "${name}" is not in dependency-allowlist.json "overrides"; forcing a version requires a reviewed entry with a reason and when to remove it`,
+          );
+        } else if (version !== entry.version || !EXACT_VERSION.test(version)) {
+          errors.push(
+            `pnpm-workspace.yaml: override "${name}" must be the exact version dependency-allowlist.json lists (${entry.version}), found "${version}"`,
+          );
+        }
+      }
+      for (const name of Object.keys(allowedOverrides)) {
+        if (!(name in overrides)) {
+          errors.push(
+            `dependency-allowlist.json: override "${name}" isn't in pnpm-workspace.yaml; remove the entry with the override`,
+          );
+        }
+      }
+    }
+    const auditConfig = settings.auditConfig ?? {};
+    const ignored = Array.isArray(auditConfig.ignoreGhsas) ? auditConfig.ignoreGhsas : [];
+    if (typeof auditConfig !== 'object' || auditConfig === null || Array.isArray(auditConfig)) {
+      errors.push('pnpm-workspace.yaml: "auditConfig" must be a map');
+    } else {
+      for (const key of Object.keys(auditConfig)) {
+        if (key !== 'ignoreGhsas' || !Array.isArray(auditConfig[key])) {
+          errors.push(
+            `pnpm-workspace.yaml: auditConfig may hold only "ignoreGhsas", a list of advisories listed in dependency-allowlist.json "auditIgnores" (found "${key}")`,
+          );
+        }
+      }
+      for (const id of ignored) {
+        if (!auditIgnores[id]) {
+          errors.push(
+            `pnpm-workspace.yaml: audit exception "${id}" is not in dependency-allowlist.json "auditIgnores"; ignoring an advisory requires a reviewed entry with the package, its version, why and when to remove it`,
+          );
+        }
+      }
+      for (const id of Object.keys(auditIgnores)) {
+        if (!ignored.includes(id)) {
+          errors.push(
+            `dependency-allowlist.json: audit exception "${id}" isn't in pnpm-workspace.yaml auditConfig.ignoreGhsas; remove the entry with it`,
+          );
+        }
       }
     }
     const builds = settings.allowBuilds;
@@ -472,9 +631,33 @@ export function checkPolicy(webDir) {
   if (!existsSync(lockPath)) {
     if (hasDeps) errors.push('pnpm-lock.yaml is missing; installs must use a committed lockfile');
   } else {
-    const { errors: lockErrors, names } = parseLockfile(readFileSync(lockPath, 'utf8'));
+    const {
+      errors: lockErrors,
+      names,
+      overrides: lockOverrides,
+      versions,
+    } = parseLockfile(readFileSync(lockPath, 'utf8'));
+    // An audit exception holds only while the lockfile has its package at exactly the version it was granted for.
+    for (const [id, entry] of Object.entries(auditIgnores)) {
+      const held = [...(versions.get(entry?.package) ?? [])].sort();
+      if (held.length !== 1 || held[0] !== entry?.version) {
+        errors.push(
+          `dependency-allowlist.json: audit exception "${id}" is for ${entry?.package} ${entry?.version}, but the lockfile has ${held.length > 0 ? held.join(', ') : 'none'}; re-check the advisory, then remove or update the entry`,
+        );
+      }
+    }
     errors.push(...lockErrors);
     for (const name of names) checkForbidden(name, 'pnpm-lock.yaml', errors);
+    const wanted = existsSync(wsPath)
+      ? (parseWorkspaceYaml(readFileSync(wsPath, 'utf8')).settings.overrides ?? {})
+      : {};
+    const same = (a, b) =>
+      Object.keys(a).length === Object.keys(b).length && Object.entries(a).every(([k, v]) => b[k] === v);
+    if (typeof wanted === 'object' && wanted !== null && !same(wanted, lockOverrides)) {
+      errors.push(
+        'pnpm-lock.yaml: its "overrides" differ from pnpm-workspace.yaml\'s; run pnpm install and commit the lockfile',
+      );
+    }
   }
 
   return errors;
@@ -482,8 +665,10 @@ export function checkPolicy(webDir) {
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
-  const webDir = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..'));
-  const errors = checkPolicy(webDir);
+  const args = process.argv.slice(2);
+  const dir = args.find((a) => !a.startsWith('--'));
+  const webDir = resolve(dir ?? join(dirname(fileURLToPath(import.meta.url)), '..'));
+  const errors = checkPolicy(webDir, { reviewDates: !args.includes('--skip-review-dates') });
   if (errors.length > 0) {
     console.error(`Dependency policy check FAILED (${errors.length} problem(s)):`);
     for (const e of errors) console.error(`  - ${e}`);
