@@ -20,7 +20,7 @@ Working rules from HANDOFF that change how you act:
 
 ## Commands
 
-Toolchain is pinned and must match exactly: .NET SDK 10.0.402 (`global.json`, `rollForward: disable`), Node 24.21.0 (`.node-version`), pnpm 11.28.5 via Corepack (`corepack enable pnpm`; ignore pnpm's upgrade banner). On Linux/WSL the SDK needs ICU (`libicu`); don't work around it with invariant globalization, which `Microsoft.Data.SqlClient` refuses.
+Toolchain is pinned and must match exactly: .NET SDK 10.0.404 (`global.json`, `rollForward: disable`; the Dockerfile's SDK image must name the same version, which `tests/toolchain/check-sdk-pins.sh` checks in CI), Node 24.21.0 (`.node-version`), pnpm 11.28.5 via Corepack (`corepack enable pnpm`; ignore pnpm's upgrade banner). On Linux/WSL the SDK needs ICU (`libicu`); don't work around it with invariant globalization, which `Microsoft.Data.SqlClient` refuses.
 
 Back end (solution `Goldmark.slnx`; tests use xUnit v3 on Microsoft Testing Platform):
 

@@ -16,7 +16,7 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | DEC-001 | Approved scope: slice 1 only; PRD stays a draft | Process |
 | DEC-002 | Phase-2 scaffold = PRD slice 1; numbering kept | Process |
 | DEC-003 | Repository, branches and bootstrap commit | Process |
-| DEC-004 | Toolchain pins: .NET SDK 10.0.402, Node 24.21.0, pnpm 11.28.5 | Build |
+| DEC-004 | Toolchain pins: .NET SDK 10.0.404, Node 24.21.0, pnpm 11.28.5 | Build |
 | DEC-005 | One ASP.NET Core project for now | Structure |
 | DEC-006 | HTTPS-only host; first-start certificate persisted in a volume | Security |
 | DEC-007 | HSTS automatic: on with an operator certificate, off with self-signed | Security |
@@ -92,9 +92,22 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 
 | Tool | Pin | Why this version |
 |---|---|---|
-| .NET SDK | 10.0.402, `rollForward: disable` (`global.json`) | Matches the digest-pinned SDK image; LTS. `global.json` also selects Microsoft.Testing.Platform for `dotnet test` (required by xUnit v3 4.x on the .NET 10 SDK). |
+| .NET SDK | 10.0.404, `rollForward: disable` (`global.json`) | Matches the digest-pinned SDK image (`tests/toolchain/check-sdk-pins.sh` fails CI when they differ); LTS. `global.json` also selects Microsoft.Testing.Platform for `dotnet test` (required by xUnit v3 4.x on the .NET 10 SDK). |
 | Node.js | 24.21.0 (`.node-version`, `engines`) | Active LTS. 24.22.0 was 2 days old (7-day rule). Node 22 is in maintenance. Build-time only; no Node.js at runtime (D1). |
 | pnpm | 11.28.5 by sha512 (`packageManager`, Corepack) | pnpm 11 ships supply-chain defaults (release age, `blockExoticSubdeps`, `strictDepBuilds`) and is mature (since 2026-04). pnpm 12 is a 7-week-old Rust rewrite that itself needs install scripts. 11.28.6 was 1 day old. |
+
+- **SDK 10.0.404 and runtime 10.0.15 (owner, 2026-11-18, AskUserQuestion).**
+  Dependabot's PR #64 moved `global.json` to 10.0.403 while the Dockerfile kept
+  the 10.0.402 image (Dependabot doesn't propose the images' `ARG` defaults); its
+  Compose smoke was skipped because its npm audit failed first, so the image was
+  never built before the merge, and after it every image build failed at
+  `dotnet restore`. The owner chose "A. Fix PR with a guard (Recommended)" and
+  "A. 10.0.404 + runtime 10.0.15 (Recommended)": `global.json`, the SDK image and
+  the runtime image (10.0.13, two security releases behind) move to the
+  2026-11-10 security release, and `tests/toolchain/check-sdk-pins.sh`, with its
+  self-test, runs before `setup-dotnet` in the .NET and Windows jobs, so a split
+  fails CI even when the web job fails first. Rejected: B, the fix without the
+  guard; C, reverting #64; and staying on 10.0.403 with runtime 10.0.14.
 
 ## DEC-005 One ASP.NET Core project for now
 
@@ -320,8 +333,8 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 | Stage | Image |
 |---|---|
 | web build | `node:24.21.0-trixie-slim@sha256:173f1258…fb66` |
-| API build | `mcr.microsoft.com/dotnet/sdk:10.0.402-noble@sha256:0d99ebf1…5ffa` |
-| runtime | `mcr.microsoft.com/dotnet/aspnet:10.0.13-noble-chiseled-extra@sha256:3ed65580…4374` |
+| API build | `mcr.microsoft.com/dotnet/sdk:10.0.404-noble@sha256:bef136a3…c9b4` |
+| runtime | `mcr.microsoft.com/dotnet/aspnet:10.0.15-noble-chiseled-extra@sha256:cae5b962…115b` |
 | database | `mcr.microsoft.com/mssql/server:2025-CU9-GDR1-ubuntu-24.04@sha256:742481d1…bab2` |
 
 - Runtime is **chiseled** (no shell or package manager), uid 1654. The

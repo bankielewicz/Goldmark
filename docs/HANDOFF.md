@@ -671,7 +671,7 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
 
 ### 5.4 .NET and tooling
 
-- Pins: .NET SDK 10.0.402 (`global.json`), Node 24.21.0, pnpm 11.28.5 via
+- Pins: .NET SDK 10.0.404 (`global.json`), Node 24.21.0, pnpm 11.28.5 via
   Corepack (sha512-pinned `packageManager`). NuGet: nuget.org only, source
   mapping, signatures required, lock files, `--locked-mode`, NuGetAudit as
   errors. `System.Security.Cryptography.Pkcs` is pinned to 10.0.13 (a recorded
