@@ -307,14 +307,14 @@ describe('audit exceptions', () => {
       'GHSA-fc5q-39xc-vjpf'
     ].reviewBy;
     const day = (offset) => new Date(Date.parse(`${reviewBy}T12:00:00Z`) + offset * 86_400_000);
-    assert.ok(!checkPolicy(dir, { now: day(0), reviewDates: true }).some((e) => e.includes('reviewed by')));
+    assert.ok(!checkPolicy(dir, { now: day(0) }).some((e) => e.includes('reviewed by')));
     assert.ok(
-      checkPolicy(dir, { now: day(1), reviewDates: true }).some((e) =>
+      checkPolicy(dir, { now: day(1) }).some((e) =>
         e.includes(`"GHSA-fc5q-39xc-vjpf" was to be reviewed by ${reviewBy}; re-check the advisory`),
       ),
     );
-    // Only CI's policy job checks the date: the image build and the tests still pass after it.
-    assert.ok(!checkPolicy(dir, { now: day(1) }).some((e) => e.includes('reviewed by')));
+    // The image build alone skips the passed date, so an image still builds after it.
+    assert.ok(!checkPolicy(dir, { now: day(1), reviewDates: false }).some((e) => e.includes('reviewed by')));
     assert.ok(checkPolicy(dir, { now: day(-31) }).some((e) => e.includes('more than 30 days away')));
     editJson(dir, 'dependency-allowlist.json', (a) => {
       delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy;
@@ -334,7 +334,7 @@ describe('audit exceptions', () => {
     }
   });
 
-  it('checks a passed review date only with --review-dates, as the CI policy job runs it', () => {
+  it('fails on a passed review date, unless run as the image build does', () => {
     editJson(dir, 'dependency-allowlist.json', (a) => {
       a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy = '2026-01-05';
     });
@@ -342,10 +342,10 @@ describe('audit exceptions', () => {
       spawnSync(process.execPath, [join(webDir, 'scripts', 'check-dependency-policy.mjs'), dir, ...flags], {
         encoding: 'utf8',
       });
-    assert.equal(run().status, 0);
-    const ci = run('--review-dates');
-    assert.equal(ci.status, 1);
-    assert.match(ci.stderr, /was to be reviewed by 2026-01-05/);
+    const standard = run();
+    assert.equal(standard.status, 1);
+    assert.match(standard.stderr, /was to be reviewed by 2026-01-05/);
+    assert.equal(run('--skip-review-dates').status, 0);
   });
 
   it('fails on any other audit setting', () => {

@@ -12,12 +12,12 @@
 //   - an override forces a package that dependency-allowlist.json doesn't list
 //     under "overrides", or to another version than the exact one listed there;
 //   - an audit exception ("auditIgnores") lacks a reason or a removal condition,
-//     its review date is missing, not a real day or more than 30 days away (with
-//     --review-dates, as CI's policy job runs it, also once the date has passed),
-//     or the lockfile no longer holds its package at exactly the version listed;
+//     its review date is missing, not a real day, more than 30 days away or past
+//     (the image build alone skips the last, with --skip-review-dates), or the
+//     lockfile no longer holds its package at exactly the version listed;
 //   - package.json declares install lifecycle scripts.
 //
-// Usage: node scripts/check-dependency-policy.mjs [webDir] [--review-dates]
+// Usage: node scripts/check-dependency-policy.mjs [webDir] [--skip-review-dates]
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -417,7 +417,7 @@ function checkForbidden(name, where, errors) {
 /** How far ahead an audit exception's review date may be (owner, 2026-11-18). */
 export const AUDIT_REVIEW_DAYS = 30;
 
-export function checkPolicy(webDir, { now = new Date(), reviewDates = false } = {}) {
+export function checkPolicy(webDir, { now = new Date(), reviewDates = true } = {}) {
   const errors = [];
   const pkgPath = join(webDir, 'package.json');
   const allowPath = join(webDir, 'dependency-allowlist.json');
@@ -499,9 +499,9 @@ export function checkPolicy(webDir, { now = new Date(), reviewDates = false } = 
         errors.push(`dependency-allowlist.json: audit exception "${id}" needs "${field}"`);
       }
     }
-    // A fix published on npm doesn't move the lockfile, so each exception is re-checked by a date: past it CI's policy
-    // job (reviewDates) fails, and its weekly run on main with it, until the entry is removed or given a new date. The
-    // image build and the tests don't check that, so a commit still builds after its date (a side agent's note).
+    // A fix published on npm doesn't move the lockfile, so each exception is re-checked by a date: past it the check
+    // fails (CI's weekly run on main with it) until the entry is removed or given a new date. The image build alone
+    // skips that (reviewDates false), so an image, an old commit's included, always builds (owner, 2026-11-18).
     const today = now.toISOString().slice(0, 10);
     const latest = new Date(now.getTime() + AUDIT_REVIEW_DAYS * 86_400_000).toISOString().slice(0, 10);
     const reviewBy = entry?.reviewBy;
@@ -668,7 +668,7 @@ if (isMain) {
   const args = process.argv.slice(2);
   const dir = args.find((a) => !a.startsWith('--'));
   const webDir = resolve(dir ?? join(dirname(fileURLToPath(import.meta.url)), '..'));
-  const errors = checkPolicy(webDir, { reviewDates: args.includes('--review-dates') });
+  const errors = checkPolicy(webDir, { reviewDates: !args.includes('--skip-review-dates') });
   if (errors.length > 0) {
     console.error(`Dependency policy check FAILED (${errors.length} problem(s)):`);
     for (const e of errors) console.error(`  - ${e}`);

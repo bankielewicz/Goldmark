@@ -20,7 +20,8 @@ WORKDIR /src/web
 # Policy files first: the dependency policy check runs before anything is installed.
 COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml web/.npmrc web/dependency-allowlist.json ./
 COPY web/scripts/check-dependency-policy.mjs web/scripts/check-installed-tree.mjs ./scripts/
-RUN node scripts/check-dependency-policy.mjs
+# An audit exception's passed review date fails CI, never an image build (DEC-011).
+RUN node scripts/check-dependency-policy.mjs --skip-review-dates
 # Corepack verifies the pinned pnpm by its sha512 from package.json.
 RUN corepack enable pnpm && pnpm install --frozen-lockfile
 COPY web/ ./
