@@ -317,6 +317,18 @@ describe('audit exceptions', () => {
       delete a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy;
     });
     assert.ok(checkPolicy(dir).some((e) => e.includes('"GHSA-fc5q-39xc-vjpf" needs "reviewBy"')));
+    // A day that doesn't exist is no date, even where it would sort inside the window.
+    for (const bad of ['2026-11-31', '2026-12-00', '2026-02-29', '2026-13-01', '2026-12-1']) {
+      editJson(dir, 'dependency-allowlist.json', (a) => {
+        a.auditIgnores['GHSA-fc5q-39xc-vjpf'].reviewBy = bad;
+      });
+      assert.ok(
+        checkPolicy(dir, { now: new Date('2026-11-20T12:00:00Z') }).some((e) =>
+          e.includes('"GHSA-fc5q-39xc-vjpf" needs "reviewBy", a date (YYYY-MM-DD)'),
+        ),
+        bad,
+      );
+    }
   });
 
   it('fails on any other audit setting', () => {

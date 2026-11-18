@@ -503,7 +503,13 @@ export function checkPolicy(webDir, { now = new Date() } = {}) {
     const today = now.toISOString().slice(0, 10);
     const latest = new Date(now.getTime() + AUDIT_REVIEW_DAYS * 86_400_000).toISOString().slice(0, 10);
     const reviewBy = entry?.reviewBy;
-    if (typeof reviewBy !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(reviewBy)) {
+    // A real calendar day: the date read back must be the one written ("2026-11-31" reads back as "2026-12-01").
+    const real =
+      typeof reviewBy === 'string' &&
+      /^\d{4}-\d{2}-\d{2}$/.test(reviewBy) &&
+      !Number.isNaN(Date.parse(`${reviewBy}T00:00:00Z`)) &&
+      new Date(`${reviewBy}T00:00:00Z`).toISOString().slice(0, 10) === reviewBy;
+    if (!real) {
       errors.push(`dependency-allowlist.json: audit exception "${id}" needs "reviewBy", a date (YYYY-MM-DD)`);
     } else if (reviewBy < today) {
       errors.push(
