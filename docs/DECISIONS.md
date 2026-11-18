@@ -313,18 +313,21 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
   `pnpm audit --audit-level low` is unchanged.
 - **One copy of each package (owner, 2026-11-18, AskUserQuestion):** Dependabot's
   update of `@fluentui/react-components` to 9.75.2 kept the old and the new
-  version of 16 `@fluentui` packages side by side in `pnpm-lock.yaml` (Fluent's
-  packages ask for each other with `*`, so the versions already locked still
-  satisfied the ones it didn't touch). The bundle then held two copies of
+  version of 16 `@fluentui` packages side by side in `pnpm-lock.yaml`: the
+  versions already locked still satisfied the ranges of the packages around the
+  ones it moved (seen: `@fluentui/react-motion-components-preview` 0.15.10 asks
+  for `@fluentui/react-motion` with `*`, and got the old 9.16.4 while
+  `@fluentui/react-dialog` got 9.16.5). The bundle then held two copies of
   `@fluentui/react-motion`, and every Dialog threw "presenceFn is not a function"
   when it opened. Lint, typecheck, build and the unit tests passed; only the
   Compose smoke's browser tests failed, minutes in, as a dialog that never
   appeared and a page that hung. The owner chose "A. Add it to the Web job
   (Recommended)": CI's Web job runs `pnpm dedupe --check` (`pnpm run
   policy:dedupe`) after the install, and it fails when `pnpm dedupe` would remove
-  a copy. The fix is `pnpm dedupe` and committing the lockfile; it adds no
-  package and no newer version (on 2026-11-18 it removed 16 and added none, and
-  `main`'s lockfile passed the check). It asks the registry, as the install
+  a copy. The fix is `pnpm dedupe` and committing the lockfile (on 2026-11-18 it
+  removed 16 packages and added none; `main`'s lockfile passed the check; the
+  check was run with `CI=true` both ways: exit 0 on the deduplicated lockfile,
+  exit 1 on Dependabot's). It asks the registry, as the install
   before it does, so it is not part of the policy job that runs before any
   install. Rejected: B, relying on the smoke alone (it caught this, slowly and
   unreadably).
@@ -1405,17 +1408,28 @@ private, the agent's GitHub API token could not see it (public-repository scope 
   `web/src/ui/combobox.ts`; `web/tests/combobox-expand-icon.test.mjs` checks all of them and that the
   installed Fluent still honours it). Tab moves from field to field as on the approved boards, the
   keyboard opens the list from the field (typing, the arrow keys), and the arrow stays a pointer
-  shortcut, as in the WAI-ARIA combobox pattern's examples. Rejected: B, keeping the stop and making
+  shortcut. The WAI-ARIA combobox examples do the same: their button has `tabindex="-1"`, which
+  "removes the button from the tab sequence of the page because its function is redundant with the
+  keyboard operation of the combobox"
+  (https://www.w3.org/WAI/ARIA/apg/patterns/combobox/examples/combobox-autocomplete-list/, read
+  2026-11-18). Rejected: B, keeping the stop and making
   the arrow 24 px (a visible difference from the boards and one more Tab press per Combobox).
   **What this does not claim:** the arrow is not 24 px. It is the size it was before the update, under
   WCAG 2.2's target size (2.5.8). axe's `target-size` rule fails an undersized target only when Tab
   can reach it: as a tab stop the two arrows of the audit log's filters failed; out of the Tab order
   axe reports them as "needs review", which the browser tests (serious and critical violations only)
   don't count; before 9.17.8 the arrow wasn't focusable and axe didn't look at it. The arrow is
-  acceptable under 2.5.8's "equivalent" exception: a click anywhere in the field opens the same list
-  (Fluent's trigger toggles the list on click; the browser tests open Comboboxes that way), and the
-  field is a full-size target. A design that drops that equivalence (a field that no longer opens on
-  click) must make the arrow 24 px.
+  acceptable under 2.5.8's "Equivalent" exception ("The function can be achieved through a different
+  control on the same page that meets this criterion",
+  https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html, read 2026-11-18): a click
+  anywhere in the field opens the same list (Fluent's trigger toggles the list on click; the browser
+  tests open Comboboxes that way), and the field is at least 24 px high in every Fluent size (24, 32,
+  40 px). A design that drops that equivalence (a field that no longer opens on click) must make the
+  arrow 24 px.
+  **The look** was checked by comparing Fluent's style files, 9.74.9 against 9.75.2, not by eye: the
+  rules that changed for components Goldmark renders apply to font-glyph icons (Goldmark uses SVG
+  icons only) and to Windows high-contrast mode (menu items and checked toggle buttons there use the
+  system highlight colours).
 
 ## DEC-041 Slice 4: audit retention by a bounded procedure, a 365-day floor, exports audited
 
