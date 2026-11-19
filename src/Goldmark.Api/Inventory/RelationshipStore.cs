@@ -152,14 +152,14 @@ internal sealed class RelationshipStore(DbSession db)
         WHERE FromCiId = @id AND TenantId = @tenant AND RedundancyGroup IS NOT NULL;
         """;
 
-    // CreatedAt comes from its default (0008).
+    // CreatedAt comes from its default (0008), ChangedBy from the connection's acting principal (0009; DbSession).
     private const string InsertSql = """
         INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
-        VALUES (@id, @tenant, @from, @to, @typeId, @group, @changedBy);
+        VALUES (@id, @tenant, @from, @to, @typeId, @group, DEFAULT);
         """;
 
     private const string UpdateSql = """
-        UPDATE cmdb.Relationship SET RedundancyGroup = @group, ChangedBy = @changedBy
+        UPDATE cmdb.Relationship SET RedundancyGroup = @group, ChangedBy = DEFAULT
         WHERE Id = @id AND TenantId = @tenant;
         """;
 
@@ -214,11 +214,11 @@ internal sealed class RelationshipStore(DbSession db)
                 g.Count()))
             .OrderBy(g => g.Name, StringComparer.OrdinalIgnoreCase).ThenBy(g => g.Name, StringComparer.Ordinal)];
 
-    public Task InsertAsync(Guid id, Guid from, Guid to, int typeId, string? group, Guid changedBy) =>
-        db.ExecuteAsync(InsertSql, new { id, tenant = Tenants.Default, from, to, typeId, group, changedBy = changedBy.ToString("D") });
+    public Task InsertAsync(Guid id, Guid from, Guid to, int typeId, string? group) =>
+        db.ExecuteAsync(InsertSql, new { id, tenant = Tenants.Default, from, to, typeId, group });
 
-    public Task UpdateAsync(Guid id, string? group, Guid changedBy) =>
-        db.ExecuteAsync(UpdateSql, new { id, tenant = Tenants.Default, group, changedBy = changedBy.ToString("D") });
+    public Task UpdateAsync(Guid id, string? group) =>
+        db.ExecuteAsync(UpdateSql, new { id, tenant = Tenants.Default, group });
 
     public Task DeleteAsync(Guid id) => db.ExecuteAsync(DeleteSql, Parameters(id));
 

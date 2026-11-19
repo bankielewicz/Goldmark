@@ -166,11 +166,12 @@ internal sealed class CiTypeCatalog(DbSession db)
         OUTPUT INSERTED.Id
         SELECT @typeId, @name, @label, @dataType, @required, @enumValues, @refTypeId,
             ISNULL((SELECT MAX(SortOrder) FROM cmdb.AttributeDef WITH (UPDLOCK, HOLDLOCK) WHERE CiTypeId = @typeId), 0) + 1,
-            @createdBy;
+            CONVERT(nvarchar(256), SESSION_CONTEXT(N'Goldmark.ChangedBy'));
         """;
 
     private const string ChangeAttributeSql = """
-        UPDATE cmdb.AttributeDef SET Label = @label, IsRequired = @required, EnumValues = @enumValues, ChangedBy = @changedBy
+        UPDATE cmdb.AttributeDef SET Label = @label, IsRequired = @required, EnumValues = @enumValues,
+            ChangedBy = CONVERT(nvarchar(256), SESSION_CONTEXT(N'Goldmark.ChangedBy'))
         WHERE Id = @id;
         """;
 
@@ -187,7 +188,7 @@ internal sealed class CiTypeCatalog(DbSession db)
     // CI gets a new version by the Admin, and its history keeps the value. JSON_MODIFY leaves the other values as
     // written, numbers digit for digit.
     private const string RemoveValuesSql = """
-        UPDATE cmdb.Ci SET Attributes = JSON_MODIFY(Attributes, CONCAT('$."', @name, '"'), NULL), ChangedBy = @changedBy
+        UPDATE cmdb.Ci SET Attributes = JSON_MODIFY(Attributes, CONCAT('$."', @name, '"'), NULL), ChangedBy = DEFAULT
         WHERE CiTypeId = @typeId AND JSON_PATH_EXISTS(Attributes, CONCAT('$."', @name, '"')) = 1;
         """;
 
@@ -217,11 +218,12 @@ internal sealed class CiTypeCatalog(DbSession db)
     private const string AddRelationshipTypeSql = """
         INSERT INTO cmdb.RelationshipType (Name, FromCiTypeId, ToCiTypeId, ImpactPropagation, Description, ChangedBy)
         OUTPUT INSERTED.Id
-        VALUES (@name, @fromTypeId, @toTypeId, @impact, @description, @changedBy);
+        VALUES (@name, @fromTypeId, @toTypeId, @impact, @description, CONVERT(nvarchar(256), SESSION_CONTEXT(N'Goldmark.ChangedBy')));
         """;
 
     private const string ChangeRelationshipTypeSql = """
-        UPDATE cmdb.RelationshipType SET ImpactPropagation = @impact, Description = @description, ChangedBy = @changedBy
+        UPDATE cmdb.RelationshipType SET ImpactPropagation = @impact, Description = @description,
+            ChangedBy = CONVERT(nvarchar(256), SESSION_CONTEXT(N'Goldmark.ChangedBy'))
         WHERE Id = @id;
         """;
 
@@ -278,9 +280,13 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     public Task DeleteTypeAsync(int typeId) => db.ExecuteAsync(DeleteTypeSql, new { typeId });
 
+    // The definition tables' CreatedBy and ChangedBy allow null ("never changed"), so the database wouldn't refuse a
+    // write by nobody as it does for a CI: these ask the session first (DbSession.RequireActor; DEC-047).
     public async Task<int> AddAttributeAsync(int typeId, string name, string label, string dataType, bool required,
-        IReadOnlyList<string>? choices, int? refTypeId, Guid createdBy) =>
-        await db.ExecuteScalarAsync<int>(AddAttributeSql, new
+        IReadOnlyList<string>? choices, int? refTypeId)
+    {
+        db.RequireActor();
+        return await db.ExecuteScalarAsync<int>(AddAttributeSql, new
         {
             typeId,
             name,
@@ -289,27 +295,29 @@ internal sealed class CiTypeCatalog(DbSession db)
             required,
             enumValues = choices is null ? null : JsonSerializer.Serialize(choices),
             refTypeId,
-            createdBy = createdBy.ToString("D"),
         });
+    }
 
-    public Task ChangeAttributeAsync(int id, string label, bool required, IReadOnlyList<string>? choices, Guid changedBy) =>
-        db.ExecuteAsync(ChangeAttributeSql, new
+    public Task ChangeAttributeAsync(int id, string label, bool required, IReadOnlyList<string>? choices)
+    {
+        db.RequireActor();
+        return db.ExecuteAsync(ChangeAttributeSql, new
         {
             id,
             label,
             required,
             enumValues = choices is null ? null : JsonSerializer.Serialize(choices),
-            changedBy = changedBy.ToString("D"),
         });
+    }
 
     /// <summary>How many of the type's CIs (retired ones included) hold each choice of the attribute.</summary>
     public async Task<IReadOnlyDictionary<string, long>> ChoiceCountsAsync(int typeId, string name) =>
         (await db.QueryAsync<ChoiceCount>(ChoiceCountsSql, new { typeId, name })).ToDictionary(c => c.Choice, c => c.Count, StringComparer.Ordinal);
 
     /// <summary>Takes the attribute's values out of the type's CIs and deletes it; returns how many CIs had a value.</summary>
-    public async Task<int> DeleteAttributeAsync(int typeId, AttributeDefinition attribute, Guid changedBy)
+    public async Task<int> DeleteAttributeAsync(int typeId, AttributeDefinition attribute)
     {
-        var removed = await db.ExecuteAsync(RemoveValuesSql, new { typeId, name = attribute.Name, changedBy = changedBy.ToString("D") });
+        var removed = await db.ExecuteAsync(RemoveValuesSql, new { typeId, name = attribute.Name });
         await db.ExecuteAsync(DeleteAttributeSql, new { id = attribute.Id });
         return removed;
     }
@@ -331,11 +339,17 @@ internal sealed class CiTypeCatalog(DbSession db)
             [.. relationshipTypes.Select(r => new RelationshipTypeUsage(r.Name, relationships.GetValueOrDefault(r.Id)))]);
     }
 
-    public Task<int> AddRelationshipTypeAsync(string name, int? fromTypeId, int? toTypeId, string impact, string? description, Guid changedBy) =>
-        db.ExecuteScalarAsync<int>(AddRelationshipTypeSql, new { name, fromTypeId, toTypeId, impact, description, changedBy = changedBy.ToString("D") });
+    public Task<int> AddRelationshipTypeAsync(string name, int? fromTypeId, int? toTypeId, string impact, string? description)
+    {
+        db.RequireActor();
+        return db.ExecuteScalarAsync<int>(AddRelationshipTypeSql, new { name, fromTypeId, toTypeId, impact, description });
+    }
 
-    public Task ChangeRelationshipTypeAsync(int id, string impact, string? description, Guid changedBy) =>
-        db.ExecuteAsync(ChangeRelationshipTypeSql, new { id, impact, description, changedBy = changedBy.ToString("D") });
+    public Task ChangeRelationshipTypeAsync(int id, string impact, string? description)
+    {
+        db.RequireActor();
+        return db.ExecuteAsync(ChangeRelationshipTypeSql, new { id, impact, description });
+    }
 
     public Task<long> RelationshipsOfTypeAsync(int id) => db.ExecuteScalarAsync<long>(RelationshipsOfTypeSql, new { id });
 

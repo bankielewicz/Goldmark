@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Goldmark.Api.Audit;
-using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
@@ -80,7 +79,6 @@ internal static class CiEndpoints
             return ApiProblems.Field("type", request.Type is null ? "Required" : "UnknownType");
         }
 
-        var editor = context.User.UserId()!.Value;
         return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
         {
             if (await catalog.LockForSaveAsync(found.Id) is not { } type)
@@ -100,7 +98,7 @@ internal static class CiEndpoints
             }
 
             var id = Guid.CreateVersion7();
-            await store.InsertAsync(id, type.Id, name, check.Values.ToJsonString(), editor);
+            await store.InsertAsync(id, type.Id, name, check.Values.ToJsonString());
             await audit.WriteAsync(AuditActions.CiCreated, CiTarget, id, new { type = type.Name, name });
             var detail = await store.DetailAsync((await store.FindAsync(id))!, type);
             context.Response.Headers.ETag = Quote(detail.ETag);
@@ -116,7 +114,6 @@ internal static class CiEndpoints
             return IfMatchRequired();
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -156,7 +153,7 @@ internal static class CiEndpoints
                 var fields = (name == row.Name ? [] : NameField).Concat(AttributeValues.Changed(type, before, check.Values)).ToList();
                 if (fields.Count > 0)
                 {
-                    await store.UpdateAsync(id, name, check.Values.ToJsonString(), editor);
+                    await store.UpdateAsync(id, name, check.Values.ToJsonString());
                     await audit.WriteAsync(AuditActions.CiChanged, CiTarget, id, new { type = type.Name, name, fields });
                 }
 
@@ -180,7 +177,6 @@ internal static class CiEndpoints
         var store = services.GetRequiredService<CiStore>();
         var db = services.GetRequiredService<DbSession>();
         var audit = services.GetRequiredService<AuditTrail>();
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -205,7 +201,7 @@ internal static class CiEndpoints
                         : ApiProblems.Problem(StatusCodes.Status409Conflict, "not-retired", "This CI isn't retired.");
                 }
 
-                await store.SetLifecycleAsync(id, state, editor);
+                await store.SetLifecycleAsync(id, state);
                 await audit.WriteAsync(retiring ? AuditActions.CiRetired : AuditActions.CiRestored, CiTarget, id, new { type = type.Name, name = row.Name });
                 return Detail(context, await store.DetailAsync((await store.FindAsync(id))!, type));
             }));

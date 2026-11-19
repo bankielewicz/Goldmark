@@ -156,7 +156,8 @@ internal sealed record CiCursor(string Sort, string? Name, string? Type, string?
 /// holds everywhere. A CI's version is its <c>ValidFrom</c>, which every committed change moves (the
 /// table is system-versioned): it travels as text and is compared as <c>datetime2(7)</c>, since a .NET
 /// DateTime parameter would be sent as <c>datetime</c> and lose precision. <c>ChangedBy</c> holds the
-/// person's account ID (slice 7's <c>SESSION_CONTEXT</c> writes the same).
+/// person's account ID: every write takes it from the connection's <c>SESSION_CONTEXT</c> through the
+/// column's default (FR-CM-5, DEC-047; <see cref="DbSession"/>), and fails when nobody is acting.
 /// </summary>
 internal sealed class CiStore(DbSession db)
 {
@@ -272,16 +273,16 @@ internal sealed class CiStore(DbSession db)
 
     private const string InsertSql = """
         INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
-        VALUES (@id, @tenant, @typeId, @name, 'Active', @attributes, @changedBy);
+        VALUES (@id, @tenant, @typeId, @name, 'Active', @attributes, DEFAULT);
         """;
 
     private const string UpdateSql = """
-        UPDATE cmdb.Ci SET Name = @name, Attributes = @attributes, ChangedBy = @changedBy
+        UPDATE cmdb.Ci SET Name = @name, Attributes = @attributes, ChangedBy = DEFAULT
         WHERE Id = @id AND TenantId = @tenant;
         """;
 
     private const string LifecycleSql = """
-        UPDATE cmdb.Ci SET LifecycleState = @state, ChangedBy = @changedBy
+        UPDATE cmdb.Ci SET LifecycleState = @state, ChangedBy = DEFAULT
         WHERE Id = @id AND TenantId = @tenant;
         """;
 
@@ -360,14 +361,14 @@ internal sealed class CiStore(DbSession db)
             row.ValidFrom, Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, Stamp(row.ValidFrom));
     }
 
-    public Task InsertAsync(Guid id, int typeId, string name, string attributes, Guid changedBy) =>
-        db.ExecuteAsync(InsertSql, new { id, tenant = Tenants.Default, typeId, name, attributes, changedBy = changedBy.ToString("D") });
+    public Task InsertAsync(Guid id, int typeId, string name, string attributes) =>
+        db.ExecuteAsync(InsertSql, new { id, tenant = Tenants.Default, typeId, name, attributes });
 
-    public Task UpdateAsync(Guid id, string name, string attributes, Guid changedBy) =>
-        db.ExecuteAsync(UpdateSql, new { id, tenant = Tenants.Default, name, attributes, changedBy = changedBy.ToString("D") });
+    public Task UpdateAsync(Guid id, string name, string attributes) =>
+        db.ExecuteAsync(UpdateSql, new { id, tenant = Tenants.Default, name, attributes });
 
-    public Task SetLifecycleAsync(Guid id, string state, Guid changedBy) =>
-        db.ExecuteAsync(LifecycleSql, new { id, tenant = Tenants.Default, state, changedBy = changedBy.ToString("D") });
+    public Task SetLifecycleAsync(Guid id, string state) =>
+        db.ExecuteAsync(LifecycleSql, new { id, tenant = Tenants.Default, state });
 
     internal sealed record CiRow(Guid Id, string Name, string Type, int CiTypeId, string LifecycleState, string Attributes,
         DateTime ValidFrom, string ChangedBy, string? ChangedByName);

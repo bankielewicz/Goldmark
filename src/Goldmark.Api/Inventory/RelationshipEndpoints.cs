@@ -1,6 +1,5 @@
 using System.Globalization;
 using Goldmark.Api.Audit;
-using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
@@ -142,7 +141,6 @@ internal static class RelationshipEndpoints
             return CiEndpoints.Fields(errors);
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await CiEndpoints.RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -194,7 +192,7 @@ internal static class RelationshipEndpoints
                 }
 
                 var id = Guid.CreateVersion7();
-                await store.InsertAsync(id, from.Value, to.Value, locked.Id, group, editor);
+                await store.InsertAsync(id, from.Value, to.Value, locked.Id, group);
                 var added = (await store.FindAsync(id))!;
                 await audit.WriteAsync(AuditActions.RelationshipAdded, RelationshipTarget, id, Recorded(added));
                 context.Response.Headers.ETag = CiEndpoints.Quote(added.ETag);
@@ -222,7 +220,6 @@ internal static class RelationshipEndpoints
             return ApiProblems.Field("redundancyGroup", groupError);
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await CiEndpoints.RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -240,7 +237,7 @@ internal static class RelationshipEndpoints
                 // The text is stored as typed, so a change of case is a change.
                 if (!string.Equals(group, row.RedundancyGroup, StringComparison.Ordinal))
                 {
-                    await store.UpdateAsync(id, group, editor);
+                    await store.UpdateAsync(id, group);
                     await audit.WriteAsync(AuditActions.RelationshipChanged, RelationshipTarget, id, new
                     {
                         type = row.Type,

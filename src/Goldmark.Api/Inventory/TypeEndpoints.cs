@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
 using Goldmark.Api.Audit;
-using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
@@ -311,7 +310,7 @@ internal static partial class TypeEndpoints
                     return Fields(duplicates);
                 }
 
-                var id = await catalog.AddAttributeAsync(target.Id, name, label, dataType!, required, choices, refType?.Id, context.User.UserId()!.Value);
+                var id = await catalog.AddAttributeAsync(target.Id, name, label, dataType!, required, choices, refType?.Id);
                 await audit.WriteAsync(AuditActions.AttributeAdded, TypeTarget, target.Id,
                     new { type = target.Name, attribute = label, name, dataType = AttributeDataTypes.ToApi(dataType!), required });
                 var added = (await catalog.LockForChangeAsync(target.Id))!.Attributes.First(a => a.Id == id);
@@ -417,7 +416,7 @@ internal static partial class TypeEndpoints
 
                 if (changed.Count > 0)
                 {
-                    await catalog.ChangeAttributeAsync(attribute.Id, label, required, choices, context.User.UserId()!.Value);
+                    await catalog.ChangeAttributeAsync(attribute.Id, label, required, choices);
                     await audit.WriteAsync(AuditActions.AttributeChanged, TypeTarget, target.Id,
                         new { type = target.Name, attribute = label, name = attribute.Name, changed });
                 }
@@ -473,7 +472,7 @@ internal static partial class TypeEndpoints
                 return Changed("attribute");
             }
 
-            var removed = await catalog.DeleteAttributeAsync(target.Id, attribute, context.User.UserId()!.Value);
+            var removed = await catalog.DeleteAttributeAsync(target.Id, attribute);
             await audit.WriteAsync(AuditActions.AttributeDeleted, TypeTarget, target.Id,
                 new { type = target.Name, attribute = attribute.Label, name = attribute.Name, valuesRemoved = removed });
             return Results.Ok(new { valuesRemoved = removed });
@@ -523,7 +522,7 @@ internal static partial class TypeEndpoints
                     }
                 }
 
-                var id = await catalog.AddRelationshipTypeAsync(name, from?.Id, to?.Id, impact, description, context.User.UserId()!.Value);
+                var id = await catalog.AddRelationshipTypeAsync(name, from?.Id, to?.Id, impact, description);
                 await audit.WriteAsync(AuditActions.RelationshipTypeAdded, RelationshipTypeTarget, id,
                     new { name, from = from?.Name, to = to?.Name, impact });
                 var added = (await catalog.LockRelationshipTypeAsync(name))!;
@@ -584,7 +583,7 @@ internal static partial class TypeEndpoints
 
             if (changed.Count > 0)
             {
-                await catalog.ChangeRelationshipTypeAsync(found.Id, impact, description, context.User.UserId()!.Value);
+                await catalog.ChangeRelationshipTypeAsync(found.Id, impact, description);
                 await audit.WriteAsync(AuditActions.RelationshipTypeChanged, RelationshipTypeTarget, found.Id, new { name = found.Name, changed });
             }
 
