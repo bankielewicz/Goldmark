@@ -33,7 +33,8 @@ internal sealed record HistoryCursor(string At, string Tie)
 /// <summary>
 /// Reads a CI's history (US-43; DEC-047): every version of the CI, of its type's attribute definitions and of the
 /// relationships at either end of it, through <c>FOR SYSTEM_TIME ALL</c>, which leaves out versions that lasted
-/// no time (two changes in one transaction; measured, <c>ChangedByTests</c>). Migration 0009's indexes on the
+/// no time (two changes in one transaction; measured, <c>ChangedByTests</c>). One such version is read on purpose,
+/// from the history table itself: the stamp a relationship's delete leaves, which says who ended it. Migration 0009's indexes on the
 /// history tables serve the reads by CI. The entries are built in memory (<see cref="CiHistoryBuilder"/>) and paged
 /// there: one CI's versions are few (slice 10's collectors write none for a re-read that changes nothing, US-21).
 /// </summary>
@@ -68,7 +69,20 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
         WHERE r.TenantId = @tenant AND r.ToCiId = @id AND r.FromCiId <> @id;
         """;
 
-    // DEC-046 item 1: who ended a relationship is its "relationship.deleted" entry's actor (IX_AuditLog_Target).
+    // Who ended a relationship (DEC-047 item 9): the delete's stamp, a last version that lasted no time, which only
+    // the history table itself returns. Each half reads one of 0009's indexes.
+    private const string EndStampsSql = """
+        SELECT h.Id, h.ChangedBy, h.ValidTo
+        FROM cmdb.RelationshipHistory AS h
+        WHERE h.TenantId = @tenant AND h.FromCiId = @id AND h.ValidFrom = h.ValidTo
+        UNION ALL
+        SELECT h.Id, h.ChangedBy, h.ValidTo
+        FROM cmdb.RelationshipHistory AS h
+        WHERE h.TenantId = @tenant AND h.ToCiId = @id AND h.FromCiId <> @id AND h.ValidFrom = h.ValidTo;
+        """;
+
+    // A relationship ended before the delete stamped it (slice 6): its "relationship.deleted" audit entry's actor
+    // (DEC-046 item 1; IX_AuditLog_Target), while that entry is kept.
     private const string EndedBySql = """
         SELECT a.TargetId, a.ActorType, a.ActorId
         FROM cmdb.AuditLog AS a
@@ -94,7 +108,14 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
         var relationships = await db.QueryAsync<RelationshipVersion>(RelationshipsSql, new { id, tenant = Tenants.Default });
 
         var current = relationships.Where(r => r.ValidTo.Year == 9999).Select(r => r.Id).ToHashSet();
-        var ended = relationships.Select(r => r.Id).Distinct().Where(r => !current.Contains(r)).ToList();
+        var endings = relationships.Where(r => !current.Contains(r.Id)).GroupBy(r => r.Id).ToDictionary(g => g.Key, g => g.Max(r => r.ValidTo));
+        // The stamp is the version of no length at the very moment the relationship ended.
+        var stamps = endings.Count == 0
+            ? []
+            : (await db.QueryAsync<StampRow>(EndStampsSql, new { id, tenant = Tenants.Default }))
+                .Where(s => endings.TryGetValue(s.Id, out var end) && s.ValidTo == end)
+                .GroupBy(s => s.Id).ToDictionary(g => g.Key, g => g.First().ChangedBy);
+        var ended = endings.Keys.Where(r => !stamps.ContainsKey(r)).ToList();
         var enders = ended.Count == 0
             ? []
             : await db.QueryAsync<EndRow>(EndedBySql, new
@@ -104,7 +125,7 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
                 ids = JsonSerializer.Serialize(ended.Select(r => r.ToString("D"))),
             });
 
-        var accounts = versions.Select(v => v.ChangedBy).Concat(relationships.Select(r => r.ChangedBy))
+        var accounts = versions.Select(v => v.ChangedBy).Concat(relationships.Select(r => r.ChangedBy)).Concat(stamps.Values)
             .Concat(enders.Where(e => e.ActorType == AuditActorTypes.User).Select(e => e.ActorId))
             .Select(text => Guid.TryParse(text, out var account) ? account : (Guid?)null).OfType<Guid>().Distinct().ToList();
         var people = accounts.Count == 0
@@ -118,10 +139,18 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
             _ => new HistoryActor(null, null, changedBy),
         };
 
-        // Only a person's entry names who ended it; anything else on record there (System, Anonymous) is nobody here.
+        // The stamp first. From the audit log, only a person's entry names who ended it; anything else on record there
+        // (System, Anonymous) is nobody here.
         var endedBy = enders.Where(e => e.ActorType == AuditActorTypes.User && Guid.TryParse(e.TargetId, out _) && Actor(e.ActorId) is not null)
             .GroupBy(e => Guid.Parse(e.TargetId))
             .ToDictionary(g => g.Key, g => Actor(g.First().ActorId)!);
+        foreach (var (relationship, changedBy) in stamps)
+        {
+            if (Actor(changedBy) is { } who)
+            {
+                endedBy[relationship] = who;
+            }
+        }
 
         var events = CiHistoryBuilder.Build(id, versions, definitions, relationships, endedBy, Actor);
         var page = CiHistoryBuilder.Page(events, after, take);
@@ -131,6 +160,8 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
         return new HistoryPage([.. items.Select(e => e.Entry)], after is null ? events.Count : null, next,
             references.Values.ToDictionary(l => l.Id.ToString("D"), l => new CiReference(l.Id, l.Name, l.Type, l.LifecycleState)));
     }
+
+    private sealed record StampRow(Guid Id, string? ChangedBy, DateTime ValidTo);
 
     private sealed record EndRow(string TargetId, string ActorType, string? ActorId);
 

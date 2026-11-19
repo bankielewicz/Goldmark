@@ -48,7 +48,7 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
             $"changed by {adminPerson.Id:D}",
             $"restored by {annPerson.Id:D}",
             $"retired by {bobPerson.Id:D}",
-            $"relationshipEnded by {annPerson.Id:D}", // the audit entry's actor, not Bob, who wrote it last
+            $"relationshipEnded by {annPerson.Id:D}", // who ended it, not Bob, who wrote it last
             $"relationshipChanged by {bobPerson.Id:D}",
             $"relationshipAdded by {annPerson.Id:D}",
             $"changed by {bobPerson.Id:D}",
@@ -119,11 +119,36 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal("InvalidCursor", Field(await viewer.GetAsync($"/api/v1/cis/{id}/history?cursor=nonsense"), "cursor"));
         Assert.Equal((HttpStatusCode.NotFound, "not-found"), Status(await viewer.GetAsync($"/api/v1/cis/{Guid.NewGuid():D}/history")));
 
-        // Once the audit entry is gone (retention), nobody is named for the ending: never Bob, the last writer.
-        await sql.AsAdminAsync(scenario.Installation.Database, "DELETE FROM cmdb.AuditLog WHERE Action = 'relationship.deleted';");
-        var later = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items").EnumerateArray().ToList();
-        Assert.Equal("relationshipEnded", later[3].Value("kind"));
-        Assert.Equal(JsonValueKind.Null, later[3].GetProperty("by").ValueKind);
+        // Who ended it is kept with the relationship's own history (DEC-047 item 9: the delete's stamp, a last version
+        // that lasted no time), so the name outlives the audit entry.
+        var db = scenario.Installation.Database;
+        await sql.AsAdminAsync(db, "DELETE FROM cmdb.AuditLog WHERE Action = 'relationship.deleted';");
+        var kept = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(("relationshipEnded", annPerson.Id.ToString("D")), (kept[3].Value("kind"), kept[3].GetProperty("by").Value("id")));
+        Assert.Equal(1, await sql.AdminScalarAsync<int>(db,
+            $"SELECT COUNT(*) FROM cmdb.RelationshipHistory WHERE Id = '{relationship}' AND ValidFrom = ValidTo AND ChangedBy = '{annPerson.Id:D}';"));
+        // No read of the past shows the stamp: the history has one "ended" entry and no change by Ann before it, and
+        // as of the ending's own moment the relationship is gone.
+        Assert.Equal(8, kept.Count);
+        Assert.Equal(0, AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/relationships?asOf={Uri.EscapeDataString(kept[3].Value("at"))}")).Body
+            .GetProperty("dependencies").GetProperty("total").GetInt64());
+
+        // A relationship ended before deletes left a stamp (slice 6) has only its audit entry: that entry's actor while
+        // it is kept, then nobody; never Bob, who wrote the relationship last.
+        var old = await bob.PostAsync("/api/v1/relationships", new { type = "depends_on", from = id, to = host, redundancyGroup = "" });
+        Assert.True(old.Status == HttpStatusCode.Created, old.ToString());
+        await sql.AsAdminAsync(db, $"""
+            DELETE FROM cmdb.Relationship WHERE Id = '{old.Value("id")}';
+            INSERT INTO cmdb.AuditLog (ActorType, ActorId, Action, TargetType, TargetId)
+            VALUES ('User', '{annPerson.Id:D}', 'relationship.deleted', 'Relationship', '{old.Value("id")}');
+            """);
+        var before = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items")[0];
+        Assert.Equal(("relationshipEnded", old.Value("id"), annPerson.Id.ToString("D")),
+            (before.Value("kind"), before.GetProperty("relationship").Value("id"), before.GetProperty("by").Value("id")));
+        await sql.AsAdminAsync(db, "DELETE FROM cmdb.AuditLog WHERE Action = 'relationship.deleted';");
+        var after = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items")[0];
+        Assert.Equal("relationshipEnded", after.Value("kind"));
+        Assert.Equal(JsonValueKind.Null, after.GetProperty("by").ValueKind);
     }
 
     [Fact]

@@ -2455,8 +2455,8 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   carry work forward and state them"; branch `slice/07-history` from `04f8862` (after PR #81). HANDOFF row 7:
   "`SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads", done when "US-42/43" (screens 4, 5 and 6;
   FR-CM-5, FR-IM-4). The backend and API are built first (rule 3 allows it); the screens wait for their boards.
-  The choices below were made without asking, each with its reason, and are the owner's to change in review. One
-  question is open (item 9).
+  The choices below were made without asking, each with its reason, and are the owner's to change in review,
+  except items 7 and 9, which the owner decided.
 - **1. `ChangedBy` comes from the connection (FR-CM-5).** `DbSession` puts the signed-in person's account ID in
   the connection's `SESSION_CONTEXT` under `Goldmark.ChangedBy`, once, read-only (`@read_only = 1`), before the
   first statement it runs for that person. Migration 0009 gives `cmdb.Ci.ChangedBy` and
@@ -2522,23 +2522,28 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   - The entries are built in memory and paged there. One CI's versions are few, and slice 10's collectors write
     none for a re-read that changes nothing (US-21). If a CI's history grows past what that serves, the paging
     moves into SQL; the API doesn't change.
-- **7. Who ended a relationship** is the actor of its `relationship.deleted` audit entry (DEC-046 item 1: the
-  delete leaves the last writer's `ChangedBy`). The history shows it to everyone signed in, although the audit
-  log itself is AuditReader's: it is the same kind of fact as `ChangedBy`, which everyone already sees. When the
-  entry is gone, nobody is named; the last writer is never shown as the one who ended it (tested).
+- **7. Who ended a relationship is shown to everyone signed in (owner, 2026-11-19, AskUserQuestion: "A.
+  Everyone signed in (Recommended)").** For a relationship ended before item 9's stamp existed, the name comes
+  from its `relationship.deleted` audit entry, although the audit log itself is AuditReader's: it is the same
+  kind of fact as `ChangedBy`, which everyone already sees. Rejected: B, Admins and Auditors only, with no name
+  for the others.
 - **8. Migration 0009** adds, besides the two defaults: `IX_CiHistory_Id (Id, ValidFrom)`,
   `IX_RelationshipHistory_FromCi` and `_ToCi (…, ValidFrom)`, because the history tables had only their period
   index and a read by CI scanned them whole; and `IX_AuditLog_Target (TargetType, TargetId)` for item 7's lookup.
   It changes no row.
-- **9. Open: keeping who ended a relationship past the audit log's retention** (a side agent's note relayed by
-  the owner, 2026-11-18). The audit log is purged after its retention period (365 days at the shortest,
-  DEC-041), and after that the history can only say nobody for an ending, while every other "who" lives in the
-  versioned tables for good. Options, not decided: (A) leave it, as built; (B) a small table of endings written
-  with the delete; (C) have the delete write the ender as a last version that lasts no time (`ChangedBy = DEFAULT`,
-  then DELETE, in one transaction): the history table keeps that row, every `FOR SYSTEM_TIME` read leaves it
-  out (measured, item 6), and no new table or right is needed, but it reverses DEC-046 item 1's "Never UPDATE
-  `ChangedBy` and then DELETE". The shortest retention is 365 days, so no ending is lost within a year of an
-  installation's first one, and until then B or C could still be filled from the audit log.
+- **9. Who ended a relationship is kept with its history (owner, 2026-11-19, AskUserQuestion: "C. Keep it in
+  the history (Recommended)"; a side agent's note relayed by the owner, 2026-11-18).** The audit log is purged
+  after its retention period (365 days at the shortest, DEC-041), and the delete left only the last writer's
+  `ChangedBy` (DEC-046 item 1), so after the purge the history could name nobody for an ending, while every
+  other "who" lives in the versioned tables for good. Now the delete first writes `ChangedBy = DEFAULT` (the
+  person ending it) and then deletes, in one transaction: the relationship's last version is that stamp, which
+  lasted no time. The history table keeps it; a CI's history reads it from that table and shows it as who ended
+  the relationship. This reverses DEC-046 item 1's "Never UPDATE `ChangedBy` and then DELETE", whose worry was
+  that version showing up: no `FOR SYSTEM_TIME` read returns a version of no length (measured, item 6), so no
+  "as of" view and no history entry shows a change by the person who ended it (tested). A relationship ended
+  before this has no stamp: its audit entry's actor is shown while that entry is kept, then nobody; the last
+  writer is never shown as the one who ended it (tested). Rejected: A, leaving it to the audit log; B, a table
+  of endings, which the runtime login could rewrite unless it got its own DENY and allow-list entries.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens (4's as-of picker, 5's History tab,

@@ -193,9 +193,15 @@ internal sealed class RelationshipStore(DbSession db)
         WHERE Id = @id AND TenantId = @tenant;
         """;
 
-    // DEC-046 item 1: the row goes and its history keeps it as it was; who ended it is the audit entry's actor. Never
-    // set ChangedBy first: that would leave a version that lasted no time.
-    private const string DeleteSql = "DELETE FROM cmdb.Relationship WHERE Id = @id AND TenantId = @tenant;";
+    // DEC-046 item 1: the row goes and its history keeps it as it was. DEC-047 item 9 (owner, 2026-11-19, reversing
+    // that item's "never set ChangedBy first"): the delete first stamps the row with the person ending it, in the same
+    // transaction, which leaves a last version that lasted no time. The history table keeps it for good, so who ended
+    // a relationship outlives the audit log's retention; no FOR SYSTEM_TIME read ever returns it (measured,
+    // ChangedByTests), so no "as of" view shows a relationship changed by the person who ended it.
+    private const string DeleteSql = """
+        UPDATE cmdb.Relationship SET ChangedBy = DEFAULT WHERE Id = @id AND TenantId = @tenant;
+        DELETE FROM cmdb.Relationship WHERE Id = @id AND TenantId = @tenant;
+        """;
 
     /// <summary>One page of a section, now or as it was at <paramref name="asOf"/>; the total with the first page.</summary>
     public async Task<RelationshipPage> SectionAsync(Guid ciId, string direction, int take, RelationshipCursor? after, DateTime? asOf = null)
@@ -262,7 +268,8 @@ internal sealed class RelationshipStore(DbSession db)
     public Task UpdateAsync(Guid id, string? group) =>
         db.ExecuteAsync(UpdateSql, new { id, tenant = Tenants.Default, group });
 
-    public Task DeleteAsync(Guid id) => db.ExecuteAsync(DeleteSql, Parameters(id));
+    /// <summary>Ends the relationship, recording who did (see <c>DeleteSql</c>). One transaction, or the stamp would be a version of its own.</summary>
+    public Task DeleteAsync(Guid id) => db.InTransactionAsync(() => db.ExecuteAsync(DeleteSql, Parameters(id)));
 
     private static object Parameters(Guid id) => new { take = 1, id, tenant = Tenants.Default };
 

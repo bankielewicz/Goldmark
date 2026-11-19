@@ -136,7 +136,7 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 Slice **7** (`slice/07-history`, approved 2026-11-18, DEC-047) is **in progress**: the backend and API are built and
 tested; the screens (4's as-of picker, 5's History tab, 6's as-of control) wait for their boards. The design handoff
 is `tmp/screen-handoff-slice7.md` (git-ignored; rule 3). DEC-047 lists the choices made without asking, each with its
-reason, and one open question (item 9: keeping who ended a relationship past the audit log's retention).
+reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
 
 **What slice 7 has so far:**
 - **Migration 0009:** `cmdb.Ci.ChangedBy` and `cmdb.Relationship.ChangedBy` default to the connection's
@@ -151,7 +151,10 @@ reason, and one open question (item 9: keeping who ended a relationship past the
   as-of statement is its own constant beside the current one (`…AsOfSql`), reading every table
   `FOR SYSTEM_TIME AS OF @at`; add both when adding a read. A CI that didn't exist yet is 404 `not-found-then`.
 - **History:** `GET /cis/{id}/history` (`Inventory/CiHistory.cs` builds the entries from versions, with no database,
-  and is unit-tested; `CiHistoryStore.cs` reads them). Who ended a relationship comes from the audit log.
+  and is unit-tested; `CiHistoryStore.cs` reads them). Who ended a relationship: the delete stamps the row with the
+  person ending it and then deletes it, in one transaction, so the history table keeps a last version of no length
+  (DEC-047 item 9, reversing DEC-046 item 1's "never update, then delete"); the audit entry's actor is the fallback
+  for relationships ended before that.
 - **Tests:** `ChangedByTests` (the measurements the design rests on), `HistoryApiTests`, `CiHistoryTests`.
 - **Measured, worth knowing:** `FOR SYSTEM_TIME ALL` leaves out a version that lasted no time (two changes in one
   transaction), while the history table keeps the row. `INSERT … SELECT` can't use the `DEFAULT` keyword: leave the
@@ -160,8 +163,7 @@ reason, and one open question (item 9: keeping who ended a relationship past the
 
 **Still to do in slice 7:** the three screens after the boards are approved (`web/src/pages/SearchPage.tsx`,
 `CiPage.tsx` with a History tab, `GraphPage.tsx`, the shell's As-of slot), `docs/integration/deep-links.md`
-(`tab=history`, `asOf`), browser tests with axe, `docs/design/screens/slice-7/`, and the owner's answer to DEC-047
-item 9.
+(`tab=history`, `asOf`), browser tests with axe, and `docs/design/screens/slice-7/`.
 
 ### Slice 6 (merged), for reference
 
@@ -210,7 +212,8 @@ owner's words.
   The CI types and relationship types filters stop the walk as Show retired does (DEC-046 item 15), so every line,
   row and CSV row is a real relationship; slice 19's impact walk follows the same rule.
 - Deleting a relationship copies its last version to the history with the last writer's `ChangedBy`; who ended it is
-  the `relationship.deleted` entry's actor (DEC-046 item 1). Slice 7's history view reads it from the audit log.
+  the `relationship.deleted` entry's actor (DEC-046 item 1). Since slice 7 the delete also leaves a stamp in the
+  history that names who ended it (DEC-047 item 9); the audit entry is the fallback for earlier endings.
 - Cytoscape.js needs `ensureCytoscapeStylesheet()` before its first `cytoscape()` (DEC-046 item 3); its node icons are
   images, so a new type icon key needs `node web/scripts/graph-icons.mjs`.
 
