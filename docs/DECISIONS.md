@@ -229,9 +229,11 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 - **Settings allow-lists (review finding).** `.npmrc` may contain only
   `registry`, `ignore-scripts` and `engine-strict`, and `pnpm-workspace.yaml`
   only the settings above. Scoped registries (`@scope:registry`), auth tokens,
-  custom CAs, `strict-ssl`, `registries`, `overrides` and policy exclusions are
-  rejected; otherwise an allow-listed name@version could be fetched from
-  another source.
+  custom CAs, `strict-ssl`, `registries` and policy exclusions are rejected;
+  otherwise an allow-listed name@version could be fetched from another source.
+  `overrides` and `auditConfig.ignoreGhsas` were rejected too until 2026-11:
+  each is now accepted only for entries the allow-list names at an exact
+  version (the "Overrides" and "Audit exceptions" bullets below).
 - **`scripts/check-dependency-policy.mjs`** (no dependencies; runs before
   install in CI and in the Docker build) fails on any of the following:
   - a direct dependency that is not allow-listed, or is listed in the wrong section;
@@ -510,6 +512,17 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
     on `main`, and weekly.
   - These also keep running: NuGetAudit, `pnpm audit`, Dependabot, the
     dependency policy check, SHA-pinned actions and locked restores.
+- **Required checks on `main` (owner, 2026-11-18, AskUserQuestion: "A. Require
+  CI, I set it up (Recommended)").** PR #64 merged while its Web job was red,
+  which also skipped the Compose smoke, and its SDK change broke every image
+  build until PR #79. GitHub's ruleset "CI must pass" (id 27573740, active on
+  the default branch) now requires 12 checks before a merge: the npm policy,
+  Web, .NET, SQL Server integration, migration, Compose smoke and Windows
+  service jobs, the three CodeQL jobs, CodeQL's code-scanning status and
+  Dependency review, each by its exact name. Repository admins may bypass. A
+  renamed or added job needs the ruleset updated in the same PR. A skipped job
+  counts as passing; that is harmless here, because the job it waits on is
+  itself required.
 
 ## DEC-019 Deferred to later slices
 
