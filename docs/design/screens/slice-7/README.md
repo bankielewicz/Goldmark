@@ -70,10 +70,13 @@ The Notes board lists each with its reason. In brief:
 The Notes board also corrected the handoff: one time zone for the local-time hints (UTC+2 in summer, UTC+1 in
 winter), and the CI page's sample data follows its history (slice 6's boards are untouched).
 
-## As built, the difference from the boards
+## As built, the differences from the boards
 
 - The count line's search text takes single quotes in a past view too: "1,231 CIs matched ‘erp’ at that time" (the
   board writes “erp”), as the present line does.
+- The dialog's Date is the browser's date field, with the browser's calendar and date format, and its Time is typed
+  as 24-hour HH:MM: no new package (owner, 2026-11-19, "A. Browser date field, typed time (Recommended)"; DEC-047
+  item 10). The board draws Fluent's DatePicker and TimePicker, which aren't installed.
 
 ## What the API gives for them
 

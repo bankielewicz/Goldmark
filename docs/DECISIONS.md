@@ -2573,6 +2573,12 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   - *The search text in the count line takes single quotes in a past view too* ("A. Single ‘erp’ for both
     (Recommended)"), as slice 5 was approved and built; the board's double quotes came from the handoff.
     Rejected: double quotes for both, which would have changed the built Search page.
+  - *The dialog's Date is the browser's date field and its Time is typed, 24-hour* ("A. Browser date field, typed
+    time (Recommended)"). The board draws Fluent's DatePicker and TimePicker, noted as "the compat packages the
+    audit log already uses"; they aren't installed (the audit log uses the browser's date-time field), and drawing
+    them would add three 0.x npm packages. So no new package: the Date field shows the browser's calendar and its
+    date format, Time is typed as HH:MM, and the quick choices fill both. Rejected: B, Fluent's pickers as drawn;
+    C, typed fields only, with no calendar.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
