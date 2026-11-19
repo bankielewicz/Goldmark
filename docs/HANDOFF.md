@@ -155,7 +155,9 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   person ending it and then deletes it, in one transaction, so the history table keeps a last version of no length
   (DEC-047 item 9, reversing DEC-046 item 1's "never update, then delete"); the audit entry's actor is the fallback
   for relationships ended before that.
-- **Tests:** `ChangedByTests` (the measurements the design rests on), `HistoryApiTests`, `CiHistoryTests`.
+- **Tests:** `ChangedByTests` (the measurements the design rests on), `HistoryApiTests`, `CiHistoryTests`, and
+  `PerformanceTests.The_reads_as_of_a_moment_and_a_CIs_history_meet_their_p95_on_the_synthetic_estate` (GOLDMARK_PERF=1;
+  DEC-047 items 4 and 6 have its figures).
 - **Measured, worth knowing:** `FOR SYSTEM_TIME ALL` leaves out a version that lasted no time (two changes in one
   transaction), while the history table keeps the row. `INSERT … SELECT` can't use the `DEFAULT` keyword: leave the
   column out. A raw string literal (`"""`) can't continue after an interpolated constant on the same line: build such

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using Goldmark.Api.IntegrationTests.Infrastructure;
@@ -206,13 +207,20 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         var related = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/relationships?{asOf}")).Body.GetProperty("dependencies");
         Assert.Equal(1, related.GetProperty("total").GetInt64());
         Assert.Equal(("esx-01", "Active"), (related.GetProperty("items")[0].GetProperty("to").Value("name"), related.GetProperty("items")[0].GetProperty("to").Value("lifecycleState")));
+        Assert.True(related.GetProperty("items")[0].GetProperty("endedSince").GetBoolean()); // the board's "Ended since"
         Assert.Equal(0, AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/relationships")).Body.GetProperty("dependencies").GetProperty("total").GetInt64());
+        // A present read leaves it out.
+        var newer = await ann.PostAsync("/api/v1/relationships", new { type = "depends_on", from = second, to = id, redundancyGroup = "" });
+        Assert.True(newer.Status == HttpStatusCode.Created, newer.ToString());
+        Assert.False(AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/relationships")).Body.GetProperty("dependents").GetProperty("items")[0]
+            .TryGetProperty("endedSince", out _));
 
         // The graph walks the relationships of then (FR-IM-4).
         var graph = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/graph?ci={id}&{asOf}")).Body;
         Assert.Equal(["esx-01", "srv-01"], graph.GetProperty("nodes").EnumerateArray().Select(n => n.Value("name")).Order(StringComparer.Ordinal));
         Assert.Equal(1, graph.GetProperty("relationships").GetArrayLength());
-        Assert.Equal(0, AuthScenario.Ok(await viewer.GetAsync($"/api/v1/graph?ci={id}")).Body.GetProperty("relationships").GetArrayLength());
+        Assert.Equal(["srv-01b", "srv-02"], AuthScenario.Ok(await viewer.GetAsync($"/api/v1/graph?ci={id}")).Body.GetProperty("nodes").EnumerateArray()
+            .Select(n => n.Value("name")).Order(StringComparer.Ordinal)); // now: only the relationship added since
 
         // Its export too, and the audit entry records the moment.
         var export = await viewer.PostAsync($"/api/v1/graph/export?ci={id}&{asOf}");
@@ -220,8 +228,13 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal("1", export.Headers["X-Goldmark-Entries"]);
         Assert.Contains($"\"asOf\":\"{then}\"", Assert.Single(await scenario.AuditAsync("relationship.exported")), StringComparison.Ordinal);
 
-        // A CI that exists now and didn't then; a CI that never did.
-        Assert.Equal((HttpStatusCode.NotFound, "not-found-then"), Status(await viewer.GetAsync($"/api/v1/cis/{second}?{asOf}")));
+        // A CI that exists now and didn't then, with when it was created (its history's first entry); a CI that never did.
+        var notThen = await viewer.GetAsync($"/api/v1/cis/{second}?{asOf}");
+        Assert.Equal((HttpStatusCode.NotFound, "not-found-then"), Status(notThen));
+        var created = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{second}/history")).Body.GetProperty("items").EnumerateArray().Last();
+        Assert.Equal("created", created.Value("kind"));
+        Assert.Equal(DateTimeOffset.Parse(created.Value("at"), CultureInfo.InvariantCulture),
+            DateTimeOffset.Parse(notThen.Body.Value("createdAt"), CultureInfo.InvariantCulture));
         Assert.Equal((HttpStatusCode.NotFound, "not-found-then"), Status(await viewer.GetAsync($"/api/v1/cis/{second}/relationships?{asOf}")));
         Assert.Equal((HttpStatusCode.NotFound, "not-found-then"), Status(await viewer.GetAsync($"/api/v1/graph?ci={second}&{asOf}")));
         Assert.Equal((HttpStatusCode.NotFound, "not-found"), Status(await viewer.GetAsync($"/api/v1/cis/{Guid.NewGuid():D}?{asOf}")));

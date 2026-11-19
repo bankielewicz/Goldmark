@@ -84,9 +84,17 @@ internal static class AsOf
     private static IResult Refusal(string error) =>
         CiEndpoints.Fields(new Dictionary<string, string[]>(StringComparer.Ordinal) { [Parameter] = [error] });
 
-    /// <summary>A CI that exists now and didn't at the moment asked for.</summary>
-    public static IResult NotThen() =>
-        ApiProblems.Problem(StatusCodes.Status404NotFound, "not-found-then", "This CI didn't exist at that time.");
+    /// <summary>
+    /// A CI that exists now and didn't at the moment asked for, with when it was created (its first version), so the
+    /// page can say "It was created on …, after the time you're viewing."
+    /// </summary>
+    public static IResult NotThen(DateTime createdAt) =>
+        ApiProblems.Problem(StatusCodes.Status404NotFound, "not-found-then", "This CI didn't exist at that time.",
+            new Dictionary<string, object?> { ["createdAt"] = createdAt });
+
+    /// <summary>The answer for a CI the reads found nothing of: 404 <c>not-found-then</c> when it exists but didn't at <paramref name="asOf"/>, else null.</summary>
+    public static async Task<IResult?> NotThenAsync(CiStore cis, Guid id, DateTime? asOf) =>
+        asOf is not null && await cis.CreatedAtAsync(id) is { } createdAt ? NotThen(createdAt) : null;
 
     /// <summary>The moment as the queries take it (<see cref="Declare"/>).</summary>
     public static string? Stamp(DateTime? moment) => moment is { } m ? CiStore.Stamp(m) : null;

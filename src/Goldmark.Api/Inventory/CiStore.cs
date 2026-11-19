@@ -312,6 +312,10 @@ internal sealed class CiStore(DbSession db)
     // A CI's type never changes, so it is read without a lock, before its type's lock is taken.
     private const string TypeIdSql = "SELECT CiTypeId FROM cmdb.Ci WHERE Id = @id AND TenantId = @tenant;";
 
+    // When a CI was created: its first version (CIs are never deleted, so it is null only for no such CI). The history
+    // is read through IX_CiHistory_Id (0009).
+    private const string CreatedAtSql = "SELECT MIN(c.ValidFrom) FROM cmdb.Ci FOR SYSTEM_TIME ALL AS c WHERE c.Id = @id AND c.TenantId = @tenant;";
+
     private const string InsertSql = """
         INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
         VALUES (@id, @tenant, @typeId, @name, 'Active', @attributes, DEFAULT);
@@ -384,6 +388,9 @@ internal sealed class CiStore(DbSession db)
 
     /// <summary>The CI's type, or null when there's no such CI.</summary>
     public Task<int?> TypeIdAsync(Guid id) => db.ExecuteScalarAsync<int?>(TypeIdSql, new { id, tenant = Tenants.Default });
+
+    /// <summary>When the CI was created (its first version's time), or null when there's no such CI.</summary>
+    public Task<DateTime?> CreatedAtAsync(Guid id) => db.ExecuteScalarAsync<DateTime?>(CreatedAtSql, new { id, tenant = Tenants.Default });
 
     /// <summary>The CI, locked until the transaction ends (call inside one).</summary>
     public Task<CiRow?> FindForUpdateAsync(Guid id) => db.QuerySingleOrDefaultAsync<CiRow>(LockedDetailSql, new { id, tenant = Tenants.Default });

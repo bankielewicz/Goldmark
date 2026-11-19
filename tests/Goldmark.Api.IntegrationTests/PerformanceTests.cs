@@ -302,6 +302,106 @@ public sealed class PerformanceTests(SqlServerFixture sql)
         }
     }
 
+    /// <summary>
+    /// Slice 7's reads on the synthetic estate with history (DEC-047): every CI and every relationship changed once
+    /// after a moment T, and one team's 3,500 owned_by relationships also regrouped (half) and ended (a tenth, as the
+    /// app ends them), so the reads of T and the history read the history tables as well. Measured against
+    /// NFR-PERF-2's budgets: a list or a search 500 ms, a CI's detail 300 ms; a CI's history is a list. A side agent's
+    /// note relayed by the owner (2026-11-19) asked for the history of a CI with thousands of relationships, which is
+    /// built in memory from all of them on every page.
+    /// </summary>
+    [Fact]
+    public async Task The_reads_as_of_a_moment_and_a_CIs_history_meet_their_p95_on_the_synthetic_estate()
+    {
+        if (Environment.GetEnvironmentVariable("GOLDMARK_PERF") != "1")
+        {
+            Assert.Skip("On request only: set GOLDMARK_PERF=1 (the Performance workflow does).");
+        }
+
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, adminPerson) = await scenario.SetUpAsync();
+        await SyntheticInventory.SeedAsync(scenario.Sql, scenario.Installation, adminPerson.Id);
+        await SyntheticInventory.SeedRelationshipsAsync(scenario.Sql, scenario.Installation, adminPerson.Id);
+        var database = scenario.Installation.Database;
+        var other = Guid.NewGuid();
+        await scenario.Sql.AsAdminAsync(database, "WAITFOR DELAY '00:00:00.050';");
+        var then = await scenario.Sql.AdminScalarAsync<string>(database, "SELECT CONCAT(CONVERT(varchar(27), SYSUTCDATETIME(), 126), 'Z');");
+        await scenario.Sql.AsAdminAsync(database, $"""
+            WAITFOR DELAY '00:00:00.050';
+            UPDATE cmdb.Ci SET ChangedBy = N'{other:D}';
+            UPDATE cmdb.Relationship SET ChangedBy = N'{other:D}';
+            DECLARE @team uniqueidentifier = (SELECT Id FROM cmdb.Ci WHERE Name = N'team 00001');
+            UPDATE cmdb.Relationship SET RedundancyGroup = N'g', ChangedBy = N'{adminPerson.Id:D}' WHERE ToCiId = @team AND ABS(CHECKSUM(Id)) % 2 = 0;
+            BEGIN TRANSACTION;
+            UPDATE cmdb.Relationship SET ChangedBy = N'{adminPerson.Id:D}' WHERE ToCiId = @team AND ABS(CHECKSUM(Id)) % 10 = 1;
+            DELETE FROM cmdb.Relationship WHERE ToCiId = @team AND ABS(CHECKSUM(Id)) % 10 = 1;
+            COMMIT;
+            """);
+        var team = await scenario.Sql.AdminScalarAsync<string>(database, "SELECT CAST(Id AS nvarchar(36)) FROM cmdb.Ci WHERE Name = N'team 00001';");
+        var vm = await scenario.Sql.AdminScalarAsync<string>(database, "SELECT CAST(Id AS nvarchar(36)) FROM cmdb.Ci WHERE Name = N'app-erp-00005';");
+        var versions = await scenario.Sql.AdminScalarAsync<int>(database, "SELECT (SELECT COUNT(*) FROM cmdb.CiHistory) + (SELECT COUNT(*) FROM cmdb.RelationshipHistory);");
+        var teamHistory = AuthScenario.Ok(await admin.GetAsync($"/api/v1/cis/{team}/history")).Body;
+        var entries = teamHistory.GetProperty("total").GetInt32();
+        var cursor = teamHistory.GetProperty("next").GetString()!;
+        var ids = (await admin.GetAsync($"/api/v1/cis?limit=200&sort=-changed&asOf={Uri.EscapeDataString(then)}")).Body.GetProperty("items")
+            .EnumerateArray().Select(i => i.GetProperty("id").GetString()!).ToList();
+        var asOf = $"asOf={Uri.EscapeDataString(then)}";
+
+        var results = new List<(string What, string Path, double P95, double Budget)>
+        {
+            await MeasureAsync(admin, "History of the largest team, first page", _ => $"/api/v1/cis/{team}/history", 500),
+            await MeasureAsync(admin, "History of the largest team, second page", _ => $"/api/v1/cis/{team}/history?cursor={cursor}", 500),
+            await MeasureAsync(admin, "History of a typical VM", _ => $"/api/v1/cis/{vm}/history", 500),
+            await MeasureAsync(admin, "List as of T, first page by name", _ => $"/api/v1/cis?{asOf}", 500),
+            await MeasureAsync(admin, "Search by name as of T (\"erp\")", _ => $"/api/v1/cis?q=erp&{asOf}", 500),
+            await MeasureAsync(admin, "Newest changes first as of T, with retired", _ => $"/api/v1/cis?sort=-changed&retired=true&{asOf}", 500),
+            await MeasureAsync(admin, "A CI's detail as of T", i => $"/api/v1/cis/{ids[i % ids.Count]}?{asOf}", 300),
+            await MeasureAsync(admin, "The largest team's relationships as of T", _ => $"/api/v1/cis/{team}/relationships?{asOf}", 500),
+        };
+
+        // The design target's worst case (NFR-PERF-1; the graph read's limit, DEC-046 item 7): one CI that every other CI
+        // relates to, half of those relationships regrouped since.
+        await scenario.Sql.AsAdminAsync(database, $"""
+            DECLARE @hub uniqueidentifier = NEWID();
+            INSERT INTO cmdb.Ci (Id, TenantId, CiTypeId, Name, LifecycleState, Attributes, ChangedBy)
+            SELECT @hub, '00000000-0000-0000-0000-000000000001', t.Id, N'team everyone', 'Active', N'{"{}"}', N'{adminPerson.Id:D}'
+            FROM cmdb.CiType AS t WHERE t.Name = N'Team';
+            INSERT INTO cmdb.Relationship (Id, TenantId, FromCiId, ToCiId, RelationshipTypeId, RedundancyGroup, ChangedBy)
+            SELECT NEWID(), '00000000-0000-0000-0000-000000000001', c.Id, @hub, rt.Id, NULL, N'{adminPerson.Id:D}'
+            FROM cmdb.Ci AS c CROSS JOIN cmdb.RelationshipType AS rt WHERE rt.Name = N'owned_by' AND c.Id <> @hub;
+            WAITFOR DELAY '00:00:00.050';
+            UPDATE cmdb.Relationship SET RedundancyGroup = N'g', ChangedBy = N'{other:D}' WHERE ToCiId = @hub AND ABS(CHECKSUM(Id)) % 2 = 0;
+            """);
+        var hub = await scenario.Sql.AdminScalarAsync<string>(database, "SELECT CAST(Id AS nvarchar(36)) FROM cmdb.Ci WHERE Name = N'team everyone';");
+        var hubEntries = AuthScenario.Ok(await admin.GetAsync($"/api/v1/cis/{hub}/history")).Body.GetProperty("total").GetInt32();
+        results.Add(await MeasureAsync(admin, string.Create(CultureInfo.InvariantCulture, $"History of a CI every CI relates to ({hubEntries:N0} entries)"),
+            _ => $"/api/v1/cis/{hub}/history", 500));
+
+        var summary = new StringBuilder(string.Create(CultureInfo.InvariantCulture,
+                $"### Reads as of a moment and a CI's history on {SyntheticInventory.Count:N0} CIs (NFR-PERF-2, DEC-047)\n\n"))
+            .AppendLine(string.Create(CultureInfo.InvariantCulture,
+                $"Every CI and relationship changed once after T ({versions:N0} versions in the history tables); the largest team's history has {entries:N0} entries. {Samples} requests each after {Warmup} to warm up, through the API, SQL Server 2025 Express.\n"))
+            .AppendLine("| Request | p95 | Budget |")
+            .AppendLine("|---|---:|---:|");
+        foreach (var (what, path, p95, budget) in results)
+        {
+            summary.AppendLine(CultureInfo.InvariantCulture, $"| {what} (`{path.Split('?')[0]}`) | {p95:F0} ms | {budget:F0} ms |");
+        }
+
+        TestContext.Current.TestOutputHelper?.WriteLine(summary.ToString());
+        if (Environment.GetEnvironmentVariable("GITHUB_STEP_SUMMARY") is { Length: > 0 } file)
+        {
+            await File.AppendAllTextAsync(file, summary.ToString(), TestContext.Current.CancellationToken);
+        }
+
+        if (Environment.GetEnvironmentVariable("GOLDMARK_PERF_OUT") is { Length: > 0 } output)
+        {
+            await File.WriteAllTextAsync(output, summary.ToString(), TestContext.Current.CancellationToken);
+        }
+
+        Assert.All(results, r => Assert.True(r.P95 <= r.Budget, $"{r.What}: p95 {r.P95:F0} ms, budget {r.Budget:F0} ms"));
+    }
+
     private static async Task<(string, string, double, double)> MeasureAsync(ApiClient client, string what, Func<int, string> path, double budget)
     {
         var times = new List<double>(Samples);

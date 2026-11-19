@@ -87,7 +87,7 @@ internal static class CiEndpoints
 
         if (await store.FindAsync(id, asOf) is not { } row)
         {
-            return asOf is not null && await store.TypeIdAsync(id) is not null ? AsOf.NotThen() : NotFound();
+            return await AsOf.NotThenAsync(store, id, asOf) ?? NotFound();
         }
 
         var detail = await store.DetailAsync(row, TypeOf(await catalog.ListAsync(asOf), row), asOf);

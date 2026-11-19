@@ -52,7 +52,7 @@ internal static class GraphEndpoints
     }
 
     private static async Task<IResult> NotFoundAsync(CiStore cis, Guid ci, DateTime? asOf) =>
-        asOf is not null && await cis.TypeIdAsync(ci) is not null ? AsOf.NotThen() : CiNotFound();
+        await AsOf.NotThenAsync(cis, ci, asOf) ?? CiNotFound();
 
     private static async Task<IResult> ExportAsync(HttpContext context, CiTypeCatalog catalog, CiStore cis, GraphStore graph, DbSession db, AuditTrail audit)
     {

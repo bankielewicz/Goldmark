@@ -2495,11 +2495,16 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   to CIs as they were named; the search finds by the names of then; the graph walks the relationships in force
   then past CIs as they were, so one retired since is still in use (FR-IM-4). `GET /types?asOf=` exists so the
   web app can label a past CI's values. The current-time statements are unchanged: the as-of ones are separate
-  constants, so no present read can slow down or change (NFR-PERF-2). How fast the as-of search is on 25k CIs
-  with a long history isn't measured yet: it reads the history table as well, which has its period index and
-  0009's index by CI, and none by name.
+  constants, so no present read can slow down or change (NFR-PERF-2). Measured on the synthetic estate (25,000
+  CIs and 52,000 relationships, every one changed once after the moment read, 79,000 versions in the history
+  tables; `PerformanceTests`, GOLDMARK_PERF=1, SQL Server 2025 Express in WSL, 2026-11-19), p95 against NFR-PERF-2's
+  budgets: the list as of the moment 93 ms, a search by name 95 ms, newest changes first 87 ms (500 ms each), a
+  CI's detail 6 ms (300 ms), the largest team's 3,500 relationships 69 ms (500 ms).
 - **5. Details of the as-of answers.** A CI that exists now and didn't then is 404 `not-found-then` ("This CI
-  didn't exist at that time."), so the page can say so instead of "no such CI". A past version is read-only and
+  didn't exist at that time.") with `createdAt`, its first version's time, so the page can say so instead of "no
+  such CI", and when it was created (the boards' "It was created on …, after the time you're viewing"). A
+  relationship read as of a moment says whether it has ended since (`endedSince`, the boards' "Ended since"
+  badge); a present read leaves the property out. A past version is read-only and
   carries no ETag header. A cursor carries its moment and is refused with another (`InvalidCursor`), since its
   keys order a different list. An export of the past records `asOf` in its audit entry's filters.
 - **6. A CI's history is `GET /api/v1/cis/{id}/history`** (PRD §5.7 names it; SignedIn, as the CI itself),
@@ -2519,9 +2524,13 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     the attribute went, not that someone cleared the value.
   - Versions that lasted no time (two changes in one transaction) aren't entries: `FOR SYSTEM_TIME ALL` leaves
     them out, though the history table keeps them (measured).
-  - The entries are built in memory and paged there. One CI's versions are few, and slice 10's collectors write
-    none for a re-read that changes nothing (US-21). If a CI's history grows past what that serves, the paging
-    moves into SQL; the API doesn't change.
+  - The entries are built in memory from all of the CI's versions and its relationships' versions, and paged
+    there. Slice 10's collectors write no version for a re-read that changes nothing (US-21). A side agent's note
+    relayed by the owner (2026-11-19) asked how that holds for a CI with thousands of relationships; measured with
+    the reads above (p95, budget 500 ms as a list): the largest team, 3,500 relationships and 9,200 entries, 73 ms
+    for its first page and 57 ms for the second; a typical VM 17 ms; a CI that every one of the 25,000 CIs relates
+    to, half of those relationships regrouped (37,460 entries), 213 ms. So the paging stays in memory; if it ever
+    has to move into SQL, the API doesn't change.
 - **7. Who ended a relationship is shown to everyone signed in (owner, 2026-11-19, AskUserQuestion: "A.
   Everyone signed in (Recommended)").** For a relationship ended before item 9's stamp existed, the name comes
   from its `relationship.deleted` audit entry, although the audit log itself is AuditReader's: it is the same

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Goldmark.Api.Data;
 
 namespace Goldmark.Api.Inventory;
@@ -9,10 +10,12 @@ internal sealed record RelationshipEnd(Guid Id, string Name, string Type, string
 /// <summary>
 /// A relationship as screen 5's Relationships tab and panel show it (DEC-046): <c>From</c> is the dependent, <c>To</c>
 /// the dependency. <c>CreatedAt</c> is when it was added (item 13; "Since"), <c>ChangedAt</c> and <c>ChangedBy</c> its
-/// last change, <c>ETag</c> the version If-Match must name to change or delete it.
+/// last change, <c>ETag</c> the version If-Match must name to change or delete it. Read as of a past moment, it also
+/// says whether it has ended since (<c>EndedSince</c>, the board's "Ended since"; DEC-047); a present read leaves it out.
 /// </summary>
 internal sealed record RelationshipDetail(Guid Id, string Type, RelationshipEnd From, RelationshipEnd To, string? RedundancyGroup,
-    DateTime? CreatedAt, DateTime ChangedAt, CiChangedBy? ChangedBy, string ETag);
+    DateTime? CreatedAt, DateTime ChangedAt, CiChangedBy? ChangedBy, string ETag,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? EndedSince = null);
 
 /// <summary>
 /// One page of a section of the tab. <c>Total</c> comes with the first page only; <c>Next</c> is the cursor of the
@@ -102,11 +105,17 @@ internal sealed class RelationshipStore(DbSession db)
     public const int DefaultLimit = 50;
     public const int MaxLimit = 200;
 
-    private const string Columns = """
+    private const string ColumnList = """
         SELECT TOP (@take) r.Id, rt.Name AS Type, r.RedundancyGroup, r.CreatedAt, r.ValidFrom, r.ChangedBy, u.DisplayName AS ChangedByName,
             f.Id AS FromId, f.Name AS FromName, ft.Name AS FromType, f.LifecycleState AS FromState,
             t.Id AS ToId, t.Name AS ToName, tt.Name AS ToType, t.LifecycleState AS ToState
         """;
+
+    private const string Columns = ColumnList + ", CAST(NULL AS bit) AS EndedSince";
+
+    // As of a past moment, whether the relationship has ended since: no current row has its ID (the primary key).
+    private const string ColumnsAsOf = ColumnList
+        + ",\n    CAST(IIF(EXISTS (SELECT 1 FROM cmdb.Relationship AS cur WHERE cur.Id = r.Id), 0, 1) AS bit) AS EndedSince";
 
     private const string Joins = """
 
@@ -152,9 +161,9 @@ internal sealed class RelationshipStore(DbSession db)
 
     private const string DependentsSql = Columns + " FROM cmdb.Relationship AS r" + Joins + DependentsPage;
 
-    private const string DependenciesAsOfSql = AsOf.Declare + Columns + TablesAsOf + DependenciesPage;
+    private const string DependenciesAsOfSql = AsOf.Declare + ColumnsAsOf + TablesAsOf + DependenciesPage;
 
-    private const string DependentsAsOfSql = AsOf.Declare + Columns + TablesAsOf + DependentsPage;
+    private const string DependentsAsOfSql = AsOf.Declare + ColumnsAsOf + TablesAsOf + DependentsPage;
 
     private const string DependenciesCountSql = "SELECT COUNT_BIG(*) FROM cmdb.Relationship WHERE FromCiId = @id AND TenantId = @tenant;";
 
@@ -276,9 +285,9 @@ internal sealed class RelationshipStore(DbSession db)
     private static RelationshipDetail ToDetail(Row row) =>
         new(row.Id, row.Type, new RelationshipEnd(row.FromId, row.FromName, row.FromType, row.FromState),
             new RelationshipEnd(row.ToId, row.ToName, row.ToType, row.ToState), row.RedundancyGroup, row.CreatedAt, row.ValidFrom,
-            Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, CiStore.Stamp(row.ValidFrom));
+            Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, CiStore.Stamp(row.ValidFrom), row.EndedSince);
 
     private sealed record Row(Guid Id, string Type, string? RedundancyGroup, DateTime? CreatedAt, DateTime ValidFrom, string ChangedBy,
         string? ChangedByName, Guid FromId, string FromName, string FromType, string FromState, Guid ToId, string ToName, string ToType,
-        string ToState);
+        string ToState, bool? EndedSince);
 }

@@ -102,9 +102,9 @@ internal static class RelationshipEndpoints
             return CiNotFound();
         }
 
-        if (asOf is not null && await cis.FindAsync(id, asOf) is null)
+        if (asOf is not null && await cis.FindAsync(id, asOf) is null && await AsOf.NotThenAsync(cis, id, asOf) is { } notThen)
         {
-            return AsOf.NotThen();
+            return notThen;
         }
 
         return direction.Length > 0
