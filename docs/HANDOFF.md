@@ -5,7 +5,7 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-23:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+**As of 2026-11-18:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
 (PR #32), 4a (PR #38), 4b (PR #39) and **5 (PR #49)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group), #29, #44, #50 (React 19.3.1 with React DOM, axe 4.14 and
 Playwright 1.64.1, a Dependabot `react` group) and #51. Slice 3 brought first-run
@@ -133,7 +133,39 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in review** (PR #59), with its approved screens in
+Slice **7** (`slice/07-history`, approved 2026-11-18, DEC-047) is **in progress**: the backend and API are built and
+tested; the screens (4's as-of picker, 5's History tab, 6's as-of control) wait for their boards. The design handoff
+is `tmp/screen-handoff-slice7.md` (git-ignored; rule 3). DEC-047 lists the choices made without asking, each with its
+reason, and one open question (item 9: keeping who ended a relationship past the audit log's retention).
+
+**What slice 7 has so far:**
+- **Migration 0009:** `cmdb.Ci.ChangedBy` and `cmdb.Relationship.ChangedBy` default to the connection's
+  `SESSION_CONTEXT(N'Goldmark.ChangedBy')`; indexes on the two history tables by CI and on the audit log by target.
+  It changes no row.
+- **Who changed it (FR-CM-5):** `Data/DbSession.cs` sets that key once per connection for the signed-in person,
+  read-only; every write gives `ChangedBy` as `DEFAULT` (the definition tables read the key themselves, after
+  `DbSession.RequireActor()`). `Data/ActingPrincipal.cs` is the one answer to "who is acting", for the audit trail too.
+  A write on a connection that names nobody fails (error 515). A test's fixture may still state `ChangedBy` itself.
+- **`asOf`** (`Inventory/AsOf.cs`): a past UTC moment with a `Z`, on `GET /cis`, `/cis/{id}`, `/cis/{id}/relationships`,
+  `/graph`, `POST /graph/export` and `GET /types`; every other inventory read answers 400 `NotSupported` to it. Each
+  as-of statement is its own constant beside the current one (`…AsOfSql`), reading every table
+  `FOR SYSTEM_TIME AS OF @at`; add both when adding a read. A CI that didn't exist yet is 404 `not-found-then`.
+- **History:** `GET /cis/{id}/history` (`Inventory/CiHistory.cs` builds the entries from versions, with no database,
+  and is unit-tested; `CiHistoryStore.cs` reads them). Who ended a relationship comes from the audit log.
+- **Tests:** `ChangedByTests` (the measurements the design rests on), `HistoryApiTests`, `CiHistoryTests`.
+- **Measured, worth knowing:** `FOR SYSTEM_TIME ALL` leaves out a version that lasted no time (two changes in one
+  transaction), while the history table keeps the row. `INSERT … SELECT` can't use the `DEFAULT` keyword: leave the
+  column out. A raw string literal (`"""`) can't continue after an interpolated constant on the same line: build such
+  SQL constants with ordinary strings and `+`.
+
+**Still to do in slice 7:** the three screens after the boards are approved (`web/src/pages/SearchPage.tsx`,
+`CiPage.tsx` with a History tab, `GraphPage.tsx`, the shell's As-of slot), `docs/integration/deep-links.md`
+(`tab=history`, `asOf`), browser tests with axe, `docs/design/screens/slice-7/`, and the owner's answer to DEC-047
+item 9.
+
+### Slice 6 (merged), for reference
+
+Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) merged on 2026-11-18 (PR #59), with its approved screens in
 `docs/design/screens/slice-6/` (canvas version `1794767106-ecfd`). The decisions are DEC-046 items 1 to 19, with the
 owner's words.
 

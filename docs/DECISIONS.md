@@ -2448,3 +2448,92 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.
+
+## DEC-047 Slice 7: who changed it from the session, a CI's history, and reads "as of"
+
+- **Status.** Approved by the owner on 2026-11-18 ("approved"), with "Make reasonable, reversible assumptions to
+  carry work forward and state them"; branch `slice/07-history` from `04f8862` (after PR #81). HANDOFF row 7:
+  "`SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads", done when "US-42/43" (screens 4, 5 and 6;
+  FR-CM-5, FR-IM-4). The backend and API are built first (rule 3 allows it); the screens wait for their boards.
+  The choices below were made without asking, each with its reason, and are the owner's to change in review. One
+  question is open (item 9).
+- **1. `ChangedBy` comes from the connection (FR-CM-5).** `DbSession` puts the signed-in person's account ID in
+  the connection's `SESSION_CONTEXT` under `Goldmark.ChangedBy`, once, read-only (`@read_only = 1`), before the
+  first statement it runs for that person. Migration 0009 gives `cmdb.Ci.ChangedBy` and
+  `cmdb.Relationship.ChangedBy` that value as their default, and the app's statements write `ChangedBy` as
+  `DEFAULT`, on INSERT and UPDATE alike; no statement takes it as a parameter any more. The audit entry's actor
+  and `ChangedBy` come from one place (`ActingPrincipal`), so they can't name different people. The value is the
+  account ID as text, as before (DEC-044); slice 10 adds sources.
+  - *A write by nobody fails.* Both columns are NOT NULL, so on a connection that names nobody the insert or
+    update is refused (error 515). `cmdb.AttributeDef` and `cmdb.RelationshipType` allow null there (0007: null
+    means "never changed"), so they get no default: their statements read the session value themselves, after
+    `DbSession.RequireActor()` has refused a session with nobody.
+  - *Measured on SQL Server 2025* (`ChangedByTests`, 2026-11-18): the key can't be set again on the connection
+    (error 15664); a pooled connection handed to a session with no principal has the same `@@SPID` and an empty
+    key, and to another person's session that person's; the runtime login needs no new right; the migration
+    applies with versioning on, moves no `ValidFrom` and writes no history row.
+  - *No CHECK constraint ties `ChangedBy` to the session.* It would add nothing against a stolen runtime login
+    (which can open its own connection and set the key), and it would break migrations and fixtures that state
+    `ChangedBy` themselves. The default is a default.
+  - *`CiIdentifier` and `CiComponent`* (FR-CM-5 names them) don't exist yet; the slices that add them use the
+    same default.
+- **2. `asOf` is a past UTC moment with a `Z`** (US-42): `2026-11-01T14:30Z`, with seconds, or with up to seven
+  decimals. A time without a zone is refused (`InvalidTime`), since each client would read it differently; one in
+  the future is refused (`FutureTime`). A version's own time, as the history gives it, shows that version.
+- **3. Which reads take `asOf`, and the rest refuse it.** `GET /cis`, `/cis/{id}`, `/cis/{id}/relationships`,
+  `/graph`, `POST /graph/export` and `GET /types` take it. `/cis/{id}/history`, `/relationships/{id}`,
+  `/cis/{id}/redundancy-groups` and `/types/usage` answer 400 `NotSupported` when it is sent. Reason: FR-IM-4 says
+  "The `asOf` parameter applies to all reads", and a read that silently ignored it would answer a question about
+  the past with today's data, which is the worst failure this slice could have. Those four have no past to show:
+  the history is all of it, and the other three serve editing.
+- **4. Everything in an as-of answer is of that moment**: each query reads every table `FOR SYSTEM_TIME AS OF`
+  it (CIs, their types, relationships, relationship types, attribute definitions). A CI shows the name, values
+  and state it had, under the attributes its type had (labels, kinds, order, attributes deleted since), linked
+  to CIs as they were named; the search finds by the names of then; the graph walks the relationships in force
+  then past CIs as they were, so one retired since is still in use (FR-IM-4). `GET /types?asOf=` exists so the
+  web app can label a past CI's values. The current-time statements are unchanged: the as-of ones are separate
+  constants, so no present read can slow down or change (NFR-PERF-2).
+- **5. Details of the as-of answers.** A CI that exists now and didn't then is 404 `not-found-then` ("This CI
+  didn't exist at that time."), so the page can say so instead of "no such CI". A past version is read-only and
+  carries no ETag header. A cursor carries its moment and is refused with another (`InvalidCursor`), since its
+  keys order a different list. An export of the past records `asOf` in its audit entry's filters.
+- **6. A CI's history is `GET /api/v1/cis/{id}/history`** (PRD §5.7 names it; SignedIn, as the CI itself),
+  newest first, 50 entries a page (200 at most), built from every version of the CI and of the relationships at
+  either end of it:
+  - `created`, `changed`, `retired`, `restored`, each with what differed from the version before: the name, and
+    each attribute as `added`, `removed` or `changed` with the values before and after, as the API sends a CI's
+    (a number as a decimal string, DEC-044 item 12; a link as the CI's ID, with the CI as it is now in
+    `references`). `created` lists what the CI started with.
+  - `relationshipAdded`, `relationshipChanged` (the redundancy group, before and after) and `relationshipEnded`,
+    with the relationship's type, its direction as this CI sees it and the CI at the other end.
+  - Each entry says who (`by`: the account and its name; anything else `ChangedBy` holds as text, for slice 10's
+    sources; null for nobody) and when (`at`, which is also the `asOf` that shows the CI from then on).
+  - A value reads under the label and kind its attribute had when the version was written. A value that left
+    because its attribute was deleted reads under the definition in force until just before, since the delete
+    and the removal are one transaction (DEC-045 item 6).
+  - Versions that lasted no time (two changes in one transaction) aren't entries: `FOR SYSTEM_TIME ALL` leaves
+    them out, though the history table keeps them (measured).
+  - The entries are built in memory and paged there. One CI's versions are few, and slice 10's collectors write
+    none for a re-read that changes nothing (US-21). If a CI's history grows past what that serves, the paging
+    moves into SQL; the API doesn't change.
+- **7. Who ended a relationship** is the actor of its `relationship.deleted` audit entry (DEC-046 item 1: the
+  delete leaves the last writer's `ChangedBy`). The history shows it to everyone signed in, although the audit
+  log itself is AuditReader's: it is the same kind of fact as `ChangedBy`, which everyone already sees. When the
+  entry is gone, nobody is named; the last writer is never shown as the one who ended it (tested).
+- **8. Migration 0009** adds, besides the two defaults: `IX_CiHistory_Id (Id, ValidFrom)`,
+  `IX_RelationshipHistory_FromCi` and `_ToCi (…, ValidFrom)`, because the history tables had only their period
+  index and a read by CI scanned them whole; and `IX_AuditLog_Target (TargetType, TargetId)` for item 7's lookup.
+  It changes no row.
+- **9. Open: keeping who ended a relationship past the audit log's retention** (a side agent's note relayed by
+  the owner, 2026-11-18). The audit log is purged after its retention period (365 days at the shortest,
+  DEC-041), and after that the history can only say nobody for an ending, while every other "who" lives in the
+  versioned tables for good. Options, not decided: (A) leave it, as built; (B) a small table of endings written
+  with the delete; (C) have the delete write the ender as a last version that lasts no time (`ChangedBy = DEFAULT`,
+  then DELETE, in one transaction): the history table keeps that row, every `FOR SYSTEM_TIME` read leaves it
+  out (measured, item 6), and no new table or right is needed, but it reverses DEC-046 item 1's "Never UPDATE
+  `ChangedBy` and then DELETE". The shortest retention is 365 days, so no ending is lost within a year of an
+  installation's first one, and until then B or C could still be filled from the audit log.
+- **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
+  Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
+  them. The estate-wide change history is screen 15 (slice 23). The screens (4's as-of picker, 5's History tab,
+  6's as-of control) follow their boards (`tmp/screen-handoff-slice7.md`, rule 3).
