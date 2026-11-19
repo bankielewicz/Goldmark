@@ -63,9 +63,10 @@ internal static class CiEndpoints
     /// <summary>The search, now or with <c>asOf</c> as it would have answered then (US-42): the CIs, names and types of that moment.</summary>
     private static async Task<IResult> SearchAsync(HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         var (search, errors) = CiSearch.Parse(context.Request.Query, await catalog.ListAsync(asOf), asOf);
@@ -78,9 +79,10 @@ internal static class CiEndpoints
     /// </summary>
     private static async Task<IResult> GetAsync(Guid id, HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         if (await store.FindAsync(id, asOf) is not { } row)

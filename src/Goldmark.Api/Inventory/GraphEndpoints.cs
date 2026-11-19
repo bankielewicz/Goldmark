@@ -32,9 +32,10 @@ internal static class GraphEndpoints
     /// <summary>The graph, now or with <c>asOf</c> as it was then (US-42, FR-IM-4): the filters name the types of that moment.</summary>
     private static async Task<IResult> ReadAsync(HttpContext context, CiTypeCatalog catalog, CiStore cis, GraphStore graph)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         var types = await catalog.ListAsync(asOf);
@@ -55,9 +56,10 @@ internal static class GraphEndpoints
 
     private static async Task<IResult> ExportAsync(HttpContext context, CiTypeCatalog catalog, CiStore cis, GraphStore graph, DbSession db, AuditTrail audit)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         var types = await catalog.ListAsync(asOf);

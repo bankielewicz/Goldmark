@@ -2479,7 +2479,10 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     same default.
 - **2. `asOf` is a past UTC moment with a `Z`** (US-42): `2026-11-01T14:30Z`, with seconds, or with up to seven
   decimals. A time without a zone is refused (`InvalidTime`), since each client would read it differently; one in
-  the future is refused (`FutureTime`). A version's own time, as the history gives it, shows that version.
+  the future is refused (`FutureTime`), judged by the database's clock, not the app's: every version's time is
+  SQL Server's, and with the database on another server (DEC-030) a clock a few seconds ahead would otherwise
+  have "show the CI as of the change I just saved" refused. A version's own time, as the history gives it, shows
+  that version.
 - **3. Which reads take `asOf`, and the rest refuse it.** `GET /cis`, `/cis/{id}`, `/cis/{id}/relationships`,
   `/graph`, `POST /graph/export` and `GET /types` take it. `/cis/{id}/history`, `/relationships/{id}`,
   `/cis/{id}/redundancy-groups` and `/types/usage` answer 400 `NotSupported` when it is sent. Reason: FR-IM-4 says
@@ -2492,7 +2495,9 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   to CIs as they were named; the search finds by the names of then; the graph walks the relationships in force
   then past CIs as they were, so one retired since is still in use (FR-IM-4). `GET /types?asOf=` exists so the
   web app can label a past CI's values. The current-time statements are unchanged: the as-of ones are separate
-  constants, so no present read can slow down or change (NFR-PERF-2).
+  constants, so no present read can slow down or change (NFR-PERF-2). How fast the as-of search is on 25k CIs
+  with a long history isn't measured yet: it reads the history table as well, which has its period index and
+  0009's index by CI, and none by name.
 - **5. Details of the as-of answers.** A CI that exists now and didn't then is 404 `not-found-then` ("This CI
   didn't exist at that time."), so the page can say so instead of "no such CI". A past version is read-only and
   carries no ETag header. A cursor carries its moment and is refused with another (`InvalidCursor`), since its
@@ -2510,7 +2515,8 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     sources; null for nobody) and when (`at`, which is also the `asOf` that shows the CI from then on).
   - A value reads under the label and kind its attribute had when the version was written. A value that left
     because its attribute was deleted reads under the definition in force until just before, since the delete
-    and the removal are one transaction (DEC-045 item 6).
+    and the removal are one transaction (DEC-045 item 6), and is marked `attributeDeleted`, so the page can say
+    the attribute went, not that someone cleared the value.
   - Versions that lasted no time (two changes in one transaction) aren't entries: `FOR SYSTEM_TIME ALL` leaves
     them out, though the history table keeps them (measured).
   - The entries are built in memory and paged there. One CI's versions are few, and slice 10's collectors write

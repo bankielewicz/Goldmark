@@ -65,9 +65,10 @@ internal static class RelationshipEndpoints
     /// </summary>
     private static async Task<IResult> ListAsync(Guid id, HttpContext context, CiStore cis, RelationshipStore store)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         var query = context.Request.Query;

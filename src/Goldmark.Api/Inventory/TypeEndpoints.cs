@@ -105,9 +105,10 @@ internal static partial class TypeEndpoints
     /// </summary>
     private static async Task<IResult> ListAsync(HttpContext context, CiTypeCatalog catalog)
     {
-        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return refusal!;
+            return refusal;
         }
 
         return Results.Ok(new

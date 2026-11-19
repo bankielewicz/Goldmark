@@ -143,10 +143,10 @@ internal sealed class DbSession(SqlConnectionFactory factory, ActingPrincipal? a
         // Read-only: nothing later on this connection can name someone else.
         if (!_actorSet && actor?.ChangedBy is { } changedBy)
         {
-            _actorSet = true;
             await _connection.ExecuteAsync(Command(
                 "EXEC sys.sp_set_session_context @key = N'" + ChangedByKey + "', @value = @changedBy, @read_only = 1;",
                 new { changedBy }, cancellationToken));
+            _actorSet = true; // only once it is set: a failure here fails the statement that was about to run
         }
 
         return _connection;

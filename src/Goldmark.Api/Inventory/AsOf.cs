@@ -1,4 +1,5 @@
 using System.Globalization;
+using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 
 namespace Goldmark.Api.Inventory;
@@ -24,12 +25,17 @@ internal static class AsOf
         "yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'",
     ];
 
+    // Whether the moment is ahead of the database's clock. Every version's time is SQL Server's (the start of the
+    // transaction that wrote it), so the future is judged there too: by the app's clock, a database a few seconds
+    // ahead (DEC-030: it may be another server) would have "show the CI as of the change I just saved" refused.
+    private const string IsFutureSql = "SELECT CAST(IIF(CONVERT(datetime2(7), @asOf, 126) > SYSUTCDATETIME(), 1, 0) AS bit);";
+
     /// <summary>
     /// The moment asked for, or null for "now". It must be UTC with a <c>Z</c> (a time without a zone would be
-    /// read differently by each client) and not in the future. A version's own time, as the history gives it
-    /// with seven decimals, shows that version.
+    /// read differently by each client). A version's own time, as the history gives it with seven decimals,
+    /// shows that version. Whether it is in the future is the database's to say (<see cref="ReadAsync"/>).
     /// </summary>
-    public static bool TryParse(IQueryCollection query, TimeProvider clock, out DateTime? moment, out string? error)
+    public static bool TryParse(IQueryCollection query, out DateTime? moment, out string? error)
     {
         moment = null;
         error = null;
@@ -46,22 +52,30 @@ internal static class AsOf
             return false;
         }
 
-        if (parsed > clock.GetUtcNow().UtcDateTime)
-        {
-            error = "FutureTime";
-            return false;
-        }
-
         moment = parsed;
         return true;
     }
 
-    /// <summary>The moment asked for, or the answer that refuses the request (400, field <c>asOf</c>).</summary>
-    public static bool TryRead(HttpContext context, out DateTime? moment, out IResult? refusal)
+    /// <summary>
+    /// The moment the request asks for (null for now), or the answer that refuses it (400, field <c>asOf</c>):
+    /// <c>InvalidTime</c>, or <c>FutureTime</c> for a moment ahead of the database's clock.
+    /// </summary>
+    public static async Task<(DateTime? Moment, IResult? Refusal)> ReadAsync(HttpContext context)
     {
-        var clock = context.RequestServices.GetRequiredService<TimeProvider>();
-        refusal = TryParse(context.Request.Query, clock, out moment, out var error) ? null : Refusal(error!);
-        return refusal is null;
+        if (!TryParse(context.Request.Query, out var moment, out var error))
+        {
+            return (null, Refusal(error!));
+        }
+
+        if (moment is null)
+        {
+            return (null, null);
+        }
+
+        var db = context.RequestServices.GetRequiredService<DbSession>();
+        return await db.ExecuteScalarAsync<bool>(IsFutureSql, new { asOf = Stamp(moment) }, context.RequestAborted)
+            ? (null, Refusal("FutureTime"))
+            : (moment, null);
     }
 
     /// <summary>For a read that has no past: null, or the refusal when the request names a moment.</summary>

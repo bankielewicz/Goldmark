@@ -77,6 +77,8 @@ public sealed class CiHistoryTests
         // ChangedBy that is no account is given as it is.
         var removed = events[0].Entry;
         Assert.Equal(["attributes.rack:Rack position:removed:\"R2\":"], removed.Changes.Select(Line));
+        Assert.True(removed.Changes[0].AttributeDeleted);
+        Assert.DoesNotContain(events.Skip(1).SelectMany(e => e.Entry.Changes), c => c.AttributeDeleted);
         Assert.Equal(new HistoryActor(null, null, "collector:vc01"), removed.By);
     }
 
@@ -142,14 +144,12 @@ public sealed class CiHistoryTests
     [InlineData("2026-11-01T14:30:05.5Z", "2026-11-01T14:30:05.5000000")]
     public void AsOf_reads_a_UTC_moment_and_writes_it_back_as_it_came(string text, string stamp)
     {
-        var clock = new FixedClock(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
-
-        Assert.True(AsOf.TryParse(Query(text), clock, out var moment, out var error));
+        Assert.True(AsOf.TryParse(Query(text), out var moment, out var error));
 
         Assert.Null(error);
         Assert.Equal(DateTimeKind.Utc, moment!.Value.Kind);
         Assert.Equal(stamp, AsOf.Stamp(moment));
-        Assert.True(AsOf.TryParse(Query(AsOf.Text(moment.Value)), clock, out var again, out _));
+        Assert.True(AsOf.TryParse(Query(AsOf.Text(moment.Value)), out var again, out _));
         Assert.Equal(moment, again);
     }
 
@@ -159,12 +159,9 @@ public sealed class CiHistoryTests
     [InlineData("2026-11-01", "InvalidTime")]
     [InlineData("yesterday", "InvalidTime")]
     [InlineData("", "InvalidTime")]
-    [InlineData("2026-11-18T00:00:01Z", "FutureTime")]
-    public void AsOf_refuses_what_is_not_a_past_UTC_moment(string text, string expected)
+    public void AsOf_refuses_what_is_not_a_UTC_moment(string text, string expected)
     {
-        var clock = new FixedClock(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
-
-        Assert.False(AsOf.TryParse(Query(text), clock, out var moment, out var error));
+        Assert.False(AsOf.TryParse(Query(text), out var moment, out var error));
 
         Assert.Null(moment);
         Assert.Equal(expected, error);
@@ -173,14 +170,12 @@ public sealed class CiHistoryTests
     [Fact]
     public void AsOf_absent_is_now_and_given_twice_is_refused()
     {
-        var clock = new FixedClock(new DateTimeOffset(2026, 11, 18, 0, 0, 0, TimeSpan.Zero));
-
-        Assert.True(AsOf.TryParse(new QueryCollection(), clock, out var moment, out _));
+        Assert.True(AsOf.TryParse(new QueryCollection(), out var moment, out _));
         Assert.Null(moment);
         Assert.False(AsOf.TryParse(new QueryCollection(new Dictionary<string, StringValues>
         {
             ["asOf"] = new StringValues(["2026-11-01T14:30Z", "2026-11-02T14:30Z"]),
-        }), clock, out _, out var error));
+        }), out _, out var error));
         Assert.Equal("InvalidTime", error);
     }
 
@@ -202,11 +197,6 @@ public sealed class CiHistoryTests
         Assert.NotNull(RelationshipCursor.Decode(section, "dependencies", then));
         Assert.Null(RelationshipCursor.Decode(section, "dependencies"));
         Assert.Null(RelationshipCursor.Decode(new RelationshipCursor("dependencies", "runs_on", "esx", id).Encode(), "dependencies", then));
-    }
-
-    private sealed class FixedClock(DateTimeOffset now) : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => now;
     }
 
     private static QueryCollection Query(string asOf) => new(new Dictionary<string, StringValues> { ["asOf"] = asOf });

@@ -13,9 +13,11 @@ internal sealed record HistoryActor(Guid? Id, string? DisplayName, string? Name)
 /// One difference between two versions: <c>Field</c> is <c>name</c>, <c>lifecycleState</c>, <c>attributes.{name}</c>
 /// or <c>redundancyGroup</c>; <c>Change</c> is <c>added</c>, <c>removed</c> or <c>changed</c>; the values are as the
 /// API sends a CI's (a number as a decimal string, a link as the CI's ID). <c>Kind</c> is the attribute's kind
-/// when its definition is known.
+/// when its definition is known. <c>AttributeDeleted</c> says the value went because its attribute was deleted
+/// at that moment, not because someone cleared it.
 /// </summary>
-internal sealed record HistoryChange(string Field, string Label, string? Kind, string Change, JsonNode? Before, JsonNode? After);
+internal sealed record HistoryChange(string Field, string Label, string? Kind, string Change, JsonNode? Before, JsonNode? After,
+    bool AttributeDeleted = false);
 
 /// <summary>The relationship an entry is about, seen from the CI: its type, which way it points, and the CI at the other end.</summary>
 internal sealed record HistoryRelationship(Guid Id, string Type, string Direction, Guid Ci, string? RedundancyGroup);
@@ -167,11 +169,13 @@ internal static class CiHistoryBuilder
             .Distinct(StringComparer.Ordinal);
         foreach (var attribute in names)
         {
-            var definition = now.FirstOrDefault(d => d.Name == attribute) ?? then.FirstOrDefault(d => d.Name == attribute);
+            var current = now.FirstOrDefault(d => d.Name == attribute);
+            var definition = current ?? then.FirstOrDefault(d => d.Name == attribute);
             if (Difference($"attributes.{attribute}", definition?.Label ?? attribute, definition is null ? null : AttributeDataTypes.ToApi(definition.DataType),
                 Value(before[attribute], definition), Value(after[attribute], definition)) is { } change)
             {
-                changes.Add(change);
+                // Defined until just before this version and not at it: the attribute was deleted in its transaction.
+                changes.Add(change with { AttributeDeleted = current is null && definition is not null && change.Change == "removed" });
             }
         }
 

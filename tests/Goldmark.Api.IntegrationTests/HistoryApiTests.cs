@@ -68,6 +68,17 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal(["name|Name|string|added||\"srv-01\"", "attributes.rack|Rack|string|added||\"R1\"", "attributes.cores|Cores|number|added||\"8\""],
             Changes(items[7]));
 
+        Assert.True(items[0].GetProperty("changes")[0].GetProperty("attributeDeleted").GetBoolean());
+        Assert.False(items[6].GetProperty("changes")[1].GetProperty("attributeDeleted").GetBoolean());
+
+        // Why the definitions are versioned (0007): as of a moment before the attribute was deleted and renamed, the
+        // CI has its value and the type its attribute under the label of then; now neither has it.
+        var restored = Uri.EscapeDataString(items[1].Value("at"));
+        Assert.Equal("R2", AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}?asOf={restored}")).Body.GetProperty("attributes").Value("rack"));
+        Assert.Equal("Rack", RackLabel(AuthScenario.Ok(await viewer.GetAsync($"/api/v1/types?asOf={restored}")).Body));
+        Assert.False(AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}")).Body.GetProperty("attributes").TryGetProperty("rack", out _));
+        Assert.Null(RackLabel(AuthScenario.Ok(await viewer.GetAsync("/api/v1/types")).Body));
+
         // The relationship as the CI sees it, and the other CI as it is now.
         foreach (var entry in items.Skip(3).Take(3))
         {
@@ -195,7 +206,8 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal(0, early.GetProperty("total").GetInt64());
         Assert.Equal(20, AuthScenario.Ok(await viewer.GetAsync("/api/v1/types?asOf=2000-01-01T00:00:00Z")).Body.GetProperty("types").GetArrayLength());
 
-        // Not a past UTC moment; and the reads that have no past refuse asOf rather than answer with today's data.
+        // Not a past UTC moment (the future is judged by the database's clock, whose times the versions carry); and
+        // the reads that have no past refuse asOf rather than answer with today's data.
         Assert.Equal("FutureTime", Field(await viewer.GetAsync($"/api/v1/cis/{id}?asOf=2999-01-01T00:00:00Z"), "asOf"));
         Assert.Equal("InvalidTime", Field(await viewer.GetAsync("/api/v1/cis?asOf=yesterday"), "asOf"));
         Assert.Equal("InvalidTime", Field(await viewer.GetAsync($"/api/v1/graph?ci={id}&asOf=2026-11-01T10:00:00"), "asOf"));
@@ -204,9 +216,9 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal("NotSupported", Field(await admin.GetAsync($"/api/v1/types/usage?{asOf}"), "asOf"));
     }
 
-    private static string RackLabel(JsonElement types) =>
+    private static string? RackLabel(JsonElement types) =>
         types.GetProperty("types").EnumerateArray().Single(t => t.Value("name") == "Server").GetProperty("attributes").EnumerateArray()
-            .Single(a => a.Value("name") == "rack").Value("label");
+            .Where(a => a.Value("name") == "rack").Select(a => a.Value("label")).SingleOrDefault();
 
     private static IEnumerable<string> Changes(JsonElement entry) => entry.GetProperty("changes").EnumerateArray().Select(c =>
         $"{c.Value("field")}|{c.Value("label")}|{c.GetProperty("kind").GetString()}|{c.Value("change")}|{Raw(c, "before")}|{Raw(c, "after")}");
