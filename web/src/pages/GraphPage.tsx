@@ -44,6 +44,7 @@ import {
   FilterRegular,
   FlowchartRegular,
   FullScreenMaximizeRegular,
+  HistoryRegular,
   SearchRegular,
   ZoomInRegular,
   ZoomOutRegular,
@@ -51,6 +52,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { api, type ApiError } from '../api';
+import { formatMoment, setAsOf, useAsOf, withAsOf } from '../asOf';
+import { formatUtc } from '../format';
 import { GraphCanvas, type GraphCanvasHandle, type GraphSelection } from '../graph/GraphCanvas';
 import {
   canvasLabel,
@@ -78,6 +81,7 @@ import {
 import { followLink, navigate, useLocation } from '../router';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
+import { AsOfBanner, ChooseAsOfButton } from '../ui/asOf';
 import { comboboxExpandIcon } from '../ui/combobox';
 import { downloadBlob, ErrorBar } from '../ui/common';
 import {
@@ -313,6 +317,8 @@ type Load =
   | { state: 'idle' }
   | { state: 'loading' }
   | { state: 'missing' }
+  /** The focus CI exists now and didn't at the moment shown (slice 7): when it was created. */
+  | { state: 'notYet'; createdAt: string }
   | { state: 'failed'; error: ApiError }
   | { state: 'loaded'; result: GraphResult };
 
@@ -322,6 +328,7 @@ type Load =
  * left out unless shown, more than 10 like neighbours grouped unless switched off, drawn with Cytoscape.js or listed
  * in the table view (the accessible equivalent, NFR-A11Y-2). The address holds the whole view. A graph past 500 CIs
  * offers the ways out instead; the CSV export is the server's, recorded in the audit log; the PNG is the canvas.
+ * With `asOf` (slice 7, DEC-047) the graph and its table are of that moment, under the banner, read-only.
  */
 function sameNames(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((name, i) => name === b[i]);
@@ -333,8 +340,10 @@ export function GraphPage() {
   const phone = usePhone();
   const { search } = useLocation();
   const view = useMemo(() => readGraphView(search), [search]);
+  const asOf = useAsOf();
   const kind = view.view ?? (phone ? 'table' : 'graph');
-  const { types, relationshipTypes, failure: typesFailure } = useCiTypes();
+  // In a past view the filters list the types of that moment.
+  const { types, relationshipTypes, failure: typesFailure } = useCiTypes(asOf);
   const [focusCi, setFocusCi] = useState<CiDetail | null>(null);
   const [load, setLoad] = useState<Load>({ state: 'idle' });
   const [selection, setSelection] = useState<GraphSelection>(null);
@@ -345,11 +354,12 @@ export function GraphPage() {
   const [exportFailure, setExportFailure] = useState<ApiError | null>(null);
   const canvas = useRef<GraphCanvasHandle | null>(null);
   const request = useRef(0);
-  const query = graphQuery(view);
+  const query = graphQuery(view) + (asOf ? `&asOf=${encodeURIComponent(asOf)}` : '');
 
   const update = useCallback(
-    (patch: Partial<GraphView>, push = false) => navigate(graphAddress({ ...view, ...patch }), { replace: !push }),
-    [view],
+    (patch: Partial<GraphView>, push = false) =>
+      navigate(withAsOf(graphAddress({ ...view, ...patch }), asOf), { replace: !push }),
+    [view, asOf],
   );
 
   // A link's type filters as this Goldmark names them; one it doesn't have is dropped from the address before the
@@ -383,7 +393,7 @@ export function GraphPage() {
     if (!filtersReady) return;
     try {
       const [{ data: ci }, { data: result }] = await Promise.all([
-        api<CiDetail>('GET', `/api/v1/cis/${view.ci}`),
+        api<CiDetail>('GET', `/api/v1/cis/${view.ci}${asOf ? `?asOf=${encodeURIComponent(asOf)}` : ''}`),
         api<GraphResult>('GET', `/api/v1/graph?${query}`),
       ]);
       if (request.current !== current) return;
@@ -394,9 +404,18 @@ export function GraphPage() {
     } catch (error) {
       if (request.current !== current) return;
       const problem = asApiError(error);
+      if (problem.code === 'not-found-then' && typeof problem.body.createdAt === 'string') {
+        // The GraphNotYet board names the CI and its type as they are now.
+        const createdAt = problem.body.createdAt;
+        const { data: now } = await api<CiDetail>('GET', `/api/v1/cis/${view.ci}`).catch(() => ({ data: null }));
+        if (request.current !== current) return;
+        setFocusCi(now);
+        setLoad({ state: 'notYet', createdAt });
+        return;
+      }
       setLoad(problem.status === 404 ? { state: 'missing' } : { state: 'failed', error: problem });
     }
-  }, [view.ci, query, filtersReady]);
+  }, [view.ci, asOf, query, filtersReady]);
 
   useEffect(() => {
     void fetchGraph();
@@ -408,7 +427,7 @@ export function GraphPage() {
     load.state === 'loading'
       ? `Loading ${hopsText(view.depth)}${focusName ? ` around ${focusName}` : ''}…`
       : result
-        ? statusLine(result, focusName)
+        ? `${statusLine(result, focusName)}${asOf ? ', at that time' : ''}`
         : '';
   const filtered = view.types.length > 0 || view.relationshipTypes.length > 0;
   const empty = result !== null && isEmpty(result);
@@ -494,10 +513,12 @@ export function GraphPage() {
 
   return (
     <>
+      {asOf ? <AsOfBanner asOf={asOf} subject="Graph" /> : null}
       <PageHeader crumbs={[{ label: 'Inventory' }, { label: 'Graph explorer' }]} title="Graph explorer" />
       <section aria-label="Graph options" className={styles.options}>
         <FocusPicker
           focus={focusCi && focusCi.id === view.ci ? focusCi : null}
+          asOf={asOf}
           types={types}
           className={styles.focusField}
           onChange={(ci) => update({ ci }, true)}
@@ -600,6 +621,19 @@ export function GraphPage() {
         />
       ) : null}
 
+      {load.state === 'notYet' ? (
+        <Message
+          icon={<HistoryRegular />}
+          title={`${focusCi?.name ?? 'This CI'} didn’t exist at that time.`}
+          text={`This ${focusCi?.type ?? 'CI'} was created on ${formatUtc(load.createdAt)} UTC, after the time you’re viewing. Choose another CI in Focus CI above, or another time.`}
+        >
+          <Button appearance="primary" onClick={() => setAsOf(null)}>
+            Return to now
+          </Button>
+          <ChooseAsOfButton asOf={asOf} />
+        </Message>
+      ) : null}
+
       {load.state === 'missing' ? (
         <Message
           icon={<SearchRegular />}
@@ -643,7 +677,10 @@ export function GraphPage() {
               Clear filters
             </Button>
           ) : null}
-          <Link href={`/ci/${result.focus}`} onClick={(event) => followLink(event, `/ci/${result.focus}`)}>
+          <Link
+            href={withAsOf(`/ci/${result.focus}`, asOf)}
+            onClick={(event) => followLink(event, withAsOf(`/ci/${result.focus}`, asOf))}
+          >
             Open CI
           </Link>
         </Message>
@@ -688,11 +725,18 @@ export function GraphPage() {
                 layout={view.layout}
                 types={types}
                 relationshipTypes={relationshipTypes}
-                label={canvasLabel(result, focusName)}
+                label={
+                  asOf
+                    ? canvasLabel(result, focusName).replace(
+                        `around ${focusName}`,
+                        `around ${focusName} as of ${formatMoment(asOf)}`,
+                      )
+                    : canvasLabel(result, focusName)
+                }
                 selection={selection}
                 handle={canvas}
                 onSelect={setSelection}
-                onOpen={(id) => navigate(`/ci/${id}`)}
+                onOpen={(id) => navigate(withAsOf(`/ci/${id}`, asOf))}
               />
             </section>
             <Legend />
@@ -701,6 +745,7 @@ export function GraphPage() {
             result={result}
             selection={selection}
             focusName={focusName}
+            asOf={asOf}
             types={types}
             className={wide ? styles.cardWide : undefined}
             onClear={() => setSelection(null)}
@@ -717,6 +762,7 @@ export function GraphPage() {
         <GraphTable
           result={result}
           focusName={focusName}
+          asOf={asOf}
           types={types}
           group={tableGroup}
           onShowAll={() => setTableGroup(null)}
@@ -769,12 +815,18 @@ export function GraphPage() {
               {result ? (
                 <dl className={styles.dialogFacts}>
                   <dt className={styles.term}>Graph</dt>
-                  <dd className={styles.fact}>{exportSummary(result, view, focusName)}</dd>
+                  <dd className={styles.fact}>
+                    {`${exportSummary(result, view, focusName)}${asOf ? ` · as of ${formatMoment(asOf)}` : ''}`}
+                  </dd>
                   <dt className={styles.term}>Columns</dt>
                   <dd className={styles.fact}>From, From type, Relationship, To, To type, Redundancy group, Hops</dd>
                 </dl>
               ) : null}
-              <div className={styles.note}>The export is recorded in the audit log.</div>
+              <div className={styles.note}>
+                {asOf
+                  ? `The export is of ${formatMoment(asOf)} and is recorded in the audit log.`
+                  : 'The export is recorded in the audit log.'}
+              </div>
               {exportFailure ? (
                 <ErrorBar
                   error={exportFailure}
@@ -891,6 +943,7 @@ function SelectionCard({
   result,
   selection,
   focusName,
+  asOf,
   types,
   className,
   onClear,
@@ -900,6 +953,7 @@ function SelectionCard({
   result: GraphResult;
   selection: GraphSelection;
   focusName: string;
+  asOf: string | null;
   types: CiType[] | null;
   className: string | undefined;
   onClear: () => void;
@@ -981,11 +1035,18 @@ function SelectionCard({
       </dl>
       <div className={styles.cardActions}>
         {node.id === result.focus ? null : <Button onClick={() => onExplore(node.id)}>Explore from here</Button>}
-        <Link href={`/ci/${node.id}`} onClick={(event) => followLink(event, `/ci/${node.id}`)}>
+        <Link
+          href={withAsOf(`/ci/${node.id}`, asOf)}
+          onClick={(event) => followLink(event, withAsOf(`/ci/${node.id}`, asOf))}
+        >
           Open CI
         </Link>
       </div>
-      <span className={styles.hint}>Double-click a CI to open it.</span>
+      <span className={styles.hint}>
+        {asOf
+          ? `Open CI, or a double-click, opens the CI as of ${formatMoment(asOf)}.`
+          : 'Double-click a CI to open it.'}
+      </span>
     </aside>
   );
 }
@@ -996,12 +1057,14 @@ type SortColumn = 'from' | 'type' | 'to' | 'group' | 'hops';
 function GraphTable({
   result,
   focusName,
+  asOf,
   types,
   group,
   onShowAll,
 }: {
   result: GraphResult;
   focusName: string;
+  asOf: string | null;
   types: CiType[] | null;
   group: string | null;
   onShowAll: () => void;
@@ -1060,7 +1123,7 @@ function GraphTable({
     return (
       <span className={styles.cell}>
         <TypeIcon type={node?.type ?? ''} types={types} />
-        <Link href={`/ci/${id}`} onClick={(event) => followLink(event, `/ci/${id}`)}>
+        <Link href={withAsOf(`/ci/${id}`, asOf)} onClick={(event) => followLink(event, withAsOf(`/ci/${id}`, asOf))}>
           {node?.name ?? id}
         </Link>
       </span>
@@ -1081,7 +1144,7 @@ function GraphTable({
               </Link>
             </>
           ) : (
-            tableCaption(result, focusName)
+            `${tableCaption(result, focusName)}${asOf ? ', at that time' : ''}`
           )}
         </caption>
         <TableHeader>
@@ -1170,11 +1233,13 @@ function TypeFilter({
 /** Focus CI: any CI, retired ones included (it was asked for), searched by name as you type. */
 function FocusPicker({
   focus,
+  asOf,
   types,
   className,
   onChange,
 }: {
   focus: CiDetail | null;
+  asOf: string | null;
   types: CiType[] | null;
   className: string;
   onChange: (ci: string | null) => void;
@@ -1191,7 +1256,9 @@ function FocusPicker({
     if (!open) return undefined;
     const current = ++request.current;
     const timer = window.setTimeout(() => {
+      // In a past view, the CIs as they were named then.
       const query = new URLSearchParams({ q: typed ?? '', limit: '10', retired: 'true' });
+      if (asOf) query.set('asOf', asOf);
       setSearching(true);
       api<CiPageData>('GET', `/api/v1/cis?${query.toString()}`)
         .then(({ data }) => {
@@ -1209,7 +1276,7 @@ function FocusPicker({
         });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [open, typed]);
+  }, [open, typed, asOf]);
 
   return (
     <Field label="Focus CI" required className={className}>
