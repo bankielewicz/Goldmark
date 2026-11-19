@@ -19,7 +19,10 @@ export function hasPast(pathname: string): boolean {
   return pathname === '/search' || pathname === '/graph' || pathname.startsWith('/ci/');
 }
 
-/** The moment if `value` is one the API takes (a real UTC date and time, years 2000 to 9998), else null. */
+/**
+ * The moment if `value` is one the API takes (a real UTC date and time, years 2000 to 9998) and not in the future,
+ * else null: a link with a moment the page can't show opens the present (docs/integration/deep-links.md).
+ */
 export function parseAsOf(value: string | null | undefined): string | null {
   const match = value?.match(pattern);
   if (!match || !value) return null;
@@ -39,7 +42,7 @@ export function parseAsOf(value: string | null | undefined): string | null {
     h < 24 &&
     mi < 60 &&
     s < 60;
-  return real && y >= 2000 && y <= 9998 ? value : null;
+  return real && y >= 2000 && y <= 9998 && date.getTime() <= Date.now() ? value : null;
 }
 
 /** The moment as a Date (to the millisecond: enough to show it; the API is sent the text itself). */

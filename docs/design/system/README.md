@@ -14,6 +14,14 @@ directly. `canvas.json` is the canvas index (board positions and titles).
 | Patterns | `DataTable.dc.html`, `Forms.dc.html`, `Overlays.dc.html`, `Feedback.dc.html`, `States.dc.html` (supersedes `../screens/00-SharedStates.dc.html`), `Secrets.dc.html`, `Badges.dc.html`, `Unauthenticated.dc.html` |
 | Reference | `Accessibility.dc.html`, `ComponentMap.dc.html` (element → Fluent v9 component, deviations, changes to the mockups) |
 
+Slice 7 (DEC-047 item 10; the owner approved the changes with the slice 7 boards on 2026-11-19) filled the
+As-of slot and its state, published as canvas version `1795124389-026c`: the Shell's top bar holds the As-of
+control ("As of: Now", "Now" on the rail); the States board's "As of" is the amber banner (warning intent, the
+clock-arrow icon, the local-time hint, a 28 px "Return to now"; it was drawn grey, info); the Badges board's
+vocabulary adds the history's subtle badges (Added, Removed, Changed, Attribute deleted, Deleted since, Ended since,
+Shown above); the Component map names the control and the History tab's icons. The slice 7 boards
+(`../screens/slice-7/`) draw them in place.
+
 Token values and contrast ratios were read from the installed `@fluentui/react-components` 9.74.9
 themes and component source, not typed from memory. When a board changes, edit the file here and
 publish it to the canvas; if someone edits the canvas, pull the file back here first.

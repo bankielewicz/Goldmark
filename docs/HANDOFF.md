@@ -165,10 +165,13 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   column out. A raw string literal (`"""`) can't continue after an interpolated constant on the same line: build such
   SQL constants with ordinary strings and `+`.
 
-**Still to do in slice 7:** the screens, matching the boards (the shell's As-of control and dialog,
-`web/src/pages/SearchPage.tsx`, `CiPage.tsx` with a History tab, `GraphPage.tsx`), `docs/integration/deep-links.md`
-(`tab=history`, `asOf`), browser tests with axe, and the design system's changes the slice 7 README lists (the
-"As of" state amber, the Shell's slot, four badges, nine icons) in `docs/design/system/` and on its canvas.
+- **Web:** the top bar's As-of control and its dialog (`web/src/ui/asOf.tsx`, the moment in `web/src/asOf.ts`), the
+  amber banner on Search, a CI's page and the Graph explorer in a past view, every change disabled there with one
+  Tooltip, and the CI page's History tab (`web/src/ui/HistoryTab.tsx`); `web/e2e/history.spec.ts` covers them with axe
+  in both themes; `docs/integration/deep-links.md` has `tab=history` and `asOf`.
+
+**Still to do in slice 7:** the design system's changes the slice 7 README lists (the "As of" state amber, the
+Shell's slot, four badges, nine icons) in `docs/design/system/` and on its canvas.
 
 ### Slice 6 (merged), for reference
 
