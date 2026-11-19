@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
@@ -29,6 +30,10 @@ internal static class CiEndpoints
         api.MapGet("/cis/{id:guid}", GetAsync)
             .RequireAccess(AccessPolicy.SignedIn)
             .WithDisplayName("CIs: get");
+
+        api.MapGet("/cis/{id:guid}/history", HistoryAsync)
+            .RequireAccess(AccessPolicy.SignedIn)
+            .WithDisplayName("CIs: history");
 
         api.MapPost("/cis", CreateAsync)
             .RequireAccess(AccessPolicy.CiEditor)
@@ -85,6 +90,41 @@ internal static class CiEndpoints
 
         var detail = await store.DetailAsync(row, TypeOf(await catalog.ListAsync(asOf), row), asOf);
         return asOf is null ? Detail(context, detail) : Results.Ok(detail);
+    }
+
+    /// <summary>
+    /// The CI's history (US-43), newest first: each version of the CI as created, changed, retired or restored with
+    /// its differences, and each relationship at either end as added, changed and ended, each with who did it. It is
+    /// the whole past, so it takes no <c>asOf</c>; an entry's <c>at</c> is the <c>asOf</c> that shows the CI from then.
+    /// </summary>
+    private static async Task<IResult> HistoryAsync(Guid id, HttpContext context, CiHistoryStore history)
+    {
+        if (AsOf.RefuseIfAsked(context) is { } refusal)
+        {
+            return refusal;
+        }
+
+        var query = context.Request.Query;
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var limit = CiHistoryStore.DefaultLimit;
+        if (query["limit"].ToString() is { Length: > 0 } l
+            && (!int.TryParse(l, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > CiHistoryStore.MaxLimit))
+        {
+            errors["limit"] = ["InvalidLimit"];
+        }
+
+        (DateTime At, string Tie)? after = null;
+        if (query["cursor"].ToString() is { Length: > 0 } c && (after = HistoryCursor.Decode(c)) is null)
+        {
+            errors["cursor"] = ["InvalidCursor"];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Fields(errors);
+        }
+
+        return await history.PageAsync(id, limit, after) is { } page ? Results.Ok(page) : NotFound();
     }
 
     private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,

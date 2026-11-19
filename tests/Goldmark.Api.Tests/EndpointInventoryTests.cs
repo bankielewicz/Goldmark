@@ -80,6 +80,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
 
             ["CIs: search"] = ("GET", "/api/v1/cis", AccessPolicy.SignedIn),
             ["CIs: get"] = ("GET", "/api/v1/cis/{id:guid}", AccessPolicy.SignedIn),
+            ["CIs: history"] = ("GET", "/api/v1/cis/{id:guid}/history", AccessPolicy.SignedIn),
             ["CIs: create"] = ("POST", "/api/v1/cis", AccessPolicy.CiEditor),
             ["CIs: change"] = ("PUT", "/api/v1/cis/{id:guid}", AccessPolicy.CiEditor),
             ["CIs: retire"] = ("POST", "/api/v1/cis/{id:guid}/retire", AccessPolicy.CiEditor),
