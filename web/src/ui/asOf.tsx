@@ -20,7 +20,7 @@ import {
   useId,
 } from '@fluentui/react-components';
 import { ClockRegular, ErrorCircleRegular, HistoryRegular } from '@fluentui/react-icons';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 import { formatMoment, hasPast, localHint, parseAsOf, setAsOf, shortMoment, useAsOf } from '../asOf';
 import { useLocation } from '../router';
@@ -70,6 +70,27 @@ const useStyles = makeStyles({
   quickButtons: { display: 'flex', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
   actions: { width: '100%', display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
   spacer: { flexGrow: 1 },
+  empty: {
+    boxSizing: 'border-box',
+    padding: `${tokens.spacingVerticalXXXL} ${tokens.spacingHorizontalXXL}`,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: tokens.spacingVerticalM,
+    textAlign: 'center',
+    backgroundColor: tokens.colorNeutralBackground1,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusLarge,
+  },
+  emptyIcon: { fontSize: '40px', color: tokens.colorNeutralForeground3 },
+  emptyTitle: {
+    margin: 0,
+    fontSize: tokens.fontSizeBase500,
+    lineHeight: tokens.lineHeightBase500,
+    fontWeight: tokens.fontWeightSemibold,
+    overflowWrap: 'anywhere',
+  },
+  emptyActions: { display: 'flex', gap: tokens.spacingHorizontalS, flexWrap: 'wrap', justifyContent: 'center' },
 });
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -280,6 +301,61 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
         </DialogBody>
       </form>
     </DialogSurface>
+  );
+}
+
+/** "Choose another time": the same dialog as the top bar's control, from a page's own empty state. */
+export function ChooseAsOfButton({ asOf }: { asOf: string | null }) {
+  const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState(0);
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(_, data) => {
+        setOpen(data.open);
+        if (data.open) setOpened((n) => n + 1);
+      }}
+    >
+      <DialogTrigger disableButtonEnhancement>
+        <Button aria-haspopup="dialog">Choose another time</Button>
+      </DialogTrigger>
+      <AsOfDialog key={opened} asOf={asOf} onClose={() => setOpen(false)} />
+    </Dialog>
+  );
+}
+
+/**
+ * A past view with nothing to show (the SearchNothing, CiNotYet and GraphNotYet boards): what, why, and the two ways
+ * on: back to the present, or another moment.
+ */
+export function PastEmpty({
+  asOf,
+  title,
+  headingLevel = 2,
+  children,
+}: {
+  asOf: string;
+  title: string;
+  headingLevel?: 1 | 2;
+  children?: ReactNode;
+}) {
+  const styles = useStyles();
+  const Heading = headingLevel === 1 ? 'h1' : 'h2';
+  const headingId = useId('past-empty');
+  return (
+    <section aria-labelledby={headingId} className={styles.empty}>
+      <HistoryRegular aria-hidden className={styles.emptyIcon} />
+      <Heading id={headingId} className={styles.emptyTitle}>
+        {title}
+      </Heading>
+      {children}
+      <div className={styles.emptyActions}>
+        <Button appearance="primary" onClick={() => setAsOf(null)}>
+          Return to now
+        </Button>
+        <ChooseAsOfButton asOf={asOf} />
+      </div>
+    </section>
   );
 }
 

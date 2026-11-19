@@ -26,6 +26,7 @@ import { AddRegular, DeleteRegular, EditRegular } from '@fluentui/react-icons';
 import { useState } from 'react';
 
 import { api, type ApiError } from '../api';
+import { readOnlyTip, withAsOf } from '../asOf';
 import { followLink } from '../router';
 import { ErrorBar, Notice } from './common';
 import { asApiError, TypeIcon, type CiDetail, type CiType, type RelationshipType } from './inventory';
@@ -124,12 +125,14 @@ const useStyles = makeStyles({
  * Screen 5's Relationships tab (slice 6 boards `Main`, `Rels*`, `DeleteRel*`; DEC-046): what the CI depends on and
  * what depends on it, each sorted by relationship type then the related CI's name, 50 rows then "Show N more";
  * retired CIs are listed, marked Retired. Admins and Editors add (not on a retired CI), edit the redundancy group and
- * delete, the delete confirmed first.
+ * delete, the delete confirmed first. In a past view (slice 7, `asOf`) the relationships in force then, those ended
+ * since marked "Ended since", and every change disabled with the read-only Tooltip.
  */
 export function RelationshipsTab({
   ci,
   relationships,
   canEdit,
+  asOf = null,
   types,
   relationshipTypes,
   onAdd,
@@ -139,6 +142,7 @@ export function RelationshipsTab({
   ci: CiDetail;
   relationships: ReturnType<typeof useRelationships>;
   canEdit: boolean;
+  asOf?: string | null;
   types: CiType[] | null;
   relationshipTypes: RelationshipType[] | null;
   onAdd: () => void;
@@ -153,6 +157,21 @@ export function RelationshipsTab({
   const [gone, setGone] = useState<string | null>(null);
   const retired = ci.lifecycleState === 'Retired';
   const total = totals ? totals.dependencies + totals.dependents : 0;
+  // Add relationship: live now; in a past view disabled, with the Tooltip, where it would show (Notes default 10).
+  const addButton =
+    canEdit && !retired ? (
+      asOf ? (
+        <Tooltip content={readOnlyTip} relationship="description">
+          <Button icon={<AddRegular />} disabledFocusable>
+            Add relationship
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button icon={<AddRegular />} aria-haspopup="dialog" onClick={onAdd}>
+          Add relationship
+        </Button>
+      )
+    ) : null;
 
   const remove = async () => {
     if (!deleting) return;
@@ -232,22 +251,14 @@ export function RelationshipsTab({
       ) : null}
       {total === 0 ? (
         <div className={styles.empty}>
-          <p className={styles.emptyText}>{ci.name} has no relationships yet.</p>
-          {canEdit && !retired ? (
-            <Button icon={<AddRegular />} aria-haspopup="dialog" onClick={onAdd}>
-              Add relationship
-            </Button>
-          ) : null}
+          <p className={styles.emptyText}>
+            {asOf ? `${ci.name} had no relationships at that time.` : `${ci.name} has no relationships yet.`}
+          </p>
+          {addButton}
         </div>
       ) : (
         <>
-          {canEdit && !retired ? (
-            <div className={styles.toolbar}>
-              <Button icon={<AddRegular />} aria-haspopup="dialog" onClick={onAdd}>
-                Add relationship
-              </Button>
-            </div>
-          ) : null}
+          {addButton ? <div className={styles.toolbar}>{addButton}</div> : null}
           {(['dependencies', 'dependents'] as const).map((direction) => (
             <Section
               key={direction}
@@ -256,6 +267,7 @@ export function RelationshipsTab({
               section={data[direction]}
               total={totals?.[direction] ?? 0}
               canEdit={canEdit}
+              asOf={asOf}
               types={types}
               description={description}
               busy={moreBusy.has(direction)}
@@ -312,6 +324,7 @@ function Section({
   section,
   total,
   canEdit,
+  asOf,
   types,
   description,
   busy,
@@ -324,6 +337,7 @@ function Section({
   section: RelationshipSection;
   total: number;
   canEdit: boolean;
+  asOf: string | null;
   types: CiType[] | null;
   description: (type: string) => string;
   busy: boolean;
@@ -389,9 +403,9 @@ function Section({
                   <TableCell>
                     <span className={styles.related}>
                       <Link
-                        href={`/ci/${related.id}`}
+                        href={withAsOf(`/ci/${related.id}`, asOf)}
                         className={styles.link}
-                        onClick={(event) => followLink(event, `/ci/${related.id}`)}
+                        onClick={(event) => followLink(event, withAsOf(`/ci/${related.id}`, asOf))}
                       >
                         <TypeIcon type={related.type} types={types} />
                         {related.name}
@@ -399,6 +413,11 @@ function Section({
                       {related.lifecycleState === 'Retired' ? (
                         <Badge appearance="tint" color="subtle">
                           Retired
+                        </Badge>
+                      ) : null}
+                      {relationship.endedSince ? (
+                        <Badge appearance="tint" color="subtle">
+                          Ended since
                         </Badge>
                       ) : null}
                     </span>
@@ -411,24 +430,46 @@ function Section({
                   </TableCell>
                   {canEdit ? (
                     <TableCell>
-                      <div className={styles.actions}>
-                        <Tooltip content={`Edit ${label}`} relationship="label">
-                          <Button
-                            appearance="subtle"
-                            icon={<EditRegular />}
-                            aria-haspopup="dialog"
-                            onClick={() => onEdit(relationship)}
-                          />
-                        </Tooltip>
-                        <Tooltip content={`Delete ${label}`} relationship="label">
-                          <Button
-                            appearance="subtle"
-                            icon={<DeleteRegular />}
-                            aria-haspopup="dialog"
-                            onClick={() => onDelete(relationship)}
-                          />
-                        </Tooltip>
-                      </div>
+                      {asOf ? (
+                        // Read-only: still in the tab order, named, and described by the Tooltip (Notes default 10).
+                        <div className={styles.actions}>
+                          <Tooltip content={readOnlyTip} relationship="description">
+                            <Button
+                              appearance="subtle"
+                              icon={<EditRegular />}
+                              aria-label={`Edit ${label}`}
+                              disabledFocusable
+                            />
+                          </Tooltip>
+                          <Tooltip content={readOnlyTip} relationship="description">
+                            <Button
+                              appearance="subtle"
+                              icon={<DeleteRegular />}
+                              aria-label={`Delete ${label}`}
+                              disabledFocusable
+                            />
+                          </Tooltip>
+                        </div>
+                      ) : (
+                        <div className={styles.actions}>
+                          <Tooltip content={`Edit ${label}`} relationship="label">
+                            <Button
+                              appearance="subtle"
+                              icon={<EditRegular />}
+                              aria-haspopup="dialog"
+                              onClick={() => onEdit(relationship)}
+                            />
+                          </Tooltip>
+                          <Tooltip content={`Delete ${label}`} relationship="label">
+                            <Button
+                              appearance="subtle"
+                              icon={<DeleteRegular />}
+                              aria-haspopup="dialog"
+                              onClick={() => onDelete(relationship)}
+                            />
+                          </Tooltip>
+                        </div>
+                      )}
                     </TableCell>
                   ) : null}
                 </TableRow>

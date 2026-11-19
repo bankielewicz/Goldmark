@@ -153,7 +153,8 @@ export function asApiError(error: unknown): ApiError {
  * The CI types with their attributes, and the relationship types, read when a page opens (an Admin may change
  * them at any time).
  */
-export function useCiTypes(): {
+/** The CI and relationship types, now or as they were at `asOf` (slice 7: a past view reads them as of its moment). */
+export function useCiTypes(asOf: string | null = null): {
   types: CiType[] | null;
   relationshipTypes: RelationshipType[] | null;
   failure: ApiError | null;
@@ -164,13 +165,16 @@ export function useCiTypes(): {
   const [failure, setFailure] = useState<ApiError | null>(null);
   const load = useCallback(() => {
     setFailure(null);
-    api<{ types: CiType[]; relationshipTypes: RelationshipType[] }>('GET', '/api/v1/types')
+    api<{ types: CiType[]; relationshipTypes: RelationshipType[] }>(
+      'GET',
+      asOf ? `/api/v1/types?asOf=${encodeURIComponent(asOf)}` : '/api/v1/types',
+    )
       .then(({ data }) => {
         setTypes(data.types);
         setRelationshipTypes(data.relationshipTypes);
       })
       .catch((error: unknown) => setFailure(asApiError(error)));
-  }, []);
+  }, [asOf]);
   useEffect(load, [load]);
   return { types, relationshipTypes, failure, reload: load };
 }
