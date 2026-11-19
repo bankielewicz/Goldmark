@@ -32,6 +32,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 
 import { api, ApiError } from '../api';
 import { formatAgo } from '../format';
+import { comboboxExpandIcon } from './combobox';
 import { ErrorBar, Notice } from './common';
 import {
   asApiError,
@@ -327,6 +328,7 @@ function TypeSelect({
       {...(error ? { validationState: 'error' as const, validationMessage: error } : { hint })}
     >
       <Combobox
+        expandIcon={comboboxExpandIcon}
         value={typed ?? value ?? 'Any type'}
         selectedOptions={[value ?? '']}
         onChange={(event) => setTyped(event.target.value)}

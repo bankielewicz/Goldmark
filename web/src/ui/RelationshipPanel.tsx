@@ -36,6 +36,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { api, type ApiError } from '../api';
 import { formatUtcTime } from '../format';
+import { comboboxExpandIcon } from './combobox';
 import { ErrorBar, Notice } from './common';
 import {
   asApiError,
@@ -477,6 +478,7 @@ export function RelationshipPanel({
               >
                 <div className={styles.typeBox}>
                   <Combobox
+                    expandIcon={comboboxExpandIcon}
                     className={styles.typeCombobox}
                     input={{ ref: firstField, className: type ? styles.typeInput : undefined }}
                     placeholder="Choose a relationship type"
@@ -582,6 +584,7 @@ export function RelationshipPanel({
                 })}
           >
             <Combobox
+              expandIcon={comboboxExpandIcon}
               freeform
               placeholder="None"
               value={group}

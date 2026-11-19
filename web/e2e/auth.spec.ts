@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { admin, expectAccessible, recordViolations, signIn, toast, totp, useScheme } from './session';
+import { admin, COMBOBOX_ARROW, expectAccessible, recordViolations, signIn, toast, totp, useScheme } from './session';
 
 // Slices 3, 4, 4a, 5 and 5b in a real browser against the Compose stack (tests/smoke/compose-smoke.sh
 // completes first-run setup through the API first and passes the administrator's credentials):
@@ -125,6 +125,15 @@ test.describe('slice 4 screen', () => {
     await expect(first).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByText('Entry number')).toBeVisible();
     await expect(page.getByText('auth.sign-in.succeeded').first()).toBeVisible();
+
+    // A Combobox's arrow is not a Tab stop (DEC-040): Tab goes from Actor straight to Action. Actor is
+    // empty here; with a value its clear button shows, and Fluent itself then takes the arrow out.
+    await page.getByRole('combobox', { name: 'Actor' }).focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('combobox', { name: 'Action' })).toBeFocused();
+    // The class expectAccessible looks for is still the arrow's: Actor and the person affected.
+    await expect(page.locator(COMBOBOX_ARROW)).toHaveCount(2);
+    await expect(page.locator(COMBOBOX_ARROW).first()).toHaveAttribute('tabindex', '-1');
     await expectAccessible(page, 'audit log');
 
     // Filters live in the page address.

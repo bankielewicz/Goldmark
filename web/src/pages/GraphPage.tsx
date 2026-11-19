@@ -78,6 +78,7 @@ import {
 import { followLink, navigate, useLocation } from '../router';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
+import { comboboxExpandIcon } from '../ui/combobox';
 import { downloadBlob, ErrorBar } from '../ui/common';
 import {
   asApiError,
@@ -1213,6 +1214,7 @@ function FocusPicker({
   return (
     <Field label="Focus CI" required className={className}>
       <Combobox
+        expandIcon={comboboxExpandIcon}
         clearable
         clearIcon={{ 'aria-label': 'Clear Focus CI' }}
         placeholder="Search CIs by name"

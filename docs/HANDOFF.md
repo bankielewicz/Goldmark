@@ -710,6 +710,15 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   "self-signed certificate"); capture headers from a browser navigation instead.
 - **`pnpm add` in `/mnt/c/...` is slow** (Fluent UI's 88 packages took 12 minutes, with no output
   through a pipe); run it in the background.
+- **A Dependabot update of Fluent UI can leave two versions of its packages in the lockfile**
+  (2026-11-18, 9.75.2: 16 packages twice, two `@fluentui/react-motion`): every Dialog then throws
+  "presenceFn is not a function" and only the smoke's browser tests show it. CI's Web job now runs
+  `pnpm run policy:dedupe`; the fix is `pnpm dedupe` and committing the lockfile (DEC-011). For
+  9.75.2 the owner had the update finished in a branch of ours (Dependabot stops rebasing a pull
+  request others push to, and closes its own once `main` has the version).
+- **Every Combobox passes `expandIcon={comboboxExpandIcon}`** (`web/src/ui/combobox.ts`, DEC-040):
+  since Fluent UI 9.75 the arrow is otherwise a tab stop of its own, and axe fails it for its size.
+  The arrow is still under 24 px; DEC-040 says why that is acceptable and when it stops being so.
 - **A minimal-API lambda whose only parameter is `HttpContext` binds as a `RequestDelegate`**: its
   returned `IResult` is dropped and the response is an empty 200. Give it a second parameter (slice 3:
   the anti-forgery token endpoint).
