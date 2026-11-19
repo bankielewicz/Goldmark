@@ -28,10 +28,11 @@ internal sealed record GraphResult(Guid Focus, int Depth, string Direction, IRea
 /// <summary>
 /// The graph read's parameters (screen 6's address, <c>docs/integration/deep-links.md</c>): the focus CI, the depth
 /// (1 to 6, 3 by default; item 10), the direction, the CI types and relationship types shown (all when none is
-/// given), retired CIs (left out by default) and grouping (on by default; item 5's switch).
+/// given), retired CIs (left out by default) and grouping (on by default; item 5's switch). <c>AsOf</c> is the past
+/// moment to read the graph at (US-42, FR-IM-4; DEC-047), or null for now.
 /// </summary>
 internal sealed record GraphQuery(Guid Ci, int Depth, string Direction, IReadOnlyList<string> Types, IReadOnlyList<string> RelationshipTypes,
-    bool Retired, bool Group)
+    bool Retired, bool Group, DateTime? AsOf = null)
 {
     public const int DefaultDepth = 3;
     public const int MaxDepth = 6;
@@ -109,8 +110,10 @@ internal sealed record GraphQuery(Guid Ci, int Depth, string Direction, IReadOnl
                 [.. relationshipTypeNames.Distinct(StringComparer.Ordinal)], retired, group), errors);
     }
 
-    /// <summary>The query as an export's audit entry records it (DEC-046 item 7).</summary>
-    public object Describe() => new { depth = Depth, direction = Direction, types = Types, relationshipTypes = RelationshipTypes, retired = Retired, group = Group };
+    /// <summary>The query as an export's audit entry records it (DEC-046 item 7); <c>asOf</c> only for an export of the past.</summary>
+    public object Describe() => AsOf is { } moment
+        ? new { depth = Depth, direction = Direction, types = Types, relationshipTypes = RelationshipTypes, retired = Retired, group = Group, asOf = Inventory.AsOf.Text(moment) }
+        : new { depth = Depth, direction = Direction, types = Types, relationshipTypes = RelationshipTypes, retired = Retired, group = Group };
 
     private static bool Boolean(IQueryCollection query, string name, bool fallback, Dictionary<string, string[]> errors)
     {
@@ -154,12 +157,24 @@ internal sealed class GraphStore(DbSession db)
     /// </summary>
     public const int MaxRelationships = 25_000;
 
-    private const string HopColumns = """
+    private const string HopSelect = """
         SELECT TOP (@take) r.Id, r.FromCiId, r.ToCiId, r.RelationshipTypeId, r.RedundancyGroup, c.CiTypeId AS FarTypeId,
             rt.Name AS RelationshipTypeName
+        """;
+
+    private const string HopColumns = HopSelect + """
+
         FROM cmdb.Relationship AS r
         JOIN cmdb.RelationshipType AS rt ON rt.Id = r.RelationshipTypeId
         """;
+
+    // The same walk through the relationships in force at @at, past the CIs as they were then (US-42, FR-IM-4): one
+    // ended since is walked, one added since is not, and a CI retired since is still a CI in use.
+    private const string HopColumnsAsOf = AsOf.Declare + HopSelect
+        + "\nFROM cmdb.Relationship" + AsOf.Clause + " AS r"
+        + "\nJOIN cmdb.RelationshipType" + AsOf.Clause + " AS rt ON rt.Id = r.RelationshipTypeId";
+
+    private const string FarCiAsOf = "\nJOIN cmdb.Ci" + AsOf.Clause + " AS c ON c.Id = ";
 
     private const string HopFilters = """
 
@@ -168,24 +183,29 @@ internal sealed class GraphStore(DbSession db)
             AND (@retired = 1 OR c.LifecycleState <> 'Retired')
         """;
 
-    private const string DependenciesHopSql = HopColumns + """
+    private const string DependenciesHopWhere = """
 
-        JOIN cmdb.Ci AS c ON c.Id = r.ToCiId
         WHERE r.TenantId = @tenant AND r.FromCiId IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids))
         """ + HopFilters + ";";
 
-    private const string DependentsHopSql = HopColumns + """
+    private const string DependentsHopWhere = """
 
-        JOIN cmdb.Ci AS c ON c.Id = r.FromCiId
         WHERE r.TenantId = @tenant AND r.ToCiId IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids))
         """ + HopFilters + ";";
+
+    private const string DependenciesHopSql = HopColumns + "\nJOIN cmdb.Ci AS c ON c.Id = r.ToCiId" + DependenciesHopWhere;
+
+    private const string DependentsHopSql = HopColumns + "\nJOIN cmdb.Ci AS c ON c.Id = r.FromCiId" + DependentsHopWhere;
+
+    private const string DependenciesHopAsOfSql = HopColumnsAsOf + FarCiAsOf + "r.ToCiId" + DependenciesHopWhere;
+
+    private const string DependentsHopAsOfSql = HopColumnsAsOf + FarCiAsOf + "r.FromCiId" + DependentsHopWhere;
 
     /// <summary>The members read's page: the dependents' relationships in any redundancy group, after <c>@after</c>.</summary>
     private const int MembersPage = MaxRelationships;
 
-    private const string MembersSql = HopColumns + """
+    private const string MembersWhere = """
 
-        JOIN cmdb.Ci AS c ON c.Id = r.ToCiId
         WHERE r.TenantId = @tenant AND r.RedundancyGroup IS NOT NULL
             AND r.FromCiId IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids))
             AND (@after IS NULL OR r.Id > @after)
@@ -194,12 +214,18 @@ internal sealed class GraphStore(DbSession db)
         ORDER BY r.Id;
         """;
 
-    private const string NodesSql = """
-        SELECT c.Id, c.Name, c.CiTypeId, c.LifecycleState, t.Name AS TypeName
-        FROM cmdb.Ci AS c
-        JOIN cmdb.CiType AS t ON t.Id = c.CiTypeId
-        WHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
-        """;
+    private const string MembersSql = HopColumns + "\nJOIN cmdb.Ci AS c ON c.Id = r.ToCiId" + MembersWhere;
+
+    private const string MembersAsOfSql = HopColumnsAsOf + FarCiAsOf + "r.ToCiId" + MembersWhere;
+
+    private const string NodeColumns = "SELECT c.Id, c.Name, c.CiTypeId, c.LifecycleState, t.Name AS TypeName";
+
+    private const string NodeFilter = "\nWHERE c.TenantId = @tenant AND c.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));";
+
+    private const string NodesSql = NodeColumns + "\nFROM cmdb.Ci AS c\nJOIN cmdb.CiType AS t ON t.Id = c.CiTypeId" + NodeFilter;
+
+    private const string NodesAsOfSql = AsOf.Declare + NodeColumns
+        + "\nFROM cmdb.Ci" + AsOf.Clause + " AS c\nJOIN cmdb.CiType" + AsOf.Clause + " AS t ON t.Id = c.CiTypeId" + NodeFilter;
 
     /// <summary>
     /// The graph, or null when the focus CI doesn't exist. The lists are the request's, read before the walk, and only
@@ -211,7 +237,7 @@ internal sealed class GraphStore(DbSession db)
         var filter = new Filter(
             query.Types.Count == 0 ? null : JsonSerializer.Serialize(query.Types.Select(n => types.First(t => t.Name == n).Id)),
             query.RelationshipTypes.Count == 0 ? null : JsonSerializer.Serialize(query.RelationshipTypes.Select(n => relationshipTypes.First(r => r.Name == n).Id)),
-            query.Retired);
+            query.Retired, AsOf.Stamp(query.AsOf));
         var hops = new Dictionary<Guid, int> { [query.Ci] = 0 };
         var drawn = new HashSet<Guid> { query.Ci };
         var boxed = new HashSet<Guid>();
@@ -333,7 +359,7 @@ internal sealed class GraphStore(DbSession db)
             truncated = !await AddRedundancyMembersAsync(edges, hops, drawn, filter);
         }
 
-        var nodes = await NodesAsync(hops.Keys);
+        var nodes = await NodesAsync(hops.Keys, filter.AsOf);
         if (!nodes.ContainsKey(query.Ci))
         {
             return null;
@@ -477,12 +503,20 @@ internal sealed class GraphStore(DbSession db)
     private async Task<IReadOnlyList<HopRow>> HopAsync(bool forward, IReadOnlyList<Guid> frontier, Filter filter, int take)
     {
         var parameters = Parameters(frontier, filter, take);
-        return forward ? await db.QueryAsync<HopRow>(DependenciesHopSql, parameters) : await db.QueryAsync<HopRow>(DependentsHopSql, parameters);
+        return (forward, filter.AsOf is null) switch
+        {
+            (true, true) => await db.QueryAsync<HopRow>(DependenciesHopSql, parameters),
+            (false, true) => await db.QueryAsync<HopRow>(DependentsHopSql, parameters),
+            (true, false) => await db.QueryAsync<HopRow>(DependenciesHopAsOfSql, parameters),
+            (false, false) => await db.QueryAsync<HopRow>(DependentsHopAsOfSql, parameters),
+        };
     }
 
-    private Task<IReadOnlyList<HopRow>> MembersAsync(IReadOnlyList<Guid> dependents, Filter filter, Guid? after) =>
-        db.QueryAsync<HopRow>(MembersSql, new
+    private Task<IReadOnlyList<HopRow>> MembersAsync(IReadOnlyList<Guid> dependents, Filter filter, Guid? after)
+    {
+        var parameters = new
         {
+            asOf = filter.AsOf,
             take = MembersPage,
             tenant = Tenants.Default,
             ids = JsonSerializer.Serialize(dependents.Select(i => i.ToString("D"))),
@@ -490,14 +524,20 @@ internal sealed class GraphStore(DbSession db)
             relationshipTypes = filter.RelationshipTypeIds,
             retired = filter.Retired,
             after,
-        });
+        };
+        return filter.AsOf is null ? db.QueryAsync<HopRow>(MembersSql, parameters) : db.QueryAsync<HopRow>(MembersAsOfSql, parameters);
+    }
 
-    private async Task<Dictionary<Guid, NodeRow>> NodesAsync(IEnumerable<Guid> ids) =>
-        (await db.QueryAsync<NodeRow>(NodesSql, new { tenant = Tenants.Default, ids = JsonSerializer.Serialize(ids.Select(i => i.ToString("D"))) }))
+    private async Task<Dictionary<Guid, NodeRow>> NodesAsync(IEnumerable<Guid> ids, string? asOf)
+    {
+        var parameters = new { asOf, tenant = Tenants.Default, ids = JsonSerializer.Serialize(ids.Select(i => i.ToString("D"))) };
+        return (asOf is null ? await db.QueryAsync<NodeRow>(NodesSql, parameters) : await db.QueryAsync<NodeRow>(NodesAsOfSql, parameters))
             .ToDictionary(n => n.Id);
+    }
 
     private static object Parameters(IReadOnlyList<Guid> ids, Filter filter, int take) => new
     {
+        asOf = filter.AsOf,
         take,
         tenant = Tenants.Default,
         ids = JsonSerializer.Serialize(ids.Select(i => i.ToString("D"))),
@@ -506,7 +546,7 @@ internal sealed class GraphStore(DbSession db)
         retired = filter.Retired,
     };
 
-    private sealed record Filter(string? TypeIds, string? RelationshipTypeIds, bool Retired);
+    private sealed record Filter(string? TypeIds, string? RelationshipTypeIds, bool Retired, string? AsOf);
 
     /// <summary>One walk's state: which way it goes, the CIs it has reached and the ones it expands at the next hop.</summary>
     private sealed record Walk(bool Forward, Guid Focus)

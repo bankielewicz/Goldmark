@@ -1,4 +1,5 @@
 using System.Globalization;
+using Goldmark.Api.Hosting;
 
 namespace Goldmark.Api.Inventory;
 
@@ -54,6 +55,24 @@ internal static class AsOf
         moment = parsed;
         return true;
     }
+
+    /// <summary>The moment asked for, or the answer that refuses the request (400, field <c>asOf</c>).</summary>
+    public static bool TryRead(HttpContext context, out DateTime? moment, out IResult? refusal)
+    {
+        var clock = context.RequestServices.GetRequiredService<TimeProvider>();
+        refusal = TryParse(context.Request.Query, clock, out moment, out var error) ? null : Refusal(error!);
+        return refusal is null;
+    }
+
+    /// <summary>For a read that has no past: null, or the refusal when the request names a moment.</summary>
+    public static IResult? RefuseIfAsked(HttpContext context) => context.Request.Query.ContainsKey(Parameter) ? Refusal("NotSupported") : null;
+
+    private static IResult Refusal(string error) =>
+        CiEndpoints.Fields(new Dictionary<string, string[]>(StringComparer.Ordinal) { [Parameter] = [error] });
+
+    /// <summary>A CI that exists now and didn't at the moment asked for.</summary>
+    public static IResult NotThen() =>
+        ApiProblems.Problem(StatusCodes.Status404NotFound, "not-found-then", "This CI didn't exist at that time.");
 
     /// <summary>The moment as the queries take it (<see cref="Declare"/>).</summary>
     public static string? Stamp(DateTime? moment) => moment is { } m ? CiStore.Stamp(m) : null;

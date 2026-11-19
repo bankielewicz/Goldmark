@@ -99,15 +99,31 @@ internal static partial class TypeEndpoints
 
     internal sealed record RelationshipTypeChangeRequest(string? Impact, string? Description);
 
-    private static async Task<IResult> ListAsync(CiTypeCatalog catalog) =>
-        Results.Ok(new
-        {
-            types = (await catalog.ListAsync()).Select(Type),
-            relationshipTypes = (await catalog.RelationshipTypesAsync()).Select(RelationshipType),
-        });
-
-    private static async Task<IResult> UsageAsync(CiTypeCatalog catalog)
+    /// <summary>
+    /// The types, their attributes and the relationship types, now or with <c>asOf</c> as they were then (US-42), so a
+    /// past CI's values read under the labels, kinds and order of that moment, attributes deleted since included.
+    /// </summary>
+    private static async Task<IResult> ListAsync(HttpContext context, CiTypeCatalog catalog)
     {
+        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        {
+            return refusal!;
+        }
+
+        return Results.Ok(new
+        {
+            types = (await catalog.ListAsync(asOf)).Select(Type),
+            relationshipTypes = (await catalog.RelationshipTypesAsync(asOf)).Select(RelationshipType),
+        });
+    }
+
+    private static async Task<IResult> UsageAsync(HttpContext context, CiTypeCatalog catalog)
+    {
+        if (AsOf.RefuseIfAsked(context) is { } refusal)
+        {
+            return refusal;
+        }
+
         var (types, relationshipTypes) = await catalog.UsageAsync(await catalog.ListAsync(), await catalog.RelationshipTypesAsync());
         return Results.Ok(new { types, relationshipTypes });
     }

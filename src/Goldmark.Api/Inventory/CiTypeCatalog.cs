@@ -87,6 +87,10 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     private const string TypesSql = TypeColumns + " ORDER BY Id;";
 
+    // The definitions as they were (US-42; DEC-045 item 8 made the three tables system-versioned for this): a type
+    // or an attribute deleted since is there, one added since is not, and a label reads as it did.
+    private const string TypesAsOfSql = AsOf.Declare + TypeColumns + AsOf.Clause + " ORDER BY Id;";
+
     // Shared until the transaction ends (a CI save, or a definition that names this type); HOLDLOCK takes it
     // whatever the isolation level.
     private const string TypeForSaveSql = TypeColumns + " WITH (HOLDLOCK) WHERE Id = @typeId;";
@@ -99,15 +103,30 @@ internal sealed class CiTypeCatalog(DbSession db)
     // times; PerformanceTests.Deleting_an_attribute_many_CIs_hold_and_what_waits_for_it measures them.
     private const string TypeForChangeSql = TypeColumns + " WITH (XLOCK, HOLDLOCK, ROWLOCK) WHERE Id = @typeId;";
 
-    private const string AttributeColumns = """
+    private const string AttributeSelect = """
         SELECT a.Id, a.CiTypeId, a.Name, a.Label, a.DataType, a.IsRequired, CAST(a.EnumValues AS nvarchar(max)) AS EnumValues,
             r.Name AS RefType, a.IsBuiltIn, a.ValidFrom, a.ChangedBy, u.DisplayName AS ChangedByName
-        FROM cmdb.AttributeDef AS a
-        LEFT JOIN cmdb.CiType AS r ON r.Id = a.RefCiTypeId
+        """;
+
+    private const string AttributeChanger = """
+
         LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(a.ChangedBy AS uniqueidentifier)
         """;
 
-    private const string AttributesSql = AttributeColumns + " ORDER BY a.CiTypeId, a.IsBuiltIn DESC, a.SortOrder, a.Id;";
+    private const string AttributeColumns = AttributeSelect + """
+
+        FROM cmdb.AttributeDef AS a
+        LEFT JOIN cmdb.CiType AS r ON r.Id = a.RefCiTypeId
+        """ + AttributeChanger;
+
+    private const string AttributeOrder = " ORDER BY a.CiTypeId, a.IsBuiltIn DESC, a.SortOrder, a.Id;";
+
+    private const string AttributesSql = AttributeColumns + AttributeOrder;
+
+    private const string AttributesAsOfSql = AsOf.Declare + AttributeSelect
+        + "\nFROM cmdb.AttributeDef" + AsOf.Clause + " AS a"
+        + "\nLEFT JOIN cmdb.CiType" + AsOf.Clause + " AS r ON r.Id = a.RefCiTypeId"
+        + AttributeChanger + AttributeOrder;
 
     private const string AttributesOfTypeSql = AttributeColumns + " WHERE a.CiTypeId = @typeId ORDER BY a.IsBuiltIn DESC, a.SortOrder, a.Id;";
 
@@ -124,6 +143,13 @@ internal sealed class CiTypeCatalog(DbSession db)
         """;
 
     private const string RelationshipTypesSql = RelationshipColumns + " FROM cmdb.RelationshipType AS r" + RelationshipJoins + " ORDER BY r.Id;";
+
+    private const string RelationshipTypesAsOfSql = AsOf.Declare + RelationshipColumns
+        + "\nFROM cmdb.RelationshipType" + AsOf.Clause + " AS r"
+        + "\nLEFT JOIN cmdb.CiType" + AsOf.Clause + " AS f ON f.Id = r.FromCiTypeId"
+        + "\nLEFT JOIN cmdb.CiType" + AsOf.Clause + " AS t ON t.Id = r.ToCiTypeId"
+        + "\nLEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)"
+        + "\nORDER BY r.Id;";
 
     // Shared until the transaction ends (a relationship save, DEC-046): an Admin's delete of the type waits for it, or
     // the save finds the type gone, rather than meeting the save's new row in its foreign key check.
@@ -229,10 +255,13 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     private const string DeleteRelationshipTypeSql = "DELETE FROM cmdb.RelationshipType WHERE Id = @id;";
 
-    public async Task<IReadOnlyList<CiTypeInfo>> ListAsync()
+    /// <summary>The types and their attributes, now or as they were at <paramref name="asOf"/> (US-42).</summary>
+    public async Task<IReadOnlyList<CiTypeInfo>> ListAsync(DateTime? asOf = null)
     {
-        var types = await db.QueryAsync<TypeRow>(TypesSql);
-        var attributes = (await db.QueryAsync<AttributeRow>(AttributesSql)).ToLookup(a => a.CiTypeId);
+        var moment = new { asOf = AsOf.Stamp(asOf) };
+        var types = asOf is null ? await db.QueryAsync<TypeRow>(TypesSql) : await db.QueryAsync<TypeRow>(TypesAsOfSql, moment);
+        var attributes = (asOf is null ? await db.QueryAsync<AttributeRow>(AttributesSql) : await db.QueryAsync<AttributeRow>(AttributesAsOfSql, moment))
+            .ToLookup(a => a.CiTypeId);
         return [.. types.Select(t => Type(t, attributes[t.Id]))];
     }
 
@@ -256,8 +285,11 @@ internal sealed class CiTypeCatalog(DbSession db)
         return Type(row, await db.QueryAsync<AttributeRow>(AttributesOfTypeSql, new { typeId }));
     }
 
-    public async Task<IReadOnlyList<RelationshipTypeInfo>> RelationshipTypesAsync() =>
-        [.. (await db.QueryAsync<RelationshipRow>(RelationshipTypesSql)).Select(RelationshipType)];
+    /// <summary>The relationship types, now or as they were at <paramref name="asOf"/>.</summary>
+    public async Task<IReadOnlyList<RelationshipTypeInfo>> RelationshipTypesAsync(DateTime? asOf = null) =>
+        [.. (asOf is null
+            ? await db.QueryAsync<RelationshipRow>(RelationshipTypesSql)
+            : await db.QueryAsync<RelationshipRow>(RelationshipTypesAsOfSql, new { asOf = AsOf.Stamp(asOf) })).Select(RelationshipType)];
 
     /// <summary>The relationship type as it is now, locked (shared) until the transaction ends; null if it was deleted. Call inside one, first.</summary>
     public async Task<RelationshipTypeInfo?> LockRelationshipTypeForSaveAsync(int id) =>

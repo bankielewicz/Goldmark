@@ -59,23 +59,28 @@ internal static class RedundancyGroups
 
 /// <summary>
 /// Where a section's next page starts: its direction, the last row's relationship type, the related CI's name and the
-/// relationship's ID, as an opaque base64url JSON array. A cursor of the other section is refused.
+/// relationship's ID, and for a past moment that moment, as an opaque base64url JSON array. A cursor of the other
+/// section or of another moment is refused.
 /// </summary>
-internal sealed record RelationshipCursor(string Direction, string Type, string Name, Guid Id)
+internal sealed record RelationshipCursor(string Direction, string Type, string Name, Guid Id, string? AsOf = null)
 {
     public string Encode() =>
-        Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(new[] { Direction, Type, Name, Id.ToString("D") }))
+        Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(AsOf is null
+                ? new[] { Direction, Type, Name, Id.ToString("D") }
+                : [Direction, Type, Name, Id.ToString("D"), AsOf]))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    public static RelationshipCursor? Decode(string value, string direction)
+    public static RelationshipCursor? Decode(string value, string direction, DateTime? asOf = null)
     {
         try
         {
             var base64 = value.Replace('-', '+').Replace('_', '/');
             base64 += new string('=', (4 - (base64.Length % 4)) % 4);
             var parts = JsonSerializer.Deserialize<string?[]>(Convert.FromBase64String(base64));
-            return parts is [{ } d, { } type, { } name, { } id] && d == direction && Guid.TryParseExact(id, "D", out var guid)
-                ? new RelationshipCursor(d, type, name, guid)
+            var moment = Inventory.AsOf.Stamp(asOf);
+            return parts is [{ } d, { } type, { } name, { } id, .. var rest] && d == direction && Guid.TryParseExact(id, "D", out var guid)
+                && (moment is null ? rest.Length == 0 : rest is [{ } then] && then == moment)
+                ? new RelationshipCursor(d, type, name, guid, moment)
                 : null;
         }
         catch (Exception e) when (e is FormatException or JsonException)
@@ -113,8 +118,19 @@ internal sealed class RelationshipStore(DbSession db)
         LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)
         """;
 
+    // The same tables as they were at @at (US-42, FR-IM-4): the relationships in force then, between the CIs as
+    // they were named then, under the type names of then. A relationship ended since is there; one added since is not.
+    private const string TablesAsOf =
+        "\nFROM cmdb.Relationship" + AsOf.Clause + " AS r"
+        + "\nJOIN cmdb.RelationshipType" + AsOf.Clause + " AS rt ON rt.Id = r.RelationshipTypeId"
+        + "\nJOIN cmdb.Ci" + AsOf.Clause + " AS f ON f.Id = r.FromCiId"
+        + "\nJOIN cmdb.CiType" + AsOf.Clause + " AS ft ON ft.Id = f.CiTypeId"
+        + "\nJOIN cmdb.Ci" + AsOf.Clause + " AS t ON t.Id = r.ToCiId"
+        + "\nJOIN cmdb.CiType" + AsOf.Clause + " AS tt ON tt.Id = t.CiTypeId"
+        + "\nLEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)";
+
     // A section is sorted by relationship type, then the related CI's name (screen 5's tab; Notes board).
-    private const string DependenciesSql = Columns + " FROM cmdb.Relationship AS r" + Joins + """
+    private const string DependenciesPage = """
 
         WHERE r.FromCiId = @id AND r.TenantId = @tenant
             AND (@afterId IS NULL OR rt.Name COLLATE Latin1_General_100_CI_AS > @afterType
@@ -123,7 +139,7 @@ internal sealed class RelationshipStore(DbSession db)
         ORDER BY rt.Name COLLATE Latin1_General_100_CI_AS, t.Name COLLATE Latin1_General_100_CI_AS, r.Id;
         """;
 
-    private const string DependentsSql = Columns + " FROM cmdb.Relationship AS r" + Joins + """
+    private const string DependentsPage = """
 
         WHERE r.ToCiId = @id AND r.TenantId = @tenant
             AND (@afterId IS NULL OR rt.Name COLLATE Latin1_General_100_CI_AS > @afterType
@@ -132,9 +148,23 @@ internal sealed class RelationshipStore(DbSession db)
         ORDER BY rt.Name COLLATE Latin1_General_100_CI_AS, f.Name COLLATE Latin1_General_100_CI_AS, r.Id;
         """;
 
+    private const string DependenciesSql = Columns + " FROM cmdb.Relationship AS r" + Joins + DependenciesPage;
+
+    private const string DependentsSql = Columns + " FROM cmdb.Relationship AS r" + Joins + DependentsPage;
+
+    private const string DependenciesAsOfSql = AsOf.Declare + Columns + TablesAsOf + DependenciesPage;
+
+    private const string DependentsAsOfSql = AsOf.Declare + Columns + TablesAsOf + DependentsPage;
+
     private const string DependenciesCountSql = "SELECT COUNT_BIG(*) FROM cmdb.Relationship WHERE FromCiId = @id AND TenantId = @tenant;";
 
     private const string DependentsCountSql = "SELECT COUNT_BIG(*) FROM cmdb.Relationship WHERE ToCiId = @id AND TenantId = @tenant;";
+
+    private const string DependenciesCountAsOfSql = AsOf.Declare
+        + "SELECT COUNT_BIG(*) FROM cmdb.Relationship" + AsOf.Clause + " WHERE FromCiId = @id AND TenantId = @tenant;";
+
+    private const string DependentsCountAsOfSql = AsOf.Declare
+        + "SELECT COUNT_BIG(*) FROM cmdb.Relationship" + AsOf.Clause + " WHERE ToCiId = @id AND TenantId = @tenant;";
 
     private const string DetailSql = Columns + " FROM cmdb.Relationship AS r" + Joins + """
 
@@ -167,12 +197,13 @@ internal sealed class RelationshipStore(DbSession db)
     // set ChangedBy first: that would leave a version that lasted no time.
     private const string DeleteSql = "DELETE FROM cmdb.Relationship WHERE Id = @id AND TenantId = @tenant;";
 
-    /// <summary>One page of a section; the total with the first page.</summary>
-    public async Task<RelationshipPage> SectionAsync(Guid ciId, string direction, int take, RelationshipCursor? after)
+    /// <summary>One page of a section, now or as it was at <paramref name="asOf"/>; the total with the first page.</summary>
+    public async Task<RelationshipPage> SectionAsync(Guid ciId, string direction, int take, RelationshipCursor? after, DateTime? asOf = null)
     {
         var dependencies = direction == RelationshipDirections.Dependencies;
         var parameters = new
         {
+            asOf = AsOf.Stamp(asOf),
             take = take + 1,
             id = ciId,
             tenant = Tenants.Default,
@@ -180,16 +211,27 @@ internal sealed class RelationshipStore(DbSession db)
             afterType = after?.Type,
             afterName = after?.Name,
         };
-        var rows = dependencies ? await db.QueryAsync<Row>(DependenciesSql, parameters) : await db.QueryAsync<Row>(DependentsSql, parameters);
+        var rows = (dependencies, asOf is null) switch
+        {
+            (true, true) => await db.QueryAsync<Row>(DependenciesSql, parameters),
+            (false, true) => await db.QueryAsync<Row>(DependentsSql, parameters),
+            (true, false) => await db.QueryAsync<Row>(DependenciesAsOfSql, parameters),
+            (false, false) => await db.QueryAsync<Row>(DependentsAsOfSql, parameters),
+        };
         var items = rows.Take(take).Select(ToDetail).ToList();
         var next = rows.Count > take && items[^1] is var last
-            ? new RelationshipCursor(direction, last.Type, dependencies ? last.To.Name : last.From.Name, last.Id).Encode()
+            ? new RelationshipCursor(direction, last.Type, dependencies ? last.To.Name : last.From.Name, last.Id, parameters.asOf).Encode()
             : null;
         long? total = null;
         if (after is null)
         {
-            var count = new { id = ciId, tenant = Tenants.Default };
-            total = dependencies ? await db.ExecuteScalarAsync<long>(DependenciesCountSql, count) : await db.ExecuteScalarAsync<long>(DependentsCountSql, count);
+            total = (dependencies, asOf is null) switch
+            {
+                (true, true) => await db.ExecuteScalarAsync<long>(DependenciesCountSql, parameters),
+                (false, true) => await db.ExecuteScalarAsync<long>(DependentsCountSql, parameters),
+                (true, false) => await db.ExecuteScalarAsync<long>(DependenciesCountAsOfSql, parameters),
+                (false, false) => await db.ExecuteScalarAsync<long>(DependentsCountAsOfSql, parameters),
+            };
         }
 
         return new RelationshipPage(items, total, next);

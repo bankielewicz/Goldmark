@@ -55,20 +55,36 @@ internal static class CiEndpoints
 
     internal sealed record ChangeRequest(string? Name, JsonElement? Attributes);
 
+    /// <summary>The search, now or with <c>asOf</c> as it would have answered then (US-42): the CIs, names and types of that moment.</summary>
     private static async Task<IResult> SearchAsync(HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        var (search, errors) = CiSearch.Parse(context.Request.Query, await catalog.ListAsync());
+        if (!AsOf.TryRead(context, out var asOf, out var refusal))
+        {
+            return refusal!;
+        }
+
+        var (search, errors) = CiSearch.Parse(context.Request.Query, await catalog.ListAsync(asOf), asOf);
         return search is null ? Fields(errors) : Results.Ok(await store.SearchAsync(search));
     }
 
+    /// <summary>
+    /// The CI, now or with <c>asOf</c> as it was then: its values under the attributes its type had then, and the
+    /// CIs it linked to as they were. A past version is read-only, so it carries no ETag header.
+    /// </summary>
     private static async Task<IResult> GetAsync(Guid id, HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        if (await store.FindAsync(id) is not { } row)
+        if (!AsOf.TryRead(context, out var asOf, out var refusal))
         {
-            return NotFound();
+            return refusal!;
         }
 
-        return Detail(context, await store.DetailAsync(row, TypeOf(await catalog.ListAsync(), row)));
+        if (await store.FindAsync(id, asOf) is not { } row)
+        {
+            return asOf is not null && await store.TypeIdAsync(id) is not null ? AsOf.NotThen() : NotFound();
+        }
+
+        var detail = await store.DetailAsync(row, TypeOf(await catalog.ListAsync(asOf), row), asOf);
+        return asOf is null ? Detail(context, detail) : Results.Ok(detail);
     }
 
     private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,
