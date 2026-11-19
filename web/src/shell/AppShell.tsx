@@ -48,9 +48,11 @@ import {
 import { useEffect, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 
 import { api, ApiError } from '../api';
+import { hasPast, keptAsOf, useAsOf, withAsOf } from '../asOf';
 import { usePreferences } from '../preferences';
 import { followLink, navigate, useLocation } from '../router';
 import { canReadAudit, isAdmin, useSession } from '../session';
+import { AsOfControl } from '../ui/asOf';
 import { ErrorBar } from '../ui/common';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
 
@@ -198,8 +200,8 @@ export function useWide(): boolean {
  * The app shell for signed-in screens (DEC-039; slice 3's sparse nav: only the screens that exist).
  * NavDrawer inline at 1100 px and wider, an icon rail with an overlay drawer below; top bar with the
  * CI search (slice 5: a box, or below 1100 px a button opening it in a Popover; not on /search, which has
- * its own), the theme toggle and the account menu; a skip link to the main region. The As-of control
- * (slice 7) arrives with its slice.
+ * its own), the As-of control (slice 7, DEC-047 item 10), the theme toggle and the account menu; a skip link to
+ * the main region. While a moment is shown or kept, the links to Search and the Graph explorer carry it.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const styles = useStyles();
@@ -215,6 +217,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { dispatchToast } = useToastController(toasterId);
   const user = session.user;
   const approvals = useApprovals(isAdmin(user), pathname);
+  // The moment the links to the screens with a past bring back: this screen's own, or the one kept for the session
+  // while on another screen (Notes default 2).
+  const asOf = useAsOf();
+  const moment = hasPast(pathname) ? asOf : keptAsOf();
 
   const closeChangePassword = () => {
     setChangingPassword(false);
@@ -233,9 +239,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
-    { value: 'search', label: 'Search', group: 'Inventory', path: '/search', icon: <SearchRegular /> },
+    {
+      value: 'search',
+      label: 'Search',
+      group: 'Inventory',
+      path: withAsOf('/search', moment),
+      icon: <SearchRegular />,
+    },
     // Slice 6 (screen 6): for everyone signed in, after Search.
-    { value: 'graph', label: 'Graph explorer', group: 'Inventory', path: '/graph', icon: <FlowchartRegular /> },
+    {
+      value: 'graph',
+      label: 'Graph explorer',
+      group: 'Inventory',
+      path: withAsOf('/graph', moment),
+      icon: <FlowchartRegular />,
+    },
     ...(isAdmin(user)
       ? [
           // Slice 5b (screen 14): first in the group, Admin only.
@@ -271,7 +289,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // A CI's page sits under Search (its breadcrumb starts there).
   const selected = pathname.startsWith('/ci/')
     ? 'search'
-    : (entries.find((entry) => (entry.path === '/' ? pathname === '/' : pathname.startsWith(entry.path)))?.value ?? '');
+    : (entries.find((entry) => {
+        const path = entry.path.split('?')[0] ?? entry.path;
+        return path === '/' ? pathname === '/' : pathname.startsWith(path);
+      })?.value ?? '');
   const otherTheme = preferences.theme === 'dark' ? 'light' : 'dark';
   const initials = (user?.displayName ?? '')
     .split(/\s+/)
@@ -352,7 +373,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             Goldmark
           </Text>
         </div>
-        {pathname === '/search' ? null : <TopSearch wide={wide} />}
+        {pathname === '/search' ? null : <TopSearch wide={wide} moment={moment} />}
+        <AsOfControl wide={wide} />
         <Tooltip content={`Switch to ${otherTheme} theme`} relationship="label">
           <Button
             appearance="subtle"
@@ -479,8 +501,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** The top bar's CI search: Enter opens /search?q=… (US-53). */
-function TopSearch({ wide }: { wide: boolean }) {
+/** The top bar's CI search: Enter opens /search?q=… (US-53), at the moment shown or kept (slice 7). */
+function TopSearch({ wide, moment }: { wide: boolean; moment: string | null }) {
   const styles = useStyles();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -488,7 +510,7 @@ function TopSearch({ wide }: { wide: boolean }) {
     const text = q.trim();
     setOpen(false);
     setQ('');
-    navigate(`/search${text ? `?q=${encodeURIComponent(text)}` : ''}`);
+    navigate(withAsOf(`/search${text ? `?q=${encodeURIComponent(text)}` : ''}`, moment));
   };
   const box = (
     <SearchBox
