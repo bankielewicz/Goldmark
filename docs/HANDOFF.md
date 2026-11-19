@@ -39,7 +39,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 5 | **done** (PR #49, merged as `783f526`, DEC-044) | `slice/05-ci-crud` | CI types/attributes metadata (the built-in CI and relationship types, only the attributes the PRD names; the API to add custom attributes, its screen in 5b), CI CRUD API, list/detail UI with retire and restore (retired CIs hidden unless shown; other lifecycle changes in slice 20), deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | **done** (PR #54, merged as `7e9077a`, DEC-045) | `slice/05b-types-admin` | Types & attributes admin screen: custom CI types (add, hide, delete if unused), custom attributes (add, change, delete with typed confirmation), relationship types (built-in listed; custom added, edited, deleted if unused); promoted attributes wait (#53) | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | **done** (PR #59, merged as `1393c33`, DEC-046; boards approved 2026-10-25, `docs/design/screens/slice-6/`) | `slice/06-relationships` | Relationships CRUD (several CIs in one Add; deleting ends a relationship, its history keeps it), relationship tab, graph explorer (two walks plus redundancy-group members, many same-type neighbours grouped behind a switch, PNG and CSV export, depth 3); migration 0008 `Relationship.CreatedAt` for "Since" (DEC-046 items 1 to 14). Later: a phrase per direction for relationship types (#57), keyboard selection on the canvas (#58) | US-11 for relationships; US-40 | 5 (tab), 6 |
-| 7 | **in progress** (approved 2026-11-18) | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
+| 7 | **in progress** (approved 2026-11-18; boards approved 2026-11-19, `docs/design/screens/slice-7/`) | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | the top bar's As-of control for 4, 5 and 6 (one control, DEC-047 item 10), 5 (History tab) |
 | 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH (#48, DEC-044 item 11) | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff; #48 closed | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression; how a collector ends the relationships it no longer sees, a policy (ServiceNow offers Keep, Delete, Delete relations, Mark absent, Mark retired), and what a person's removal of a discovered relationship means then (GLPI and Lansweeper treat it specially; a research session's note relayed by the owner, 2026-10-24, DEC-046 item 1) | US-20/21; re-ingest → 0 history rows | — |
@@ -134,8 +134,10 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 ## 3. Next slice: notes
 
 Slice **7** (`slice/07-history`, approved 2026-11-18, DEC-047) is **in progress**: the backend and API are built and
-tested; the screens (4's as-of picker, 5's History tab, 6's as-of control) wait for their boards. The design handoff
-is `tmp/screen-handoff-slice7.md` (git-ignored; rule 3). DEC-047 lists the choices made without asking, each with its
+tested, and the boards were approved on 2026-11-19 (`docs/design/screens/slice-7/`, canvas version
+`1795092518-f2f7`; DEC-047 item 10): one As-of control in the top bar for Search, a CI's page and the Graph
+explorer, an amber banner in a past view, and the CI page's History tab. The design handoff was
+`tmp/screen-handoff-slice7.md` (git-ignored; rule 3). DEC-047 lists the choices made without asking, each with its
 reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
 
 **What slice 7 has so far:**
@@ -163,9 +165,10 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   column out. A raw string literal (`"""`) can't continue after an interpolated constant on the same line: build such
   SQL constants with ordinary strings and `+`.
 
-**Still to do in slice 7:** the three screens after the boards are approved (`web/src/pages/SearchPage.tsx`,
-`CiPage.tsx` with a History tab, `GraphPage.tsx`, the shell's As-of slot), `docs/integration/deep-links.md`
-(`tab=history`, `asOf`), browser tests with axe, and `docs/design/screens/slice-7/`.
+**Still to do in slice 7:** the screens, matching the boards (the shell's As-of control and dialog,
+`web/src/pages/SearchPage.tsx`, `CiPage.tsx` with a History tab, `GraphPage.tsx`), `docs/integration/deep-links.md`
+(`tab=history`, `asOf`), browser tests with axe, and the design system's changes the slice 7 README lists (the
+"As of" state amber, the Shell's slot, four badges, nine icons) in `docs/design/system/` and on its canvas.
 
 ### Slice 6 (merged), for reference
 

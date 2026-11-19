@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark dialog: Show Goldmark as of</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div role="dialog" aria-modal="true" aria-label="Choose a point in time" style="{{rootStyle}}">
+  <h2 style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Show Goldmark as of</h2>
+  <p style="margin: 0; color: var(--fg2)">Search, CI pages and the Graph explorer show what was recorded at this time. A past view is read-only.</p>
+
+  <fieldset aria-describedby="{{describedBy}}" style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
+    <legend style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Point in time, UTC</legend>
+    <div style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="asof-date" style="font-weight: 600">Date<span aria-hidden="true" style="color: var(--rdfg)"> *</span></label>
+        <span style="{{dateBox}}"><input id="asof-date" type="text" inputmode="numeric" autocomplete="off" aria-required="true" aria-invalid="{{dateInvalid}}" placeholder="YYYY-MM-DD" value="{{date}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; font-variant-numeric: tabular-nums; outline: none"><button type="button" aria-label="Open the calendar" aria-haspopup="dialog" style="width: 24px; height: 24px; flex: none; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 5h14v12H3zM3 8.5h14M7 3v3.5M13 3v3.5"></path></svg></button></span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <label for="asof-time" style="font-weight: 600">Time<span aria-hidden="true" style="color: var(--rdfg)"> *</span></label>
+        <span style="{{timeBox}}"><input id="asof-time" type="text" inputmode="numeric" autocomplete="off" aria-required="true" aria-invalid="{{timeInvalid}}" placeholder="HH:MM" value="{{time}}" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; font-variant-numeric: tabular-nums; outline: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM10 6v4l2.5 1.5"></path></svg></span>
+      </div>
+      <span style="height: 32px; display: inline-flex; align-items: center; font-weight: 600; color: var(--fg2)">UTC</span>
+    </div>
+    <sc-if value="{{showHint}}" hint-placeholder-val="{{true}}">
+      <span id="asof-hint" aria-live="polite" style="font-size: 12px; line-height: 16px; color: var(--fg3)">{{hint}}</span>
+    </sc-if>
+    <sc-if value="{{showError}}" hint-placeholder-val="{{false}}">
+      <span id="asof-error" role="alert" style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; line-height: 16px; color: var(--rdfg)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 4.5v4M8 10.8v.2"></path></svg>{{error}}</span>
+    </sc-if>
+  </fieldset>
+
+  <div role="group" aria-labelledby="asof-quick" style="display: flex; flex-direction: column; gap: 6px">
+    <span id="asof-quick" style="font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg2)">Quick choices</span>
+    <div style="display: flex; gap: 8px; flex-wrap: wrap">
+      <button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit">1 hour ago</button>
+      <button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit">Yesterday</button>
+      <button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit">7 days ago</button>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding-top: 4px">
+    <sc-if value="{{hasMoment}}" hint-placeholder-val="{{false}}">
+      <button type="button" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Return to now</button>
+    </sc-if>
+    <span style="flex: 1"></span>
+    <button type="button" style="height: 32px; padding: 0 16px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Cancel</button>
+    <button type="button" style="height: 32px; padding: 0 16px; border: none; border-radius: 4px; background: var(--brand); color: #ffffff; font: inherit; font-weight: 600">Apply</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"mode":{"editor":"enum","options":["empty","typed","current","errEmpty","errFuture","errYear"],"default":"typed"},"width":{"editor":"int","default":480},"$preview":{"width":480,"height":400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--fg1:#242424;--fg2:#424242;--fg3:#616161;--st1:#d1d1d1;--stacc:#616161;--brand:#8a5a00;--cbrand:#8a5a00;--fo:#000000;--rdfg:#bc2f32;--rdbd:#c50f1f;--sh64:0 0 8px rgba(0,0,0,.12),0 32px 64px rgba(0,0,0,.14);';
+    const DARK = '--bg1:#292929;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--st1:#666666;--stacc:#adadad;--brand:#7d5200;--cbrand:#c28a2a;--fo:#ffffff;--rdfg:#e37d80;--rdbd:#dc626d;--sh64:0 0 8px rgba(0,0,0,.24),0 32px 64px rgba(0,0,0,.28);';
+    const dark = this.props.dark ?? false;
+    const mode = this.props.mode ?? 'typed';
+    const width = this.props.width ?? 480;
+    // typed: a first choice, focus still in Time. current: reopened with a moment already chosen, so Return to now is offered.
+    const M = {
+      empty: { date: '', time: '', focus: 'date' },
+      typed: { date: '2026-10-06', time: '14:00', hint: '16:00 your local time', focus: 'time' },
+      current: { date: '2026-10-06', time: '14:00', hint: '16:00 your local time', moment: true },
+      errEmpty: { date: '', time: '', error: 'Enter a date and a time.', bad: 'both' },
+      errFuture: { date: '2026-11-25', time: '09:00', hint: '10:00 your local time', error: 'That time is in the future.', bad: 'both' },
+      errYear: { date: '1999-12-31', time: '23:00', error: 'Use a year from 2000 to 9998.', bad: 'date' }
+    }[mode];
+    const box = (w, bad, focus) => 'width: ' + w + 'px; height: 32px; box-sizing: border-box; padding: 0 6px 0 10px; display: flex; align-items: center; gap: 6px; background: var(--bg1); border-radius: 4px; border: 1px solid ' + (bad ? 'var(--rdbd)' : 'var(--st1)') + '; ' + (focus ? 'border-bottom: 2px solid var(--cbrand)' : bad ? '' : 'border-bottom-color: var(--stacc)');
+    const badDate = !!M.bad;
+    const badTime = M.bad === 'both';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'width: ' + width + 'px; max-width: 100%; box-sizing: border-box; padding: 24px; background: var(--bg1); border-radius: 8px; box-shadow: var(--sh64); display: flex; flex-direction: column; gap: 16px; color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      date: M.date,
+      time: M.time,
+      dateBox: box(170, badDate, M.focus === 'date'),
+      timeBox: box(120, badTime, M.focus === 'time'),
+      dateInvalid: badDate ? 'true' : 'false',
+      timeInvalid: badTime ? 'true' : 'false',
+      showHint: !!M.hint,
+      hint: M.hint ?? '',
+      showError: !!M.error,
+      error: M.error ?? '',
+      describedBy: M.error ? 'asof-error' : M.hint ? 'asof-hint' : null,
+      hasMoment: !!M.moment
+    };
+  }
+}
+</script>
+</body>
+</html>

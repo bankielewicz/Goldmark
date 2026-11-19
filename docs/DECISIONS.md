@@ -2454,7 +2454,8 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 - **Status.** Approved by the owner on 2026-11-18 ("approved"), with "Make reasonable, reversible assumptions to
   carry work forward and state them"; branch `slice/07-history` from `04f8862` (after PR #81). HANDOFF row 7:
   "`SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads", done when "US-42/43" (screens 4, 5 and 6;
-  FR-CM-5, FR-IM-4). The backend and API are built first (rule 3 allows it); the screens wait for their boards.
+  FR-CM-5, FR-IM-4). The backend and API were built first (rule 3 allows it), then the screens after their boards
+  (item 10).
   The choices below were made without asking, each with its reason, and are the owner's to change in review,
   except items 7 and 9, which the owner decided.
 - **1. `ChangedBy` comes from the connection (FR-CM-5).** `DbSession` puts the signed-in person's account ID in
@@ -2553,7 +2554,26 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   before this has no stamp: its audit entry's actor is shown while that entry is kept, then nobody; the last
   writer is never shown as the one who ended it (tested). Rejected: A, leaving it to the audit log; B, a table
   of endings, which the runtime login could rewrite unless it got its own DENY and allow-list entries.
+- **10. The screens (owner, 2026-11-19, AskUserQuestion).** The boards were approved as drawn ("A. Approve as
+  drawn (Recommended)"): Claude Design canvas https://claude.ai/artifact/BKdXWuabswWXgQ98WaNC7b, version
+  `1795092518-f2f7`, copied byte for byte into `docs/design/screens/slice-7/` (its README lists them), with the
+  Notes board's 12 defaults: one As-of control in the top bar, for Search, a CI's page and the Graph explorer (not
+  one per screen, as HANDOFF row 7 had it); on other screens the control is disabled and the moment kept for the
+  browser session; the History tab as a timeline with a detail pane; "Ended since" on a relationship in a past view;
+  disabled actions that stay visible and focusable; and the others listed there. Rejected: B, approving without
+  "Ended since"; C, not yet. Two details the Notes board left open:
+  - *The past-view banner stays amber, Fluent's warning intent, as drawn* ("A. Amber (warning), as drawn
+    (Recommended)"). The design system's "As of" state was drawn grey (info); it changes to match, with the
+    clock-arrow icon, the local-time hint and a 28 px "Return to now". Asked twice: the first time the question
+    called the design system's info banner blue, and the owner chose it ("A. Blue (info), as approved
+    (Recommended)"); info is neutral grey in Fluent v9 and in the design system, so the question was asked again
+    with the right colours. Reason: someone who set a moment and moved on to another screen (the moment is kept)
+    must not take old data for current, and amber is what Goldmark already uses for a Retired CI, which isn't the
+    live record either. Rejected: grey, as the design system had it.
+  - *The search text in the count line takes single quotes in a past view too* ("A. Single ‘erp’ for both
+    (Recommended)"), as slice 5 was approved and built; the board's double quotes came from the handoff.
+    Rejected: double quotes for both, which would have changed the built Search page.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
-  them. The estate-wide change history is screen 15 (slice 23). The screens (4's as-of picker, 5's History tab,
-  6's as-of control) follow their boards (`tmp/screen-handoff-slice7.md`, rule 3).
+  them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
+  10; the handoff was `tmp/screen-handoff-slice7.md`, rule 3).

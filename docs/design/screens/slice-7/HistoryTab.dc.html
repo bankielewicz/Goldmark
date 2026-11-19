@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark CI history: timeline and the selected change</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div aria-busy="{{busy}}" style="{{rootStyle}}">
+  <sc-if value="{{showError}}" hint-placeholder-val="{{false}}">
+    <div role="alert" style="grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span style="flex: 1; min-width: 240px"><b>Couldn’t load the history.</b> Check your connection, then try again.</span><span style="font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">c41d8e7a2b9f4c03a5e6d7f8091a2b3c</span></span><button type="button" aria-label="Copy reference ID" style="width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h9v9H7zM4 13V4h9"></path></svg></button><button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button></div>
+  </sc-if>
+
+  <sc-for list="{{blocks}}" as="b" hint-placeholder-count="2">
+    <sc-if value="{{b.isList}}" hint-placeholder-val="{{true}}">
+      <div role="group" aria-label="{{b.label}}" style="{{b.style}}">
+        <sc-for list="{{b.days}}" as="day" hint-placeholder-count="4">
+          <sc-if value="{{day.head}}" hint-placeholder-val="{{true}}"><h2 style="margin: 0; padding: 12px 12px 4px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--fg3)">{{day.label}}</h2></sc-if>
+          <ul role="list" style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column">
+            <sc-for list="{{day.entries}}" as="e" hint-placeholder-count="2">
+              <li>
+                <button type="button" aria-current="{{e.current}}" aria-expanded="{{e.expanded}}" style="{{e.style}}">
+                  <time datetime="{{e.iso}}" title="{{e.full}}" style="width: 66px; flex: none; font-size: 13px; color: var(--fg2); font-variant-numeric: tabular-nums; white-space: nowrap">{{e.time}} UTC</time>
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none; margin-top: 2px; color: var(--fg2)"><path d="{{e.icon}}"></path></svg>
+                  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px">
+                    <span style="font-weight: 600; overflow-wrap: anywhere">{{e.sum}}</span>
+                    <span style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; line-height: 18px; color: var(--fg2)">
+                      <sc-if value="{{e.w.hasInitials}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="width: 18px; height: 18px; flex: none; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); box-shadow: 0 0 0 1px var(--avbd); display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700">{{e.w.initials}}</span></sc-if>
+                      <sc-if value="{{e.w.former}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width: 18px; height: 18px; flex: none; border-radius: 50%; background: var(--bg4); color: var(--fg3); box-shadow: 0 0 0 1px var(--st1); display: inline-flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 17c0-3.3 2.7-5 6-5s6 1.7 6 5"></path></svg></span></sc-if>
+                      <span style="{{e.w.nameStyle}}">{{e.w.name}}</span>
+                      <sc-if value="{{e.marked}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600; white-space: nowrap">Shown above</span></sc-if>
+                    </span>
+                  </span>
+                  <sc-if value="{{oneCol}}" hint-placeholder-val="{{false}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true" style="flex: none; margin-top: 2px; color: var(--fg2)"><path d="{{e.chevron}}"></path></svg></sc-if>
+                </button>
+              </li>
+            </sc-for>
+          </ul>
+        </sc-for>
+
+        <sc-if value="{{b.skeleton}}" hint-placeholder-val="{{false}}">
+          <div aria-label="Loading the history" style="display: flex; flex-direction: column; padding: 12px">
+            <span style="display: block; width: 110px; height: 12px; border-radius: 3px; background: var(--bg4); margin-bottom: 14px"></span>
+            <sc-for list="{{skeleton}}" as="s" hint-placeholder-count="6">
+              <div style="display: flex; gap: 10px; align-items: flex-start; height: 56px"><span style="display: block; width: 58px; height: 12px; border-radius: 3px; background: var(--bg4)"></span><span style="display: block; width: 16px; height: 16px; border-radius: 3px; background: var(--bg4)"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 8px"><span style="{{s.a}}"></span><span style="{{s.b}}"></span></span></div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{b.foot}}" hint-placeholder-val="{{true}}">
+          <div style="padding: 12px; border-top: 1px solid var(--st2); display: flex; flex-direction: column; gap: 10px">
+            <sc-if value="{{moreError}}" hint-placeholder-val="{{false}}">
+              <div role="alert" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: var(--mberr); border: 1px solid var(--mberrbd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mberri)" stroke-width="1.6" aria-hidden="true" style="flex: none"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM5.5 5.5l5 5M10.5 5.5l-5 5"></path></svg><span style="flex: 1; min-width: 180px"><b>Couldn’t load more changes.</b> The ones above are still here.</span><button type="button" style="height: 28px; padding: 0 10px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font: inherit; font-weight: 600">Retry</button><span style="flex-basis: 100%; font-size: 12px; line-height: 16px; color: var(--fg2)">Reference ID <span style="font-family: Consolas, 'Courier New', monospace">9a0b1c2d3e4f40516273849a5b6c7d8e</span> <button type="button" aria-label="Copy reference ID" style="width: 24px; height: 24px; vertical-align: middle; display: inline-flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M7 7h9v9H7zM4 13V4h9"></path></svg></button></span></div>
+            </sc-if>
+            <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+              <sc-if value="{{moreButton}}" hint-placeholder-val="{{false}}">
+                <button type="button" aria-disabled="{{moreDisabled}}" style="{{moreStyle}}"><sc-if value="{{moreLoading}}" hint-placeholder-val="{{false}}"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke-width="2" aria-hidden="true"><circle cx="10" cy="10" r="7" stroke="var(--st1)"></circle><path d="M10 3a7 7 0 0 1 7 7" stroke="var(--cbrand)" stroke-linecap="round"></path></svg></sc-if>{{moreLabel}}</button>
+              </sc-if>
+              <span aria-live="polite" style="color: var(--fg3)">{{countLine}}</span>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{b.isDetail}}" hint-placeholder-val="{{false}}">
+      <section role="region" aria-labelledby="hist-h" aria-live="polite" style="{{b.style}}">
+        <sc-if value="{{d.show}}" hint-placeholder-val="{{true}}">
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 id="hist-h" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Change on {{d.date}} {{d.time}} UTC</h2>
+            <div style="display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; color: var(--fg2)">
+              <span>{{d.local}} your local time</span>
+              <span aria-hidden="true">·</span>
+              <span style="display: inline-flex; align-items: center; gap: 6px">by
+                <sc-if value="{{d.w.hasInitials}}" hint-placeholder-val="{{true}}"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700">{{d.w.initials}}</span></sc-if>
+                <span style="{{d.w.detailNameStyle}}">{{d.w.name}}</span>
+              </span>
+            </div>
+          </div>
+
+          <div><a href="#" style="height: 32px; box-sizing: border-box; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; background: var(--bg1); border: 1px solid var(--st1); border-radius: 4px; color: var(--fg1); font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10a6.5 6.5 0 1 0 2-4.7M3 3.5V7h3.5M10 6.5V10l2.5 1.5"></path></svg>View this CI as of this time</a></div>
+
+          <sc-if value="{{d.isSentence}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0; font-size: 16px; line-height: 22px">{{d.sentence}}</p>
+          </sc-if>
+
+          <sc-if value="{{d.hasLead}}" hint-placeholder-val="{{false}}">
+            <p style="margin: 0">{{d.lead}}</p>
+          </sc-if>
+
+          <sc-if value="{{d.isCi}}" hint-placeholder-val="{{true}}">
+            <div style="overflow-x: auto; border: 1px solid var(--st2); border-radius: 6px">
+              <table style="width: 100%; min-width: 520px; border-collapse: collapse">
+                <caption style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">{{d.caption}}</caption>
+                <thead>
+                  <tr style="text-align: left">
+                    <th scope="col" style="height: 36px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--st1); font-weight: 600; color: var(--fg2); width: 26%">Field</th>
+                    <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st1); font-weight: 600; color: var(--fg2); width: 96px">Change</th>
+                    <th scope="col" style="padding: 0 12px; border-bottom: 1px solid var(--st1); font-weight: 600; color: var(--fg2); width: 24%">Before</th>
+                    <th scope="col" style="padding: 0 16px 0 12px; border-bottom: 1px solid var(--st1); font-weight: 600; color: var(--fg2)">After</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <sc-for list="{{d.rows}}" as="r" hint-placeholder-count="3">
+                    <tr style="vertical-align: top">
+                      <th scope="row" style="padding: 11px 12px 11px 16px; border-bottom: 1px solid var(--st2); text-align: left; font-weight: 600"><span style="display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap">{{r.field}}<sc-if value="{{r.attrDeleted}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600; white-space: nowrap">Attribute deleted</span></sc-if></span></th>
+                      <td style="padding: 11px 12px; border-bottom: 1px solid var(--st2)"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{r.change}}</span></td>
+                      <td style="padding: 11px 12px; border-bottom: 1px solid var(--st2); overflow-wrap: anywhere"><sc-if value="{{r.hasBefore}}" hint-placeholder-val="{{true}}"><s style="color: var(--fg2)">{{r.before}}</s></sc-if><sc-if value="{{r.noBefore}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: var(--fg3)">—</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">No value</span></sc-if></td>
+                      <td style="padding: 11px 16px 11px 12px; border-bottom: 1px solid var(--st2); overflow-wrap: anywhere"><sc-if value="{{r.afterText}}" hint-placeholder-val="{{true}}"><span>{{r.after}}</span></sc-if><sc-if value="{{r.afterLink}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap"><a href="#" style="display: inline-flex; align-items: center; gap: 6px; color: var(--blink); font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{r.linkIcon}}"></path></svg>{{r.after}}</a><span style="font-size: 12px; color: var(--fg3)">{{r.linkType}}</span></span></sc-if><sc-if value="{{r.afterLong}}" hint-placeholder-val="{{false}}"><span style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start"><span style="display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden">{{r.after}}</span><button type="button" aria-expanded="false" style="height: 24px; padding: 0; border: none; background: transparent; color: var(--blink); font: inherit; font-weight: 600">Show all</button></span></sc-if><sc-if value="{{r.noAfter}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="color: var(--fg3)">—</span><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">No value</span></sc-if></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{d.isRel}}" hint-placeholder-val="{{false}}">
+            <dl style="{{dlStyle}}">
+              <dt style="color: var(--fg3); font-weight: 600">Change</dt>
+              <dd style="margin: 0"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">{{d.rel.change}}</span></dd>
+              <dt style="color: var(--fg3); font-weight: 600">Relationship</dt>
+              <dd style="margin: 0"><code style="font-family: Consolas, 'Cascadia Mono', monospace; font-size: 13px; font-weight: 600">{{d.rel.type}}</code></dd>
+              <dt style="color: var(--fg3); font-weight: 600">Direction</dt>
+              <dd style="margin: 0">{{d.rel.direction}}</dd>
+              <dt style="color: var(--fg3); font-weight: 600">Redundancy group</dt>
+              <dd style="margin: 0">
+                <sc-if value="{{d.rel.groupPlain}}" hint-placeholder-val="{{true}}"><span style="{{d.rel.groupStyle}}">{{d.rel.group}}</span></sc-if>
+                <sc-if value="{{d.rel.groupChanged}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap"><span style="font-size: 12px; color: var(--fg3)">Before</span><span>{{d.rel.groupBefore}}</span><span aria-hidden="true" style="color: var(--fg3)">→</span><span style="font-size: 12px; color: var(--fg3)">After</span><span style="font-weight: 600">{{d.rel.groupAfter}}</span></span></sc-if>
+              </dd>
+              <dt style="color: var(--fg3); font-weight: 600">Other CI</dt>
+              <dd style="margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap"><a href="#" style="display: inline-flex; align-items: center; gap: 6px; color: var(--blink); font-weight: 600; text-decoration: none"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" style="flex: none; color: var(--fg2)"><path d="{{d.rel.otherIcon}}"></path></svg>{{d.rel.other}}</a><span style="font-size: 12px; color: var(--fg3)">{{d.rel.otherType}}</span><sc-if value="{{d.rel.otherRetired}}" hint-placeholder-val="{{false}}"><span style="display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--sbbd); background: var(--sbbg); color: var(--sbfg); font-size: 12px; font-weight: 600">Retired</span></sc-if></dd>
+            </dl>
+            <span style="font-size: 12px; line-height: 16px; color: var(--fg3)">The link opens the other CI as it is now.</span>
+          </sc-if>
+
+          <sc-if value="{{d.hasNote}}" hint-placeholder-val="{{false}}">
+            <div role="note" style="display: flex; gap: 8px; align-items: flex-start; padding: 8px 12px; background: var(--mbinfo); border: 1px solid var(--mbinfobd); border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--mbinfoi)" stroke-width="1.6" aria-hidden="true" style="flex: none; margin-top: 2px"><path d="M8 1.5a6.5 6.5 0 1 1 0 13 6.5 6.5 0 0 1 0-13zM8 7v4.5M8 4.6v.2"></path></svg><span>{{d.note}}</span></div>
+          </sc-if>
+        </sc-if>
+      </section>
+    </sc-if>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"dark":{"editor":"boolean","default":false},"cols":{"editor":"enum","options":[2,1],"default":2},"ci":{"editor":"enum","options":["vm","host"],"default":"vm"},"sel":{"editor":"enum","options":["end11","add14","group","attrdel","rename","restored","retired","unknown","created"],"default":"end11"},"state":{"editor":"enum","options":["default","loading","error","more","moreLoading","moreError"],"default":"default"},"mark":{"editor":"boolean","default":false},"height":{"editor":"int","default":780},"$preview":{"width":1084,"height":780}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const LIGHT = '--bg1:#ffffff;--bg2:#fafafa;--bg4:#f0f0f0;--fg1:#242424;--fg2:#424242;--fg3:#616161;--fgdis:#bdbdbd;--st1:#d1d1d1;--st2:#e0e0e0;--bfg1:#8a5a00;--bbg2:#fcefd8;--avbd:#e3c58d;--blink:#7d5200;--cbrand:#8a5a00;--fo:#000000;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--bgdis:#f0f0f0;--stdis:#e0e0e0;--mbinfo:#f5f5f5;--mbinfobd:#d1d1d1;--mbinfoi:#616161;--mberr:#fdf3f4;--mberrbd:#eeacb2;--mberri:#b10e1c;';
+    const DARK = '--bg1:#292929;--bg2:#1f1f1f;--bg4:#0a0a0a;--fg1:#ffffff;--fg2:#d6d6d6;--fg3:#adadad;--fgdis:#5c5c5c;--st1:#666666;--st2:#525252;--bfg1:#c28a2a;--bbg2:#2c1d00;--avbd:#7d5200;--blink:#c28a2a;--cbrand:#c28a2a;--fo:#ffffff;--sbfg:#adadad;--sbbg:#292929;--sbbd:#525252;--bgdis:#141414;--stdis:#424242;--mbinfo:#141414;--mbinfobd:#666666;--mbinfoi:#adadad;--mberr:#3b0509;--mberrbd:#c50f1f;--mberri:#dc626d;';
+    const p = this.props;
+    const dark = p.dark ?? false;
+    const cols = Number(p.cols ?? 2);
+    const which = p.ci ?? 'vm';
+    const state = p.state ?? 'default';
+    const mark = p.mark ?? false;
+    const height = p.height ?? 780;
+    const oneCol = cols === 1;
+    const more = state === 'more' || state === 'moreLoading' || state === 'moreError';
+    const ICON = {
+      VirtualMachine: 'M3 4h14v9H3zM7 16h6M10 13v3',
+      HypervisorHost: 'M3 4h14v12H3zM3 8h14M3 12h14',
+      ClusterNetworkName: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM2.5 10h15M10 2.5c2 2.2 3 4.7 3 7.5s-1 5.3-3 7.5c-2-2.2-3-4.7-3-7.5s1-5.3 3-7.5z',
+      BusinessService: 'M3 7h14v9H3zM7 7V4.5h6V7',
+      Team: 'M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 17c0-3 2.2-5 5-5s5 2 5 5M13 9a2.5 2.5 0 1 0 0-5M14 12c2.3.3 4 2.2 4 5'
+    };
+    // One icon per kind of change, always beside the words.
+    const KIND = {
+      created: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM10 6.5v7M6.5 10h7',
+      changed: 'M4 16l1-4 8-8 3 3-8 8zM11.5 5.5l3 3',
+      removed: 'M10 2.5a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15zM6.5 10h7',
+      retired: 'M3 4h14v3H3zM4 7v9h12V7M8 10.5h4',
+      restored: 'M4.5 9.5a5.5 5.5 0 1 1 1.6 4.4M4 4.5v5h5',
+      relAdded: 'M8 12l4-4M9 6.5l1.5-1.5a3.2 3.2 0 0 1 4.5 4.5L13.5 11M11 13.5L9.5 15A3.2 3.2 0 0 1 5 10.5L6.5 9',
+      relChanged: 'M3 6.5h11M11 3.5l3 3-3 3M17 13.5H6M9 10.5l-3 3 3 3',
+      relEnded: 'M9 6.5l1.5-1.5a3.2 3.2 0 0 1 4.5 4.5L13.5 11M11 13.5L9.5 15A3.2 3.2 0 0 1 5 10.5L6.5 9M4 4l12 12'
+    };
+    const person = (name, initials) => ({ name, initials, hasInitials: true, former: false, nameStyle: '', detailNameStyle: 'font-weight: 600; color: var(--fg1)' });
+    const WHO = {
+      dk: person('Dana Kowalski', 'DK'),
+      so: person('Sam Okafor', 'SO'),
+      pn: person('Priya Nair', 'PN'),
+      unknown: { name: 'Unknown', initials: '', hasInitials: false, former: false, nameStyle: 'color: var(--fg3)', detailNameStyle: 'color: var(--fg3)' },
+      former: { name: 'Former user', initials: '', hasInitials: false, former: true, nameStyle: '', detailNameStyle: 'font-weight: 600; color: var(--fg1)' }
+    };
+    const LONG = 'Primary ERP database VM. Keep on hosts with 256 GB or more. Built from the 2026 database template; the data and log disks sit on DS-S3-ERP-01. Before maintenance, tell the ERP Platform team and check the month-end calendar.';
+    // app-erp-db01, newest first (DEC-047). Local hints are UTC+2.
+    const VM = [
+      { k: 'end11', date: '2026-10-15', day: '15 October 2026', time: '09:12', local: '11:12', who: 'dk', kind: 'relEnded', sum: 'Ended relationship: runs_on esx-mx-011',
+        rel: { change: 'Ended', type: 'runs_on', direction: 'This CI depends on esx-mx-011', other: ['esx-mx-011', 'HypervisorHost'] } },
+      { k: 'add14', date: '2026-10-15', day: '15 October 2026', time: '09:12', local: '11:12', who: 'dk', kind: 'relAdded', sum: 'Added relationship: runs_on esx-mx-014',
+        rel: { change: 'Added', type: 'runs_on', direction: 'This CI depends on esx-mx-014', other: ['esx-mx-014', 'HypervisorHost'] } },
+      { k: 'group', date: '2026-10-12', day: '12 October 2026', time: '11:30', local: '13:30', who: 'so', kind: 'relChanged', sum: 'Changed redundancy group on depends_on ERP-LSNR',
+        rel: { change: 'Changed', type: 'depends_on', direction: 'This CI depends on ERP-LSNR', groupBefore: '—', groupAfter: 'AG-ERP', other: ['ERP-LSNR', 'ClusterNetworkName'] } },
+      { k: 'attrdel', date: '2026-10-09', day: '9 October 2026', time: '16:02', local: '18:02', who: 'pn', kind: 'removed', sum: 'Removed Cost centre (attribute deleted)',
+        lead: 'Priya Nair deleted the attribute Cost centre from the VirtualMachine type, so its value left this CI.',
+        rows: [['Cost centre', 'Removed', 'CC-4100', null, 'attrDeleted']] },
+      { k: 'rename', date: '2026-10-02', day: '2 October 2026', time: '14:40', local: '16:40', who: 'dk', kind: 'changed', sum: 'Changed Name and 2 attributes',
+        rows: [['Name', 'Changed', 'app-erp-db1', 'app-erp-db01'], ['Memory (GB)', 'Changed', '64', '128'], ['Owner', 'Added', null, 'ERP Platform', 'Team']] },
+      { k: 'restored', date: '2026-09-28', day: '28 September 2026', time: '08:20', local: '10:20', who: 'so', kind: 'restored', sum: 'Restored', sentence: 'Sam Okafor restored this CI.' },
+      { k: 'retired', date: '2026-09-28', day: '28 September 2026', time: '08:05', local: '10:05', who: 'so', kind: 'retired', sum: 'Retired', sentence: 'Sam Okafor retired this CI.' },
+      { k: 'unknown', date: '2026-09-20', day: '20 September 2026', time: '03:05', local: '05:05', who: 'unknown', kind: 'relEnded', sum: 'Ended relationship: depends_on Payroll',
+        rel: { change: 'Ended', type: 'depends_on', direction: 'This CI depends on Payroll', other: ['Payroll', 'BusinessService', true] },
+        note: 'The audit entry that recorded who ended it is no longer kept.' },
+      { k: 'created', date: '2026-09-01', day: '1 September 2026', time: '10:00', local: '12:00', who: 'dk', kind: 'created', sum: 'Created',
+        rows: [['Name', 'Added', null, 'app-erp-db1'], ['Memory (GB)', 'Added', null, '64'], ['Cost centre', 'Added', null, 'CC-4100'], ['Description', 'Added', null, LONG, 'long']] }
+    ];
+    // esx-mx-014 has 132 changes; these are the last of the first 50, where Show 50 more sits.
+    const dep = (k, date, day, time, local, who, vm, ended) => ({ k, date, day, time, local, who, kind: ended ? 'relEnded' : 'relAdded',
+      sum: (ended ? 'Ended' : 'Added') + ' relationship: depended on by ' + vm + ' (runs_on)',
+      rel: { change: ended ? 'Ended' : 'Added', type: 'runs_on', direction: vm + ' depends on this CI', other: [vm, 'VirtualMachine'] } });
+    const HOST = [
+      dep('h1', '2026-09-19', '19 September 2026', '14:22', '16:22', 'dk', 'vdi-mx-31'),
+      dep('h2', '2026-09-19', '19 September 2026', '14:22', '16:22', 'dk', 'vdi-mx-30'),
+      dep('h3', '2026-09-19', '19 September 2026', '14:21', '16:21', 'dk', 'vdi-mx-29'),
+      { k: 'rack', date: '2026-09-18', day: '18 September 2026', time: '10:05', local: '12:05', who: 'so', kind: 'changed', sum: 'Changed Rack', rows: [['Rack', 'Changed', 'R12-U08', 'R14-U22']] },
+      dep('h5', '2026-09-18', '18 September 2026', '09:50', '11:50', 'former', 'bld-agent-04', true),
+      dep('h6', '2026-09-16', '16 September 2026', '16:30', '18:30', 'dk', 'sql-rpt-07'),
+      dep('h7', '2026-09-16', '16 September 2026', '16:30', '18:30', 'dk', 'sql-rpt-06')
+    ];
+    const list = more || which === 'host' ? HOST : VM;
+    const selKey = more || which === 'host' ? 'rack' : (p.sel ?? 'end11');
+    const loading = state === 'loading';
+    const error = state === 'error';
+
+    const entry = (x) => {
+      const on = x.k === selKey;
+      return {
+        k: x.k, sum: x.sum, time: x.time, iso: x.date + 'T' + x.time + 'Z', full: x.date + ' ' + x.time + ' UTC · ' + x.local + ' your local time',
+        icon: KIND[x.kind], w: WHO[x.who],
+        marked: mark && x.k === 'rename',
+        current: oneCol ? null : (on ? 'true' : null),
+        expanded: oneCol ? (on ? 'true' : 'false') : null,
+        chevron: on ? 'M5 12l5-5 5 5' : 'M5 8l5 5 5-5',
+        style: 'width: 100%; min-height: 56px; box-sizing: border-box; padding: 9px 12px; display: flex; align-items: flex-start; gap: 10px; border: none; border-top: 1px solid var(--st2); color: var(--fg1); font: inherit; text-align: left; ' + (on ? 'background: var(--bbg2); box-shadow: inset 3px 0 0 var(--bfg1)' : 'background: transparent')
+      };
+    };
+    const group = (items, firstHead) => {
+      const days = [];
+      items.forEach((x, i) => {
+        const last = days[days.length - 1];
+        if (last && last.label === x.day) last.entries.push(entry(x));
+        else days.push({ label: x.day, head: i > 0 || firstHead, entries: [entry(x)] });
+      });
+      return days;
+    };
+    const card = 'background: var(--bg1); border: 1px solid var(--st2); ';
+    const detailBody = 'box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; ';
+    const blocks = [];
+    if (!error) {
+      if (loading) {
+        blocks.push({ isList: true, isDetail: false, label: 'Timeline', days: [], skeleton: true, foot: false, style: card + 'border-radius: 6px; max-height: ' + height + 'px; overflow: hidden' });
+        if (!oneCol) blocks.push({ isList: false, isDetail: true, style: card + detailBody + 'border-radius: 6px; padding: 20px; min-height: 240px' });
+      } else if (oneCol) {
+        const at = list.findIndex((x) => x.k === selKey);
+        const head = list.slice(0, at + 1);
+        const rest = list.slice(at + 1);
+        const sameDay = rest.length > 0 && rest[0].day === list[at].day;
+        blocks.push({ isList: true, isDetail: false, label: 'Timeline', days: group(head, true), skeleton: false, foot: false, style: card + 'border-bottom: none; border-radius: 6px 6px 0 0' });
+        blocks.push({ isList: false, isDetail: true, style: detailBody + 'padding: 16px; background: var(--bg2); border: 1px solid var(--st2); border-top: none; border-bottom: none; box-shadow: inset 3px 0 0 var(--bfg1)' });
+        blocks.push({ isList: true, isDetail: false, label: 'Timeline, continued', days: group(rest, !sameDay), skeleton: false, foot: true, style: card + 'border-top: none; border-radius: 0 0 6px 6px' });
+      } else {
+        blocks.push({ isList: true, isDetail: false, label: 'Timeline', days: group(list, true), skeleton: false, foot: true, style: card + 'border-radius: 6px; max-height: ' + height + 'px; overflow: auto' });
+        blocks.push({ isList: false, isDetail: true, style: card + detailBody + 'border-radius: 6px; padding: 20px' });
+      }
+    }
+
+    const x = list.find((e) => e.k === selKey);
+    const rows = (x.rows ?? []).map(([field, change, before, after, extra]) => ({
+      field, change, before: before ?? '', after: after ?? '',
+      attrDeleted: extra === 'attrDeleted',
+      hasBefore: before !== null, noBefore: before === null,
+      afterText: after !== null && !extra, afterLink: after !== null && !!ICON[extra], afterLong: extra === 'long', noAfter: after === null,
+      linkIcon: ICON[extra] ?? '', linkType: ICON[extra] ? extra : ''
+    }));
+    const r = x.rel;
+    const rel = r ? {
+      change: r.change, type: r.type, direction: r.direction,
+      groupPlain: !r.groupAfter, group: r.group ?? '—', groupStyle: r.group ? '' : 'color: var(--fg3)',
+      groupChanged: !!r.groupAfter, groupBefore: r.groupBefore ?? '', groupAfter: r.groupAfter ?? '',
+      other: r.other[0], otherType: r.other[1], otherIcon: ICON[r.other[1]], otherRetired: !!r.other[2]
+    } : { change: '', type: '', direction: '', groupPlain: false, group: '', groupStyle: '', groupChanged: false, groupBefore: '', groupAfter: '', other: '', otherType: '', otherIcon: '', otherRetired: false };
+    const d = {
+      show: !loading && !error,
+      date: x.date, time: x.time, local: x.local, w: WHO[x.who],
+      isCi: !!x.rows, rows, caption: 'What changed on ' + x.date + ' at ' + x.time + ' UTC',
+      hasLead: !!x.lead, lead: x.lead ?? '',
+      isRel: !!r, rel,
+      isSentence: !!x.sentence, sentence: x.sentence ?? '',
+      hasNote: !!x.note, note: x.note ?? ''
+    };
+    const bar = (w) => 'display: block; width: ' + w + '; height: 12px; border-radius: 3px; background: var(--bg4)';
+    return {
+      rootStyle: (dark ? DARK : LIGHT) + 'display: grid; grid-template-columns: ' + (oneCol ? 'minmax(0, 1fr)' : 'minmax(0, 2fr) minmax(0, 3fr)') + '; gap: ' + (oneCol ? '0' : '16px') + '; align-items: start; color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif; font-size: 14px; line-height: 20px;',
+      busy: loading ? 'true' : 'false',
+      oneCol,
+      showError: error,
+      blocks,
+      skeleton: ['72%', '58%', '80%', '46%', '66%', '52%'].map((w, i) => ({ a: bar(w), b: bar(i % 2 ? '110px' : '130px') })),
+      d,
+      dlStyle: 'margin: 0; display: grid; grid-template-columns: ' + (oneCol ? '130px' : '160px') + ' minmax(0, 1fr); gap: 12px 16px; align-items: center',
+      moreButton: more && state !== 'moreError',
+      moreLoading: state === 'moreLoading',
+      moreDisabled: state === 'moreLoading' ? 'true' : null,
+      moreLabel: state === 'moreLoading' ? 'Loading 50 more…' : 'Show 50 more',
+      moreStyle: 'height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border-radius: 4px; font: inherit; font-weight: 600; ' + (state === 'moreLoading' ? 'background: var(--bgdis); border: 1px solid var(--stdis); color: var(--fg3)' : 'background: var(--bg1); border: 1px solid var(--st1); color: var(--fg1)'),
+      moreError: state === 'moreError',
+      countLine: more ? 'Showing 50 of 132 changes' : which === 'host' ? 'Showing 50 of 132 changes' : '9 changes'
+    };
+  }
+}
+</script>
+</body>
+</html>
