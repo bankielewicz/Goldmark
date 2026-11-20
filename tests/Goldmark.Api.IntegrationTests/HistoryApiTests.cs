@@ -254,6 +254,49 @@ public sealed class HistoryApiTests(SqlServerFixture sql)
         Assert.Equal("NotSupported", Field(await admin.GetAsync($"/api/v1/types/usage?{asOf}"), "asOf"));
     }
 
+    /// <summary>
+    /// A custom attribute that an Admin added before the definitions had history (slice 5, before migration 0007):
+    /// 0007 started its period at 1900-01-01, as for the built-in ones, and its CreatedAt kept the real time. A read
+    /// as of a moment before it was created doesn't list it (DEC-047 item 12); the built-in attributes were always
+    /// there.
+    /// </summary>
+    [Fact]
+    public async Task An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (viewer, _) = await scenario.InviteAndAcceptAsync(admin, "vic.viewer", "Viewer");
+        var id = await CreateAsync(admin, new { type = "Server", name = "srv-legacy" });
+        var before = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items")[0].Value("at");
+        await Task.Delay(50, TestContext.Current.CancellationToken);
+        await AddAttributeAsync(admin, new { name = "rack", label = "Rack", dataType = "string" });
+        await ChangeAsync(admin, id, new { name = "srv-legacy", attributes = new { rack = "R1" } });
+
+        // The attribute as 0007 left one that existed when it ran: the same row, its period starting in 1900.
+        var db = scenario.Installation.Database;
+        await sql.AsAdminAsync(db, "ALTER TABLE cmdb.AttributeDef SET (SYSTEM_VERSIONING = OFF);");
+        await sql.AsAdminAsync(db, "ALTER TABLE cmdb.AttributeDef DROP PERIOD FOR SYSTEM_TIME;");
+        await sql.AsAdminAsync(db, "UPDATE cmdb.AttributeDef SET ValidFrom = '19000101' WHERE Name = N'rack';");
+        await sql.AsAdminAsync(db, "ALTER TABLE cmdb.AttributeDef ADD PERIOD FOR SYSTEM_TIME (ValidFrom, ValidTo);");
+        await sql.AsAdminAsync(db, "ALTER TABLE cmdb.AttributeDef SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = cmdb.AttributeDefHistory, DATA_CONSISTENCY_CHECK = ON));");
+        Assert.Equal("1900-01-01", await sql.AdminScalarAsync<string>(db,
+            "SELECT CONVERT(char(10), ValidFrom, 23) FROM cmdb.AttributeDef WHERE Name = N'rack' AND CreatedAt > '20200101';"));
+
+        var then = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/types?asOf={Uri.EscapeDataString(before)}")).Body;
+        Assert.Null(RackLabel(then));
+        Assert.Equal("Rack", RackLabel(AuthScenario.Ok(await viewer.GetAsync("/api/v1/types")).Body));
+        var afterwards = AuthScenario.Ok(await viewer.GetAsync($"/api/v1/cis/{id}/history")).Body.GetProperty("items")[0].Value("at");
+        Assert.Equal("Rack", RackLabel(AuthScenario.Ok(await viewer.GetAsync($"/api/v1/types?asOf={Uri.EscapeDataString(afterwards)}")).Body));
+
+        // The built-in attributes at both moments, and long before this database existed.
+        static int BuiltIn(JsonElement types) => types.GetProperty("types").EnumerateArray().Single(t => t.Value("name") == "Server")
+            .GetProperty("attributes").EnumerateArray().Count(a => a.GetProperty("builtIn").GetBoolean());
+        var now = BuiltIn(AuthScenario.Ok(await viewer.GetAsync("/api/v1/types")).Body);
+        Assert.True(now > 0);
+        Assert.Equal(now, BuiltIn(then));
+        Assert.Equal(now, BuiltIn(AuthScenario.Ok(await viewer.GetAsync("/api/v1/types?asOf=2000-01-01T00:00:00Z")).Body));
+    }
+
     private static string? RackLabel(JsonElement types) =>
         types.GetProperty("types").EnumerateArray().Single(t => t.Value("name") == "Server").GetProperty("attributes").EnumerateArray()
             .Where(a => a.Value("name") == "rack").Select(a => a.Value("label")).SingleOrDefault();

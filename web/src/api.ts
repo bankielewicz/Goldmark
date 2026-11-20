@@ -6,6 +6,8 @@
  * Errors are Problem Details with a stable `code`.
  */
 
+import { presentInsteadOfFuture } from './asOf';
+
 export const antiforgeryHeader = 'X-Goldmark-Antiforgery';
 
 export class ApiError extends Error {
@@ -126,6 +128,11 @@ async function send<T>(
   return { data: json as T, etag: response.headers.get('ETag'), headers: response.headers };
 }
 
+/** The API refused the request's `asOf` as ahead of the database's clock (DEC-047 item 2). */
+export function isFutureTime(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 400 && (error.fieldErrors.asOf?.includes('FutureTime') ?? false);
+}
+
 function isAntiforgeryRefusal(error: unknown): boolean {
   return error instanceof ApiError && error.status === 400 && error.message.includes('anti-forgery');
 }
@@ -153,6 +160,8 @@ export async function api<T>(
     if (options.signedIn !== false && error instanceof ApiError && error.status === 401) {
       unauthorizedListeners.forEach((listener) => listener());
     }
+    // A moment ahead of the database's clock, whichever read met it first: the screen shows the present.
+    if (isFutureTime(error)) presentInsteadOfFuture(path);
     throw error;
   }
 }

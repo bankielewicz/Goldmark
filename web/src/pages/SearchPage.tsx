@@ -271,8 +271,11 @@ export function SearchPage() {
   const asOf = useAsOf();
   const wide = useWide();
   const { types, failure: typesFailure, reload: reloadTypes } = useCiTypes(asOf);
-  const [page, setPage] = useState<CiPageData | null>(null);
-  const [counts, setCounts] = useState<CiPageData['types']>(null);
+  // The rows, the counts and "no CI at all" belong to the moment they were read for: after a change of moment
+  // they aren't shown until that moment's own answer arrives, even when its request fails (DEC-047 item 12).
+  const [resultsAsOf, setResultsAsOf] = useState<string | null | undefined>(undefined);
+  const [loadedPage, setPage] = useState<CiPageData | null>(null);
+  const [loadedCounts, setCounts] = useState<CiPageData['types']>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreFailure, setMoreFailure] = useState<ApiError | null>(null);
@@ -283,7 +286,11 @@ export function SearchPage() {
   const [filtersHidden, setFiltersHidden] = useState(false);
   const [creating, setCreating] = useState(false);
   // No CI at all, rather than none that isn't retired: asked only when the list is empty.
-  const [anyCi, setAnyCi] = useState<boolean | null>(null);
+  const [loadedAnyCi, setAnyCi] = useState<boolean | null>(null);
+  const ofThisMoment = resultsAsOf === asOf;
+  const page = ofThisMoment ? loadedPage : null;
+  const counts = ofThisMoment ? loadedCounts : null;
+  const anyCi = ofThisMoment ? loadedAnyCi : null;
   // The query the shown page was loaded with: Load more continues that one, never a newer one still loading.
   const pageQuery = useRef('');
   const [replacing, setReplacing] = useState(false);
@@ -319,6 +326,7 @@ export function SearchPage() {
       const { data } = await api<CiPageData>('GET', `/api/v1/cis?${text}`);
       if (listRequest.current !== request) return;
       pageQuery.current = text;
+      setResultsAsOf(asOf);
       setPage(data);
       setCounts(data.types);
       if (data.total === 0 && !query.q.trim() && query.types.length === 0 && !query.retired) {
@@ -341,6 +349,9 @@ export function SearchPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A change of moment closes New CI: it is never open in a past view, and doesn't come back with the present.
+  useEffect(() => setCreating(false), [asOf]);
 
   // The address changed (Back, a shared link): the box follows it, keeping a space still being typed.
   useEffect(() => setTyped((current) => (current.trim() === query.q.trim() ? current : query.q)), [query.q]);
@@ -637,7 +648,8 @@ export function SearchPage() {
         </OverlayDrawer>
       )}
 
-      {creating && types ? (
+      {/* Never in a past view, however the page got there (the browser's Back with the form open). */}
+      {creating && types && !asOf ? (
         <CiPanel mode={{ kind: 'new' }} types={types} onTypesChanged={reloadTypes} onClose={() => setCreating(false)} />
       ) : null}
     </>

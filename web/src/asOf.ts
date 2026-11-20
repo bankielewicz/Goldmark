@@ -9,6 +9,11 @@ import { navigate, useLocation } from './router';
  * screens the address is the truth. The moment is also kept for the browser session, so a detour to another screen
  * doesn't lose it (Notes default 2): the navigation's links to the three screens bring it back. One of the three
  * opened without `asOf` shows the present and forgets the kept moment.
+ *
+ * Nothing of one moment stays on the page of another (DEC-047 item 12): a CI's page is one page per moment (`App`
+ * puts the moment in its key, so a change of moment starts it again, as a change of CI does); Search keeps its rows
+ * and counts with the moment they were read for; the types come with theirs (`useCiTypes`); and a form that writes
+ * is never rendered in a past view.
  */
 
 const storageKey = 'goldmark.asOf';
@@ -20,8 +25,10 @@ export function hasPast(pathname: string): boolean {
 }
 
 /**
- * The moment if `value` is one the API takes (a real UTC date and time, years 2000 to 9998) and not in the future,
- * else null: a link with a moment the page can't show opens the present (docs/integration/deep-links.md).
+ * The moment if `value` is written as the API takes it (a real UTC date and time, years 2000 to 9998), else null: a
+ * link with a moment the page can't show opens the present (docs/integration/deep-links.md). Whether a moment is in
+ * the future is the database's to say, not this browser's clock (DEC-047 item 2): the API refuses one that is, and
+ * {@link presentInsteadOfFuture} then shows the present.
  */
 export function parseAsOf(value: string | null | undefined): string | null {
   const match = value?.match(pattern);
@@ -42,7 +49,7 @@ export function parseAsOf(value: string | null | undefined): string | null {
     h < 24 &&
     mi < 60 &&
     s < 60;
-  return real && y >= 2000 && y <= 9998 && date.getTime() <= Date.now() ? value : null;
+  return real && y >= 2000 && y <= 9998 ? value : null;
 }
 
 /** The moment as a Date (to the millisecond: enough to show it; the API is sent the text itself). */
@@ -124,6 +131,21 @@ export function useAsOf(): string | null {
 export function setAsOf(value: string | null): void {
   keepAsOf(value);
   navigate(withAsOf(window.location.pathname + window.location.search + window.location.hash, value));
+}
+
+/**
+ * The API refused the moment of the request to `requestPath` as ahead of the database's clock (`FutureTime`). If
+ * the screen still shows that moment, it shows the present instead, in the same history entry, and the moment is
+ * forgotten; an answer that comes after the person moved on changes nothing.
+ */
+export function presentInsteadOfFuture(requestPath: string): void {
+  const asked = new URL(requestPath, window.location.origin).searchParams.get('asOf');
+  const shown = new URLSearchParams(window.location.search).get('asOf');
+  if (!asked || asked !== shown || !hasPast(window.location.pathname)) return;
+  keepAsOf(null);
+  navigate(withAsOf(window.location.pathname + window.location.search + window.location.hash, null), {
+    replace: true,
+  });
 }
 
 /** Read-only in a past view: the one Tooltip on every action that would change something (Notes default 10). */

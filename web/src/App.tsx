@@ -11,6 +11,7 @@ import { SignInPage } from './pages/SignInPage';
 import { TwoFactorPage } from './pages/TwoFactorPage';
 import { TypesPage } from './pages/TypesPage';
 import { UsersPage } from './pages/UsersPage';
+import { useAsOf } from './asOf';
 import { navigate, safeReturnPath, useLocation } from './router';
 import { canReadAudit, isAdmin, useSession } from './session';
 import { AppShell } from './shell/AppShell';
@@ -50,6 +51,8 @@ export function App() {
   const styles = useStyles();
   const session = useSession();
   const { pathname, search } = useLocation();
+  // A CI's page is one page per moment (src/asOf.ts): the moment is part of its key.
+  const moment = useAsOf() ?? 'now';
 
   if (pathname === '/setup') return <EnrolmentPage route="setup" />;
   if (pathname === '/invite' || pathname === '/reset' || pathname === '/password-reset') {
@@ -113,7 +116,7 @@ export function App() {
   } else if (pathname === '/graph') {
     page = <GraphPage />;
   } else if (pathname.startsWith('/ci/') && pathname.split('/').length === 3) {
-    page = <CiPage key={pathname} id={decodedSegment(pathname.slice('/ci/'.length))} />;
+    page = <CiPage key={`${pathname} ${moment}`} id={decodedSegment(pathname.slice('/ci/'.length))} />;
   } else if (pathname === '/account/two-factor') {
     page = <TwoFactorPage />;
   } else {

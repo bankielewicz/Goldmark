@@ -23,6 +23,7 @@ import {
 import { ClockRegular, ErrorCircleRegular, HistoryRegular } from '@fluentui/react-icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { api, isFutureTime } from '../api';
 import { formatMoment, hasPast, localHint, setAsOf, shortMoment, useAsOf } from '../asOf';
 import { useLocation } from '../router';
 
@@ -124,10 +125,7 @@ function fields(date: Date): { date: string; time: string } {
 }
 
 /** The fields as a moment the API takes ("2026-10-06T14:00Z"), or which field is wrong. */
-function moment(
-  date: string,
-  time: string,
-): { value: string; future: boolean } | { error: string; bad: 'date' | 'time' | 'both' } {
+function moment(date: string, time: string): { value: string } | { error: string; bad: 'date' | 'time' | 'both' } {
   const day = date.trim();
   const clock = time.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!day && !time.trim()) return { error: 'Enter a date and a time.', bad: 'both' };
@@ -141,7 +139,7 @@ function moment(
   // A day the calendar has (not 30 February).
   if (Number.isNaN(at.getTime()) || at.toISOString().slice(0, 10) !== day)
     return { error: 'Enter a date and a time.', bad: 'date' };
-  return { value, future: at.getTime() > Date.now() };
+  return { value };
 }
 
 /**
@@ -201,7 +199,7 @@ export function AsOfControl({ wide }: { wide: boolean }) {
           {label}
         </ToggleButton>
       </DialogTrigger>
-      <AsOfDialog key={opened} asOf={asOf} onClose={() => setOpen(false)} />
+      <AsOfDialog key={opened} asOf={asOf} open={open} onClose={() => setOpen(false)} />
     </Dialog>
   );
 }
@@ -210,9 +208,19 @@ export function AsOfControl({ wide }: { wide: boolean }) {
  * "Show Goldmark as of" (the DialogStates board). The Date is the browser's date field and the Time is typed,
  * 24-hour (owner, DEC-047 item 10: no date-picker package). Both are UTC; the hint gives the moment in the person's
  * own time. A quick choice fills the fields and leaves Apply to the person (Notes default 6). Errors show on Apply,
- * under the fields, and focus goes to the first field in error.
+ * under the fields, and focus goes to the first field in error. Whether the moment is in the future is the
+ * database's to say (DEC-047 item 2), so Apply asks the API, not this browser's clock, which may be slow or fast.
  */
-export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: () => void }) {
+export function AsOfDialog({
+  asOf,
+  open,
+  onClose,
+}: {
+  asOf: string | null;
+  /** The dialog is showing: an answer that comes after it closed applies nothing. */
+  open: boolean;
+  onClose: () => void;
+}) {
   const styles = useStyles();
   const start = asOf ? fields(new Date(asOf)) : { date: '', time: '' };
   const [date, setDate] = useState(start.date);
@@ -232,17 +240,28 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
     setTime(filled.time);
     setProblem(null);
   };
-  const apply = () => {
+  const [checking, setChecking] = useState(false);
+  const showing = useRef(open);
+  showing.current = open;
+  const apply = async () => {
+    if (checking) return;
     const result = moment(date, time);
-    const wrong =
-      'error' in result
-        ? result
-        : result.future
-          ? { error: 'That time is in the future.', bad: 'both' as const }
-          : null;
-    if (wrong || 'error' in result) {
-      setProblem(wrong);
-      (wrong?.bad === 'time' ? timeRef : dateRef).current?.focus();
+    if ('error' in result) {
+      setProblem(result);
+      (result.bad === 'time' ? timeRef : dateRef).current?.focus();
+      return;
+    }
+    // The types as of the moment: the lightest read that takes `asOf`. Any other failure is the page's to show.
+    setChecking(true);
+    const future = await api('GET', `/api/v1/types?asOf=${encodeURIComponent(result.value)}`).then(
+      () => false,
+      (error: unknown) => isFutureTime(error),
+    );
+    setChecking(false);
+    if (!showing.current) return;
+    if (future) {
+      setProblem({ error: 'That time is in the future.', bad: 'both' });
+      dateRef.current?.focus();
       return;
     }
     onClose();
@@ -258,7 +277,7 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          apply();
+          void apply();
         }}
       >
         <DialogBody>
@@ -336,7 +355,7 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
             ) : null}
             <span className={styles.spacer} />
             <Button onClick={onClose}>Cancel</Button>
-            <Button appearance="primary" type="submit">
+            <Button appearance="primary" type="submit" disabledFocusable={checking}>
               Apply
             </Button>
           </DialogActions>
@@ -361,7 +380,7 @@ export function ChooseAsOfButton({ asOf }: { asOf: string | null }) {
       <DialogTrigger disableButtonEnhancement>
         <Button aria-haspopup="dialog">Choose another time</Button>
       </DialogTrigger>
-      <AsOfDialog key={opened} asOf={asOf} onClose={() => setOpen(false)} />
+      <AsOfDialog key={opened} asOf={asOf} open={open} onClose={() => setOpen(false)} />
     </Dialog>
   );
 }

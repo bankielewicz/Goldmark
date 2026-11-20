@@ -168,7 +168,8 @@ function CiView({ id }: { id: string }) {
   // In a past view, the attributes the CI's type has now, to mark those deleted since (the CiAsOf board).
   const [presentAttributes, setPresentAttributes] = useState<ReadonlySet<string> | null>(null);
   // A CI that exists now and didn't at the moment shown: when it was created, and its name and type now.
-  const [notYet, setNotYet] = useState<{ createdAt: string; ci: CiDetail | null } | null>(null);
+  // `named`: the lookup of the CI's present name has answered, with the CI or without it.
+  const [notYet, setNotYet] = useState<{ createdAt: string; ci: CiDetail | null; named: boolean } | null>(null);
   const [relationshipPanel, setRelationshipPanel] = useState<RelationshipPanelMode | null>(null);
   const toasterId = useId('ci-toaster');
   const { dispatchToast } = useToastController(toasterId);
@@ -206,9 +207,9 @@ function CiView({ id }: { id: string }) {
       const problem = asApiError(error);
       if (problem.status === 404 && problem.code === 'not-found-then' && typeof problem.body.createdAt === 'string') {
         const createdAt = problem.body.createdAt;
-        setNotYet({ createdAt, ci: null });
+        setNotYet({ createdAt, ci: null, named: false });
         const { data } = await api<CiDetail>('GET', `/api/v1/cis/${id}`).catch(() => ({ data: null }));
-        setNotYet({ createdAt, ci: data });
+        setNotYet({ createdAt, ci: data, named: true });
       } else if (problem.status === 404) setMissing(true);
       else setFailure(problem);
     }
@@ -278,7 +279,8 @@ function CiView({ id }: { id: string }) {
   if (missing) return <CiNotFound id={id} malformed={false} />;
   if (notYet && asOf) {
     // The CiNotYet board: the banner and the CI's breadcrumb stay, and the page's h1 says the CI didn't exist then,
-    // with when it was created. The name and type are the CI's present ones.
+    // with when it was created. The name and type are the CI's present ones; when they can't be read, the page
+    // says the same of "This CI", as the Graph explorer does.
     const now = notYet.ci;
     return (
       <>
@@ -294,9 +296,9 @@ function CiView({ id }: { id: string }) {
               : [{ label: 'Search', path: withAsOf('/search', asOf) }, { label: 'CI' }]
           }
         />
-        {now ? (
-          <PastEmpty asOf={asOf} headingLevel={1} title={`${now.name} didn’t exist at that time.`}>
-            <TypeBadge type={now.type} types={types} />
+        {now || notYet.named ? (
+          <PastEmpty asOf={asOf} headingLevel={1} title={`${now?.name ?? 'This CI'} didn’t exist at that time.`}>
+            {now ? <TypeBadge type={now.type} types={types} /> : null}
             <PastEmptyText>{`It was created on ${formatUtc(notYet.createdAt)} UTC, after the time you’re viewing.`}</PastEmptyText>
           </PastEmpty>
         ) : (
@@ -637,7 +639,8 @@ function CiView({ id }: { id: string }) {
         />
       ) : null}
 
-      {editing && types ? (
+      {/* Never in a past view, however the page got there (the browser's Back with the form open). */}
+      {editing && types && !asOf ? (
         <CiPanel
           mode={{ kind: 'edit', ci }}
           types={types}
@@ -650,7 +653,7 @@ function CiView({ id }: { id: string }) {
         />
       ) : null}
 
-      <Dialog open={confirmRetire} modalType="alert" onOpenChange={(_, data) => setConfirmRetire(data.open)}>
+      <Dialog open={confirmRetire && !asOf} modalType="alert" onOpenChange={(_, data) => setConfirmRetire(data.open)}>
         <DialogSurface aria-describedby="retire-body">
           <DialogBody>
             <DialogTitle>Retire {ci.name}?</DialogTitle>

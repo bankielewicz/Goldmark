@@ -123,10 +123,17 @@ internal sealed class CiTypeCatalog(DbSession db)
 
     private const string AttributesSql = AttributeColumns + AttributeOrder;
 
+    // Migration 0007 started the period of every definition that existed when it ran at 1900-01-01: right for the
+    // built-in attributes, which were always there, and wrong for a custom attribute an Admin had added before it
+    // (slice 5 let them), which would show on a CI's page as of a moment before the attribute existed. Such a row
+    // counts from its CreatedAt (DEC-047 item 12). Only such a row: a later version's ValidFrom is its
+    // transaction's start, a little before the CreatedAt its insert stamped.
     private const string AttributesAsOfSql = AsOf.Declare + AttributeSelect
         + "\nFROM cmdb.AttributeDef" + AsOf.Clause + " AS a"
         + "\nLEFT JOIN cmdb.CiType" + AsOf.Clause + " AS r ON r.Id = a.RefCiTypeId"
-        + AttributeChanger + AttributeOrder;
+        + AttributeChanger
+        + "\nWHERE a.IsBuiltIn = 1 OR a.ValidFrom > '19000101' OR a.CreatedAt <= @at"
+        + AttributeOrder;
 
     private const string AttributesOfTypeSql = AttributeColumns + " WHERE a.CiTypeId = @typeId ORDER BY a.IsBuiltIn DESC, a.SortOrder, a.Id;";
 

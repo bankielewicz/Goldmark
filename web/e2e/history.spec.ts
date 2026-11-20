@@ -360,4 +360,237 @@ test.describe('slice 7 screens', () => {
 
     expect(problems).toEqual([]);
   });
+
+  // Review round 1 (DEC-047 item 12): a page with a past is one page per moment. Nothing of one moment (rows, a CI,
+  // the types, an open form) stays on the page of another, whichever answer comes first or fails; and whether a
+  // moment is in the future is the database's to say, not the browser's clock.
+  test('a change of moment leaves nothing of the other moment on the page, and the database’s clock judges the future', async ({
+    page,
+  }) => {
+    await recordViolations(page);
+    await signIn(page);
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const live = (url: URL, path: string) => url.pathname === path && !url.searchParams.has('asOf');
+    const serverError = {
+      status: 500,
+      contentType: 'application/problem+json',
+      body: JSON.stringify({ title: 'A failure made by the test', status: 500 }),
+    };
+
+    // A VM and the moment it was created. Since then: its type gains an attribute, the VM a value for it and a
+    // new name, and a second VM exists.
+    const vm = await post(page, '/api/v1/cis', { type: 'VirtualMachine', name: 'race-vm-then' });
+    const created = await call(page, 'GET', `/api/v1/cis/${vm}/history`);
+    const moment = String((created.json?.items as { at: string }[])[0]?.at);
+    const past = `asOf=${encodeURIComponent(moment)}`;
+    expect(
+      (
+        await call(page, 'POST', '/api/v1/types/VirtualMachine/attributes', {
+          name: 'raceOwner',
+          label: 'Race owner',
+          dataType: 'string',
+        })
+      ).status,
+    ).toBe(201);
+    const read = await call(page, 'GET', `/api/v1/cis/${vm}`);
+    expect(
+      (
+        await call(
+          page,
+          'PUT',
+          `/api/v1/cis/${vm}`,
+          { name: 'race-vm-now', attributes: { raceOwner: 'team-a' } },
+          read.etag ?? '',
+        )
+      ).status,
+    ).toBe(200);
+    const later = await post(page, '/api/v1/cis', { type: 'VirtualMachine', name: 'race-vm-later' });
+    const banner = page.getByText(`Viewing as of ${shown(moment)} (read-only)`);
+    const h1 = page.getByRole('heading', { level: 1 });
+    const returnToNow = page.getByRole('button', { name: 'Return to now' });
+    const owner = async () =>
+      ((await call(page, 'GET', `/api/v1/cis/${vm}`)).json?.attributes as Record<string, unknown>).raceOwner;
+
+    // Each part starts from an address of its own, so one that fails doesn't decide the next.
+    let nowName = 'race-vm-now';
+    const failures: string[] = [];
+    const part = async (name: string, body: () => Promise<void>) => {
+      await page.unrouteAll({ behavior: 'wait' });
+      try {
+        await test.step(name, body);
+      } catch (error) {
+        failures.push(
+          `${name}: ${error instanceof Error ? error.message.split('\n').slice(0, 6).join(' | ') : String(error)}`,
+        );
+      }
+    };
+    page.setDefaultTimeout(10_000);
+
+    // Back in the present with the present's types still on their way: Edit waits for them, so a save can't be
+    // built from the past's attribute list and drop the value of an attribute added since.
+    await part('Edit waits for the present’s types', async () => {
+      await page.goto(`/ci/${vm}?${past}`);
+      await expect(h1).toHaveText('race-vm-then');
+      await expect(banner).toBeVisible();
+      await page.route(
+        (url) => live(url, '/api/v1/types'),
+        async (route) => {
+          await wait(6000);
+          await route.continue();
+        },
+      );
+      await returnToNow.click();
+      await expect(h1).toHaveText('race-vm-now');
+      const edit = page.getByRole('button', { name: 'Edit' });
+      const early = await edit.isEnabled();
+      await edit.click();
+      const editPanel = page.getByRole('dialog', { name: 'Edit race-vm-now' });
+      await editPanel.getByRole('textbox', { name: /^Name/ }).fill('race-vm-saved');
+      await editPanel.getByRole('button', { name: 'Save' }).click();
+      await expect(h1).toHaveText('race-vm-saved');
+      nowName = 'race-vm-saved';
+      expect(await owner(), 'a value added since the moment survives the save').toBe('team-a');
+      expect(early, 'Edit was available before the present’s types arrived').toBe(false);
+    });
+
+    // Back (the browser's) to the past view with Edit open: the form is gone.
+    const writes: string[] = [];
+    page.on('request', (request) => {
+      const { pathname } = new URL(request.url());
+      if (request.method() !== 'GET' && pathname.startsWith('/api/v1/cis')) {
+        writes.push(`${request.method()} ${pathname}`);
+      }
+    });
+    await part('no Edit form in a past view', async () => {
+      await page.goto(`/ci/${vm}?${past}`);
+      await expect(h1).toHaveText('race-vm-then');
+      await returnToNow.click();
+      await expect(h1).toHaveText(nowName);
+      await page.getByRole('button', { name: 'Edit' }).click();
+      const editPanel = page.getByRole('dialog', { name: `Edit ${nowName}` });
+      await expect(editPanel).toBeVisible();
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await expect(h1).toHaveText('race-vm-then');
+      // No dialog of any name: left open, the form would come back as "Edit race-vm-then" once the past CI loads.
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    // The same on Search with New CI open, and nothing was written from either.
+    const rows = page.getByRole('table', { name: 'CIs' });
+    await part('no New CI form in a past view', async () => {
+      await page.goto(`/search?q=race-vm&${past}`);
+      await expect(rows.getByRole('link', { name: 'race-vm-then' })).toBeVisible();
+      await expect(rows.getByRole('link', { name: 'race-vm-later' })).toHaveCount(0);
+      await returnToNow.click();
+      await expect(rows.getByRole('link', { name: 'race-vm-later' })).toBeVisible();
+      await page.getByRole('button', { name: 'New CI' }).first().click();
+      const create = page.getByRole('dialog', { name: 'New CI' });
+      await expect(create).toBeVisible();
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(rows.getByRole('link', { name: 'race-vm-then' })).toBeVisible();
+      // Nor does it come back with the present.
+      await returnToNow.click();
+      await expect(rows.getByRole('link', { name: 'race-vm-later' })).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      expect(writes, 'nothing is written from a past view').toEqual([]);
+    });
+
+    // A past search that fails shows its error and none of the present's rows under the past's banner.
+    await part('a failed past search shows no row of the present', async () => {
+      await page.goto(`/search?q=race-vm&${past}`);
+      await expect(rows.getByRole('link', { name: 'race-vm-then' })).toBeVisible();
+      await returnToNow.click();
+      await expect(rows.getByRole('link', { name: 'race-vm-later' })).toBeVisible();
+      await page.route(
+        (url) => url.pathname === '/api/v1/cis' && url.searchParams.has('asOf'),
+        (route) => route.fulfill(serverError),
+      );
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await expect(page.getByText('Couldn’t load the CIs: something went wrong on the server.')).toBeVisible();
+      await expect(page.getByRole('link', { name: 'race-vm-later' })).toHaveCount(0);
+    });
+
+    // The present's answer, arriving after the past view is back, doesn't replace the past's CI.
+    await part('the present’s late answer is dropped', async () => {
+      await page.goto(`/ci/${vm}?${past}`);
+      await expect(h1).toHaveText('race-vm-then');
+      await page.route(
+        (url) => live(url, `/api/v1/cis/${vm}`),
+        async (route) => {
+          await wait(3000);
+          await route.continue();
+        },
+      );
+      const lateAnswer = page.waitForResponse((response) => live(new URL(response.url()), `/api/v1/cis/${vm}`));
+      await returnToNow.click();
+      await expect(banner).toHaveCount(0);
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await expect(h1).toHaveText('race-vm-then');
+      await (await lateAnswer).finished();
+      await page.waitForTimeout(500);
+      await expect(banner).toBeVisible();
+      await expect(h1).toHaveText('race-vm-then');
+    });
+
+    // A CI that didn't exist yet, when its present name can't be read: the page still says so, with when it was
+    // created, instead of loading for ever.
+    await part('a CI not yet there, its present name unreadable', async () => {
+      await page.route(
+        (url) => live(url, `/api/v1/cis/${later}`),
+        (route) => route.fulfill(serverError),
+      );
+      await page.goto(`/ci/${later}?${past}`);
+      await expect(banner).toBeVisible();
+      await expect(h1).toHaveText('This CI didn’t exist at that time.');
+      await expect(page.getByText(/^It was created on .+ UTC, after the time you’re viewing\.$/)).toBeVisible();
+    });
+
+    // A moment ahead of the database's clock: the API refuses it, and the page shows the present without it.
+    await part('a future moment shows the present', async () => {
+      await page.goto(`/ci/${vm}?asOf=2999-01-01T00:00Z`);
+      await expect(h1).toHaveText(nowName);
+      await expect(page.getByText(/^Viewing as of /)).toHaveCount(0);
+      await expect(page).toHaveURL(new RegExp(`/ci/${vm}$`));
+      await expect(page.getByRole('button', { name: 'Edit' })).toBeEnabled();
+    });
+
+    // A browser whose clock is an hour slow takes the moment for the future; the database knows better, so the
+    // link still opens the past view, read-only.
+    await part('a slow browser clock still opens the past view', async () => {
+      const slow = await page.context().newPage();
+      try {
+        await slow.addInitScript(() => {
+          const now = Date.now.bind(Date);
+          Date.now = () => now() - 3_600_000;
+        });
+        await slow.goto(`/ci/${vm}?${past}`);
+        await expect(slow.getByText(`Viewing as of ${shown(moment)} (read-only)`)).toBeVisible();
+        await expect(slow.getByRole('heading', { level: 1 })).toHaveText('race-vm-then');
+        await expect(slow.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
+
+        // The dialog too: five minutes ago is in this browser's future, and the database takes it. Search then
+        // shows that moment, and the focus is back on the control that opened the dialog.
+        await slow.goto('/search');
+        await slow.getByRole('button', { name: 'As of: Now. Choose a point in time' }).click();
+        const dialog = slow.getByRole('dialog', { name: 'Choose a point in time' });
+        const recent = new Date(Date.now() - 5 * 60_000).toISOString();
+        const recentShown = `${recent.slice(0, 10)} ${recent.slice(11, 16)} UTC`;
+        await dialog.getByLabel('Date').fill(recent.slice(0, 10));
+        await dialog.getByLabel('Time').fill(recent.slice(11, 16));
+        await dialog.getByRole('button', { name: 'Apply' }).click();
+        await expect(slow.getByText(`Viewing as of ${recentShown} (read-only)`)).toBeVisible();
+        await expect(slow.getByRole('button', { name: `As of: ${recentShown}. Choose a point in time` })).toBeFocused();
+      } finally {
+        await slow.close();
+      }
+    });
+
+    expect(failures).toEqual([]);
+  });
 });
