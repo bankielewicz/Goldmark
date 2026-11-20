@@ -2675,7 +2675,10 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     clock runs an hour slow, the focus after choosing a moment on Search). Eight failed on the image built before
     the fixes; two (the dialog on a slow clock, the focus) on a build with those two behaviours put back; three
     (Search's empty state, the late Apply after Back, and after Back and Forward) on the builds of the round's
-    earlier pushes. And
+    earlier pushes. An answer that must come late is held back by the test until the moves are done (a gate the
+    test opens), not by a delay a slow machine could outlast; the two parts that gate a CI's late answer and
+    Apply's failed again on a build with those faults put back. `expectAccessible` now repeats its reading of the
+    navigation's width until it settles: just after the window narrows past 1100 px it measured 0 once. And
     `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
     gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).

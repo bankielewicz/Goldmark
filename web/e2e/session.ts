@@ -68,14 +68,21 @@ export async function expectAccessible(page: Page, what: string) {
   // The inline navigation keeps its width on every screen. As a flex item that hides its overflow it once shrank
   // beside wide content, to nothing beside a table: still in the accessibility tree, so axe and role queries saw
   // nothing wrong, and out of a pointer's reach. history.spec.ts checks that the classes still exist.
-  // Read once: none below 1100 px (the rail), one from there, and never another width.
-  const navWidths = await page
-    .locator(INLINE_NAV)
-    .evaluateAll((navs) => navs.map((nav) => Math.round(nav.getBoundingClientRect().width)));
-  expect(
-    navWidths.filter((width) => width !== INLINE_NAV_WIDTH),
-    `${what}: the inline navigation's width`,
-  ).toEqual([]);
+  // None below 1100 px (the rail), one from there, and never another width. Each look is one reading of the
+  // page; it is repeated until it settles, because just after the window narrows past 1100 px the inline
+  // navigation is still on its way out and can measure 0 for a moment (seen once in a run). One that stays
+  // collapsed still fails, after the wait.
+  await expect
+    .poll(
+      async () =>
+        (
+          await page
+            .locator(INLINE_NAV)
+            .evaluateAll((navs) => navs.map((nav) => Math.round(nav.getBoundingClientRect().width)))
+        ).filter((width) => width !== INLINE_NAV_WIDTH),
+      { message: `${what}: the inline navigation's width` },
+    )
+    .toEqual([]);
   // No Combobox arrow on the screen is a Tab stop (DEC-040, src/ui/combobox.ts). This reads the
   // rendered attribute, so it also sees what the source check (tests/combobox-expand-icon.test.mjs)
   // can't: a later property that overrides the first. auth.spec.ts checks that the class still exists.

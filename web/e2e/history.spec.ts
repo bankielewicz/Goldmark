@@ -369,7 +369,15 @@ test.describe('slice 7 screens', () => {
   }) => {
     await recordViolations(page);
     await signIn(page);
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    // An answer the test holds back until it opens the gate: what must come late comes late by construction, not
+    // by a delay that a slow machine could outlast.
+    const gate = () => {
+      let open = () => {};
+      const opened = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      return { open: () => open(), opened };
+    };
     const live = (url: URL, path: string) => url.pathname === path && !url.searchParams.has('asOf');
     const serverError = {
       status: 500,
@@ -432,25 +440,33 @@ test.describe('slice 7 screens', () => {
       await page.goto(`/ci/${vm}?${past}`);
       await expect(h1).toHaveText('race-vm-then');
       await expect(banner).toBeVisible();
-      await page.route(
-        (url) => live(url, '/api/v1/types'),
-        async (route) => {
-          await wait(6000);
-          await route.continue();
-        },
-      );
-      await returnToNow.click();
-      await expect(h1).toHaveText('race-vm-now');
-      const edit = page.getByRole('button', { name: 'Edit' });
-      const early = await edit.isEnabled();
-      await edit.click();
-      const editPanel = page.getByRole('dialog', { name: 'Edit race-vm-now' });
-      await editPanel.getByRole('textbox', { name: /^Name/ }).fill('race-vm-saved');
-      await editPanel.getByRole('button', { name: 'Save' }).click();
-      await expect(h1).toHaveText('race-vm-saved');
-      nowName = 'race-vm-saved';
-      expect(await owner(), 'a value added since the moment survives the save').toBe('team-a');
-      expect(early, 'Edit was available before the present’s types arrived').toBe(false);
+      const presentTypes = gate();
+      try {
+        await page.route(
+          (url) => live(url, '/api/v1/types'),
+          async (route) => {
+            await presentTypes.opened;
+            await route.continue();
+          },
+        );
+        await returnToNow.click();
+        await expect(h1).toHaveText('race-vm-now');
+        const edit = page.getByRole('button', { name: 'Edit' });
+        // The present's types are held back, so Edit can't be on. Were it on, the save below would be made with
+        // them still held back, and the value lost.
+        const early = await edit.isEnabled();
+        if (!early) presentTypes.open();
+        await edit.click();
+        const editPanel = page.getByRole('dialog', { name: 'Edit race-vm-now' });
+        await editPanel.getByRole('textbox', { name: /^Name/ }).fill('race-vm-saved');
+        await editPanel.getByRole('button', { name: 'Save' }).click();
+        await expect(h1).toHaveText('race-vm-saved');
+        nowName = 'race-vm-saved';
+        expect(await owner(), 'a value added since the moment survives the save').toBe('team-a');
+        expect(early, 'Edit was available before the present’s types arrived').toBe(false);
+      } finally {
+        presentTypes.open();
+      }
     });
 
     // Back (the browser's) to the past view with Edit open: the form is gone.
@@ -569,15 +585,24 @@ test.describe('slice 7 screens', () => {
       await dialog.getByLabel('Time').fill('00:00');
       const check = (url: URL) =>
         url.pathname === '/api/v1/types' && url.searchParams.get('asOf') === '2001-01-01T00:00Z';
-      await page.route(check, async (route) => {
-        await wait(3000);
-        await route.continue();
-      });
-      const answer = page.waitForResponse((response) => check(new URL(response.url())));
-      await dialog.getByRole('button', { name: 'Apply' }).click();
-      await move();
-      await (await answer).finished();
-      await page.waitForTimeout(500);
+      // The API's answer to Apply is held back until the moves are done.
+      const answerToApply = gate();
+      try {
+        await page.route(check, async (route) => {
+          await answerToApply.opened;
+          await route.continue();
+        });
+        const asked = page.waitForRequest((request) => check(new URL(request.url())));
+        const answer = page.waitForResponse((response) => check(new URL(response.url())));
+        await dialog.getByRole('button', { name: 'Apply' }).click();
+        await asked;
+        await move();
+        answerToApply.open();
+        await (await answer).finished();
+        await page.waitForTimeout(500);
+      } finally {
+        answerToApply.open();
+      }
     };
     await part('an answer to Apply after the browser’s Back applies nothing', async () => {
       await applyThen(async () => {
@@ -602,23 +627,32 @@ test.describe('slice 7 screens', () => {
     await part('the present’s late answer is dropped', async () => {
       await page.goto(`/ci/${vm}?${past}`);
       await expect(h1).toHaveText('race-vm-then');
-      await page.route(
-        (url) => live(url, `/api/v1/cis/${vm}`),
-        async (route) => {
-          await wait(3000);
-          await route.continue();
-        },
-      );
-      const lateAnswer = page.waitForResponse((response) => live(new URL(response.url()), `/api/v1/cis/${vm}`));
-      await returnToNow.click();
-      await expect(banner).toHaveCount(0);
-      await page.goBack();
-      await expect(banner).toBeVisible();
-      await expect(h1).toHaveText('race-vm-then');
-      await (await lateAnswer).finished();
-      await page.waitForTimeout(500);
-      await expect(banner).toBeVisible();
-      await expect(h1).toHaveText('race-vm-then');
+      // The present's CI is held back until the past view is back and loaded.
+      const presentCi = gate();
+      try {
+        await page.route(
+          (url) => live(url, `/api/v1/cis/${vm}`),
+          async (route) => {
+            await presentCi.opened;
+            await route.continue();
+          },
+        );
+        const asked = page.waitForRequest((request) => live(new URL(request.url()), `/api/v1/cis/${vm}`));
+        const lateAnswer = page.waitForResponse((response) => live(new URL(response.url()), `/api/v1/cis/${vm}`));
+        await returnToNow.click();
+        await expect(banner).toHaveCount(0);
+        await asked;
+        await page.goBack();
+        await expect(banner).toBeVisible();
+        await expect(h1).toHaveText('race-vm-then');
+        presentCi.open();
+        await (await lateAnswer).finished();
+        await page.waitForTimeout(500);
+        await expect(banner).toBeVisible();
+        await expect(h1).toHaveText('race-vm-then');
+      } finally {
+        presentCi.open();
+      }
     });
 
     // A CI that didn't exist yet, when its present name can't be read: the page still says so, with when it was
