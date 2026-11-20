@@ -7,9 +7,20 @@ import { useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent, type 
  */
 
 const listeners = new Set<() => void>();
+let moves = 0;
 
 function notify() {
+  moves += 1;
   listeners.forEach((listener) => listener());
+}
+
+/**
+ * How many times the address has changed since the app loaded: every `navigate` and every move through the
+ * browser's history. Something that waits for an answer compares it before and after, so the answer isn't applied
+ * to an address the person has left, even when they came back to the same one (Back, then Forward).
+ */
+export function navigationCount(): number {
+  return moves;
 }
 
 window.addEventListener('popstate', notify);

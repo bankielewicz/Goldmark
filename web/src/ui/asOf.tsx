@@ -25,7 +25,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { api, isFutureTime } from '../api';
 import { formatMoment, hasPast, localHint, setAsOf, shortMoment, useAsOf } from '../asOf';
-import { useLocation } from '../router';
+import { navigationCount, useLocation } from '../router';
 
 const useStyles = makeStyles({
   control: { whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
@@ -234,15 +234,24 @@ export function AsOfDialog({
   const typed = moment(date, time);
   const hint = 'value' in typed ? localHint(typed.value) : null;
 
+  const [checking, setChecking] = useState(false);
+  const showing = useRef(open);
+  showing.current = open;
+  // Apply waits for the API. Its answer counts only for the Apply that asked, with the fields as they were, on the
+  // address as it was: an edit, a closed dialog or any move of the address since (the browser's Back, even Back
+  // and Forward to the same address) and the answer applies nothing.
+  const attempt = useRef(0);
+  const edited = () => {
+    attempt.current += 1;
+    setChecking(false);
+  };
   const fill = (msAgo: number) => {
     const filled = fields(new Date(Date.now() - msAgo));
+    edited();
     setDate(filled.date);
     setTime(filled.time);
     setProblem(null);
   };
-  const [checking, setChecking] = useState(false);
-  const showing = useRef(open);
-  showing.current = open;
   const apply = async () => {
     if (checking) return;
     const result = moment(date, time);
@@ -252,15 +261,16 @@ export function AsOfDialog({
       return;
     }
     // The types as of the moment: the lightest read that takes `asOf`. Any other failure is the page's to show.
-    // The answer applies to the address Apply was pressed on: after the browser's Back or a link it applies nothing.
-    const pressedOn = window.location.href;
+    const mine = ++attempt.current;
+    const pressedAt = navigationCount();
     setChecking(true);
     const future = await api('GET', `/api/v1/types?asOf=${encodeURIComponent(result.value)}`).then(
       () => false,
       (error: unknown) => isFutureTime(error),
     );
+    if (attempt.current !== mine) return;
     setChecking(false);
-    if (!showing.current || window.location.href !== pressedOn) return;
+    if (!showing.current || navigationCount() !== pressedAt) return;
     if (future) {
       setProblem({ error: 'That time is in the future.', bad: 'both' });
       dateRef.current?.focus();
@@ -299,7 +309,10 @@ export function AsOfDialog({
                     min="2000-01-01"
                     max="9998-12-31"
                     value={date}
-                    onChange={(_, data) => setDate(data.value)}
+                    onChange={(_, data) => {
+                      edited();
+                      setDate(data.value);
+                    }}
                   />
                 </Field>
                 <Field label="Time" required validationState={problem && problem.bad !== 'date' ? 'error' : 'none'}>
@@ -312,7 +325,10 @@ export function AsOfDialog({
                     maxLength={5}
                     contentAfter={<ClockRegular aria-hidden />}
                     value={time}
-                    onChange={(_, data) => setTime(data.value)}
+                    onChange={(_, data) => {
+                      edited();
+                      setTime(data.value);
+                    }}
                   />
                 </Field>
                 <span className={styles.utc}>UTC</span>

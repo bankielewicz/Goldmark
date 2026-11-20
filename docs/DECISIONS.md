@@ -2662,17 +2662,20 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     "is there no CI at all?" after it had shown an empty list, so until that answer came, or for good when it
     failed, the page said "No CIs existed at that time." on the previous answer's word: the rows, the counts and
     that answer are now read first and shown as one. And an answer to the dialog's Apply that arrived after the
-    browser's Back replaced the moment the person had gone back to: it now applies only to the address Apply was
-    pressed on.
+    browser's Back replaced the moment the person had gone back to. Apply's answer now counts only for the Apply
+    that asked, with the fields as they were, while the dialog is open and the address hasn't moved since
+    (`navigationCount` in `web/src/router.tsx` counts every move, so Back and Forward to the same address count
+    too); otherwise it applies nothing and the dialog stays as it is.
   - Assumptions, open to veto: on Search, a change of moment shows the loading state until that moment's rows
     arrive, where the previous rows used to stay (the boards draw no transition); Apply waits for the API's
     answer before the dialog closes, and when that request fails for another reason the moment is applied and the
     page shows the failure.
   - Each fix has a test that failed on the code before it: a second browser test in `web/e2e/history.spec.ts`,
-    in twelve parts (answers delayed or failed with Playwright's routes, the browser's Back, a page whose clock
-    runs an hour slow, the focus after choosing a moment on Search). Eight failed on the image built before the
-    fixes; two (the dialog on a slow clock, the focus) on a build with those two behaviours put back; the last
-    two (Search's empty state, the late Apply) on the build of the round's first push. And
+    in thirteen parts (answers delayed or failed with Playwright's routes, the browser's Back, a page whose
+    clock runs an hour slow, the focus after choosing a moment on Search). Eight failed on the image built before
+    the fixes; two (the dialog on a slow clock, the focus) on a build with those two behaviours put back; three
+    (Search's empty state, the late Apply after Back, and after Back and Forward) on the builds of the round's
+    earlier pushes. And
     `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
     gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).

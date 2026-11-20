@@ -556,8 +556,9 @@ test.describe('slice 7 screens', () => {
       await expect(none).toHaveCount(0);
     });
 
-    // Apply asks the API before it applies. An answer that comes after the person went Back applies nothing.
-    await part('an answer to Apply after the browser’s Back applies nothing', async () => {
+    // Apply asks the API before it applies. An answer that comes after the person moved through the browser's
+    // history applies nothing: not after Back, and not after Back and Forward to the address Apply was pressed on.
+    const applyThen = async (move: () => Promise<void>) => {
       await page.goto(`/search?${past}`);
       await expect(banner).toBeVisible();
       await returnToNow.click();
@@ -574,13 +575,27 @@ test.describe('slice 7 screens', () => {
       });
       const answer = page.waitForResponse((response) => check(new URL(response.url())));
       await dialog.getByRole('button', { name: 'Apply' }).click();
-      await page.goBack();
-      await expect(banner).toBeVisible();
+      await move();
       await (await answer).finished();
       await page.waitForTimeout(500);
+    };
+    await part('an answer to Apply after the browser’s Back applies nothing', async () => {
+      await applyThen(async () => {
+        await page.goBack();
+        await expect(banner).toBeVisible();
+      });
       expect(new URL(page.url()).searchParams.get('asOf')).toBe(moment);
       await expect(banner).toBeVisible();
-      await page.keyboard.press('Escape');
+    });
+    await part('nor after Back and Forward', async () => {
+      await applyThen(async () => {
+        await page.goBack();
+        await expect(banner).toBeVisible();
+        await page.goForward();
+        await expect(banner).toHaveCount(0);
+      });
+      expect(new URL(page.url()).searchParams.get('asOf')).toBeNull();
+      await expect(page.getByText(/^Viewing as of /)).toHaveCount(0);
     });
 
     // The present's answer, arriving after the past view is back, doesn't replace the past's CI.
