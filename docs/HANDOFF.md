@@ -39,7 +39,7 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 5 | **done** (PR #49, merged as `783f526`, DEC-044) | `slice/05-ci-crud` | CI types/attributes metadata (the built-in CI and relationship types, only the attributes the PRD names; the API to add custom attributes, its screen in 5b), CI CRUD API, list/detail UI with retire and restore (retired CIs hidden unless shown; other lifecycle changes in slice 20), deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | **done** (PR #54, merged as `7e9077a`, DEC-045) | `slice/05b-types-admin` | Types & attributes admin screen: custom CI types (add, hide, delete if unused), custom attributes (add, change, delete with typed confirmation), relationship types (built-in listed; custom added, edited, deleted if unused); promoted attributes wait (#53) | Admin can manage CI types, attributes and relationship types through the UI | 14 |
 | 6 | **done** (PR #59, merged as `1393c33`, DEC-046; boards approved 2026-10-25, `docs/design/screens/slice-6/`) | `slice/06-relationships` | Relationships CRUD (several CIs in one Add; deleting ends a relationship, its history keeps it), relationship tab, graph explorer (two walks plus redundancy-group members, many same-type neighbours grouped behind a switch, PNG and CSV export, depth 3); migration 0008 `Relationship.CreatedAt` for "Since" (DEC-046 items 1 to 14). Later: a phrase per direction for relationship types (#57), keyboard selection on the canvas (#58) | US-11 for relationships; US-40 | 5 (tab), 6 |
-| 7 | **in progress** (approved 2026-11-18; boards approved 2026-11-19, `docs/design/screens/slice-7/`) | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | the top bar's As-of control for 4, 5 and 6 (one control, DEC-047 item 10), 5 (History tab) |
+| 7 | **in review** (PR #82; approved 2026-11-18; boards approved 2026-11-19, `docs/design/screens/slice-7/`) | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | the top bar's As-of control for 4, 5 and 6 (one control, DEC-047 item 10), 5 (History tab) |
 | 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH (#48, DEC-044 item 11) | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff; #48 closed | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression; how a collector ends the relationships it no longer sees, a policy (ServiceNow offers Keep, Delete, Delete relations, Mark absent, Mark retired), and what a person's removal of a discovered relationship means then (GLPI and Lansweeper treat it specially; a research session's note relayed by the owner, 2026-10-24, DEC-046 item 1) | US-20/21; re-ingest → 0 history rows | — |
@@ -170,8 +170,15 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   Tooltip, and the CI page's History tab (`web/src/ui/HistoryTab.tsx`); `web/e2e/history.spec.ts` covers them with axe
   in both themes; `docs/integration/deep-links.md` has `tab=history` and `asOf`.
 
-**Still to do in slice 7:** the design system's changes the slice 7 README lists (the "As of" state amber, the
-Shell's slot, four badges, nine icons) in `docs/design/system/` and on its canvas.
+- **Design system:** slice 7's changes (the "As of" state amber, the Shell's As-of control, four badges, nine
+  icons) are in `docs/design/system/` and on its canvas (version `1795124389-026c`).
+- **The shell's navigation** is 260 px wide and never shrinks (`AppShell.tsx`, `inlineNav`; DEC-047 item 11). Until
+  slice 7 it shrank beside wide content, to nothing beside a table. `expectAccessible` (`web/e2e/session.ts`)
+  checks its width on every screen the browser tests visit: a page that is too wide now scrolls in its own box
+  instead of squeezing the navigation, so give a wide table a scroll box (`overflowX: 'auto'`, `minWidth: 0`).
+- **Browser tests:** after one test fails, the next ones fail at sign-in (the restarted worker forgets the TOTP
+  step it used, and five wrong codes lock the smoke administrator for 15 minutes): read the first failure only.
+  Switch the theme with `useScheme`, never `page.emulateMedia` alone: axe otherwise measures colours mid-change.
 
 ### Slice 6 (merged), for reference
 

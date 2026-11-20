@@ -2579,6 +2579,39 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     them would add three 0.x npm packages. So no new package: the Date field shows the browser's calendar and its
     date format, Time is typed as HH:MM, and the quick choices fill both. Rejected: B, Fluent's pickers as drawn;
     C, typed fields only, with no calendar.
+- **11. The screens as built (2026-11-20).** Three read-only reviews compared the built screens with the boards,
+  file against file; what differed was changed to match (the control's brand tint while a moment is chosen, the
+  banner as `role="status"` with a 28 px button, the dialog 480 px wide, "That time is in the future." reachable,
+  Search's toolbar and search box kept on "No CIs existed at that time.", the "didn't exist" page's breadcrumb and
+  h1, the History tab's sizes, table and loading state, the Tooltip under its button, the top bar on a phone with the
+  mark alone so the control fits). The browser test also visits the History tab and a past view at 390 px and
+  seven pages at 1100 px, and fails naming whatever makes a page wider than its window. What remains:
+  - *A past Graph explorer keeps the present's full text* (owner, 2026-11-20, AskUserQuestion: "A. Keep the full
+    text (Recommended)"): the status line, the table's caption and the export summary still say ", plus redundancy
+    groups" and "retired CIs left out" before "at that time" and "as of …". The boards' text is shorter; dropping
+    the parts would hide what was counted or left out. Rejected: B, shortening as drawn.
+  - *Where the boards are silent*, the code's choices are listed in `docs/design/screens/slice-7/README.md` ("As
+    built"), each reversible: the local hint's date, "Show less", a dependent's group change, the timeline's
+    height, the 20 px avatars, the newest entry selected in a past view, the shared error bar, the empty
+    Relationships tab's text, the More actions menu and the retired note's Restore disabled by rule 10, "Choose
+    another time" as a button on the Graph explorer, the diff table's scroll box as a Tab stop.
+  - *The inline navigation is 260 px wide and never shrinks* (`AppShell.tsx`), as the boards have drawn it since
+    slice 3. It was Fluent's Drawer at 320 px (the `size` given for the items' density also sets the width) and,
+    as a flex item that hides its overflow, free to shrink: it measured 274 px on a CI's page, 150 px on the
+    Graph explorer and nothing on Search, the Relationships tab, the audit log and Users & roles (screenshots and
+    measurements at 1280 px), still in the accessibility tree, so axe and the role queries saw nothing, and out of a pointer's
+    reach. The layout rule was unchanged since slice 3; slice 7's browser test was the first to click the
+    navigation from a page with a table. Two things followed from pages getting their real width at 1280 px: the
+    Users grid's actions cell no longer takes focus itself (Fluent's `focusMode="none"` for a cell holding one
+    button; an open row menu left too little of the cell below uncovered to count as a target), and the audit
+    log's table (1,000 px at least) scrolls sideways in its box by 30 px at 1280 px.
+    `expectAccessible` now checks the navigation's width on every screen the browser tests visit. `main` has the
+    same layout rule, so the same fault, until this merges; the fix stays in this PR (owner, 2026-11-20, "A. Keep
+    it in PR #82 (Recommended)"; rejected: B, a separate fix PR first, with a second review and CI cycle).
+  - *Six differences from earlier slices' boards, found by the reviews, go to one issue* (owner, 2026-11-20, "A.
+    One issue, later (Recommended)"): "Copy ID" with its text, the CI toolbar's name, Search's Changed column
+    between 1024 and 1100 px, the export dialog's note without its box, the Relationships tab's empty state, and
+    the 320 px navigation drawer below 1100 px. Rejected: B, fixing them in this PR; C, leaving them.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item

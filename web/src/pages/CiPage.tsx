@@ -49,8 +49,8 @@ import { formatAgo, formatUtc, formatUtcTime } from '../format';
 import { followLink, navigate, useLocation } from '../router';
 import { useSession } from '../session';
 import { useWide } from '../shell/AppShell';
-import { PageHeader } from '../shell/PageHeader';
-import { AsOfBanner, PastEmpty } from '../ui/asOf';
+import { PageCrumbs, PageHeader } from '../shell/PageHeader';
+import { AsOfBanner, PastEmpty, PastEmptyText } from '../ui/asOf';
 import { CiPanel } from '../ui/CiPanel';
 import { CopyButton, ErrorBar } from '../ui/common';
 import { HistoryTab } from '../ui/HistoryTab';
@@ -277,15 +277,27 @@ function CiView({ id }: { id: string }) {
 
   if (missing) return <CiNotFound id={id} malformed={false} />;
   if (notYet && asOf) {
-    // The CiNotYet board: the banner and breadcrumb stay; the page says when the CI was created.
+    // The CiNotYet board: the banner and the CI's breadcrumb stay, and the page's h1 says the CI didn't exist then,
+    // with when it was created. The name and type are the CI's present ones.
+    const now = notYet.ci;
     return (
       <>
         <AsOfBanner asOf={asOf} />
-        <PageHeader crumbs={[{ label: 'Search', path: withAsOf('/search', asOf) }, { label: 'CI' }]} title="CI" />
-        {notYet.ci ? (
-          <PastEmpty asOf={asOf} title={`${notYet.ci.name} didn’t exist at that time.`}>
-            <TypeBadge type={notYet.ci.type} types={types} />
-            <Text>{`It was created on ${formatUtc(notYet.createdAt)} UTC, after the time you’re viewing.`}</Text>
+        <PageCrumbs
+          crumbs={
+            now
+              ? [
+                  { label: 'Search', path: withAsOf('/search', asOf) },
+                  { label: now.type, path: withAsOf(`/search?type=${encodeURIComponent(now.type)}`, asOf) },
+                  { label: now.name },
+                ]
+              : [{ label: 'Search', path: withAsOf('/search', asOf) }, { label: 'CI' }]
+          }
+        />
+        {now ? (
+          <PastEmpty asOf={asOf} headingLevel={1} title={`${now.name} didn’t exist at that time.`}>
+            <TypeBadge type={now.type} types={types} />
+            <PastEmptyText>{`It was created on ${formatUtc(notYet.createdAt)} UTC, after the time you’re viewing.`}</PastEmptyText>
           </PastEmpty>
         ) : (
           <CiSkeleton />
@@ -315,9 +327,10 @@ function CiView({ id }: { id: string }) {
   const type = types?.find((t) => t.name === ci.type);
   const who = ci.changedBy?.displayName ?? (ci.changedBy ? 'a removed account' : 'System');
   const graphPath = withAsOf(`/graph?ci=${ci.id}`, asOf);
-  // In a past view every change is disabled where it would show, with the one Tooltip (Notes default 10).
+  // In a past view every change is disabled where it would show, with the one Tooltip (Notes default 10), under
+  // the button as the boards draw it: above, it would cover the banner.
   const readOnly = (button: ReactElement) => (
-    <Tooltip key={button.key ?? undefined} content={readOnlyTip} relationship="description">
+    <Tooltip key={button.key ?? undefined} content={readOnlyTip} relationship="description" positioning="below-start">
       {button}
     </Tooltip>
   );
@@ -505,11 +518,19 @@ function CiView({ id }: { id: string }) {
             Retired on {formatUtc(ci.changedAt).slice(0, 10)} by {who}. It’s hidden from search unless Show retired is
             on.
           </MessageBarBody>
-          {canEdit && !asOf ? (
+          {canEdit ? (
             <MessageBarActions>
-              <Button size="small" disabled={busy !== null} onClick={() => void change('restore')}>
-                Restore
-              </Button>
+              {asOf ? (
+                readOnly(
+                  <Button size="small" disabledFocusable>
+                    Restore
+                  </Button>,
+                )
+              ) : (
+                <Button size="small" disabled={busy !== null} onClick={() => void change('restore')}>
+                  Restore
+                </Button>
+              )}
             </MessageBarActions>
           ) : null}
         </MessageBar>

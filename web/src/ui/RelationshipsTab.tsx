@@ -161,7 +161,7 @@ export function RelationshipsTab({
   const addButton =
     canEdit && !retired ? (
       asOf ? (
-        <Tooltip content={readOnlyTip} relationship="description">
+        <Tooltip content={readOnlyTip} relationship="description" positioning="below-start">
           <Button icon={<AddRegular />} disabledFocusable>
             Add relationship
           </Button>

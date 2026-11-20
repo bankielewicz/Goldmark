@@ -87,7 +87,11 @@ const useStyles = makeStyles({
     padding: `0 ${tokens.spacingHorizontalM}`,
     backgroundColor: tokens.colorNeutralBackground1,
     borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    // On a phone the bar has less at its edges and the mark alone (the TopBarStates board): with the As-of
+    // control the name no longer fits.
+    '@media (max-width: 599px)': { padding: '0 6px' },
   },
+  brandName: { '@media (max-width: 599px)': { display: 'none' } },
   brand: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, marginRight: 'auto' },
   mark: {
     width: '28px',
@@ -375,7 +379,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span aria-hidden="true" className={styles.mark}>
             G
           </span>
-          <Text weight="semibold" size={400}>
+          <Text weight="semibold" size={400} className={styles.brandName}>
             Goldmark
           </Text>
         </div>

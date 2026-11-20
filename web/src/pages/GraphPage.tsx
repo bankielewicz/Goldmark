@@ -517,7 +517,8 @@ export function GraphPage() {
       <PageHeader crumbs={[{ label: 'Inventory' }, { label: 'Graph explorer' }]} title="Graph explorer" />
       <section aria-label="Graph options" className={styles.options}>
         <FocusPicker
-          focus={focusCi && focusCi.id === view.ci ? focusCi : null}
+          // The GraphNotYet board: the field is empty, for "Choose another CI in Focus CI above".
+          focus={load.state !== 'notYet' && focusCi && focusCi.id === view.ci ? focusCi : null}
           asOf={asOf}
           types={types}
           className={styles.focusField}

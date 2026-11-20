@@ -82,7 +82,8 @@ interface HistoryPage {
 }
 
 const useStyles = makeStyles({
-  root: { display: 'grid', gap: tokens.spacingHorizontalL, alignItems: 'start' },
+  // One column that may be narrower than its content: on a phone the diff table scrolls in its own box.
+  root: { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: tokens.spacingHorizontalL, alignItems: 'start' },
   wide: { gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 3fr)' },
   card: {
     boxSizing: 'border-box',
@@ -93,18 +94,11 @@ const useStyles = makeStyles({
   list: { maxHeight: '70vh', overflowY: 'auto' },
   day: {
     margin: 0,
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
+    padding: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalM} ${tokens.spacingVerticalXS}`,
     fontSize: tokens.fontSizeBase200,
     lineHeight: tokens.lineHeightBase200,
     fontWeight: tokens.fontWeightSemibold,
     color: tokens.colorNeutralForeground3,
-    backgroundColor: tokens.colorNeutralBackground2,
-    borderTop: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
-  },
-  firstDay: {
-    borderTop: 'none',
-    borderTopLeftRadius: tokens.borderRadiusLarge,
-    borderTopRightRadius: tokens.borderRadiusLarge,
   },
   entries: { margin: 0, padding: 0, listStyleType: 'none' },
   entry: {
@@ -135,20 +129,36 @@ const useStyles = makeStyles({
   },
   time: {
     flexShrink: 0,
-    width: '72px',
+    width: '66px',
+    fontSize: '13px',
     color: tokens.colorNeutralForeground2,
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
   },
   kind: { flexShrink: 0, fontSize: '16px', marginTop: '2px', color: tokens.colorNeutralForeground2 },
   summary: { flexGrow: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px', overflowWrap: 'anywhere' },
+  what: { fontWeight: tokens.fontWeightSemibold },
   who: {
     display: 'inline-flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalXS,
     flexWrap: 'wrap',
+    fontSize: tokens.fontSizeBase200,
+    lineHeight: '18px',
     color: tokens.colorNeutralForeground2,
   },
+  // "by Dana K" in the detail: the name in full weight.
+  by: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalXS, flexWrap: 'wrap' },
+  byName: { fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground1 },
+  // The timeline while it loads: a day heading, then six entries (time, icon, two lines).
+  loading: { padding: tokens.spacingHorizontalM, display: 'flex', flexDirection: 'column' },
+  loadingDay: { width: '110px' },
+  loadingEntry: { minHeight: '56px', display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS },
+  loadingTime: { width: '58px', flexShrink: 0 },
+  loadingIcon: { width: '16px', flexShrink: 0 },
+  loadingText: { flexGrow: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalXS },
+  loadingShort: { width: '40%' },
+  emptyDetail: { minHeight: '240px' },
   unknown: { color: tokens.colorNeutralForeground3 },
   chevron: { flexShrink: 0, marginTop: '2px' },
   foot: {
@@ -173,8 +183,8 @@ const useStyles = makeStyles({
   },
   heading: {
     margin: 0,
-    fontSize: tokens.fontSizeBase400,
-    lineHeight: tokens.lineHeightBase400,
+    fontSize: tokens.fontSizeBase500,
+    lineHeight: tokens.lineHeightBase500,
     fontWeight: tokens.fontWeightSemibold,
   },
   meta: {
@@ -184,10 +194,19 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
     color: tokens.colorNeutralForeground2,
   },
-  viewLink: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalXS },
-  tableBox: { overflowX: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  caption: { textAlign: 'left', paddingBottom: tokens.spacingVerticalS, color: tokens.colorNeutralForeground2 },
+  tableBox: {
+    // position: the visually hidden caption and "No value" texts are positioned, so without it they would lie
+    // outside this box's clipping and make the whole page as wide as the table.
+    position: 'relative',
+    overflowX: 'auto',
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    borderRadius: tokens.borderRadiusLarge,
+  },
+  table: { width: '100%', minWidth: '520px', borderCollapse: 'collapse' },
+  fieldColumn: { width: '26%' },
+  changeColumn: { width: '96px' },
+  beforeColumn: { width: '24%' },
+  head: { height: '36px', boxSizing: 'border-box', color: tokens.colorNeutralForeground2 },
   th: {
     textAlign: 'left',
     padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
@@ -204,15 +223,35 @@ const useStyles = makeStyles({
   fieldCell: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
   before: { color: tokens.colorNeutralForeground2 },
   noValue: { color: tokens.colorNeutralForeground3 },
+  // Read, not shown: on screen an empty value is a dash, for a screen reader it is "No value" (the boards).
+  hidden: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+  },
+  // A long value: three lines, then "Show all" beneath (the boards).
+  long: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalXS, alignItems: 'flex-start' },
+  clamp: { display: '-webkit-box', WebkitLineClamp: '3', WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  showAll: { minHeight: '24px', fontWeight: tokens.fontWeightSemibold },
   link: { display: 'inline-flex', alignItems: 'center', gap: tokens.spacingHorizontalXS },
-  linkType: { marginLeft: tokens.spacingHorizontalS, color: tokens.colorNeutralForeground3 },
+  linkType: {
+    marginLeft: tokens.spacingHorizontalS,
+    fontSize: tokens.fontSizeBase200,
+    color: tokens.colorNeutralForeground3,
+  },
+  small: { fontSize: tokens.fontSizeBase200, color: tokens.colorNeutralForeground3 },
+  strong: { fontWeight: tokens.fontWeightSemibold },
+  code: { fontFamily: tokens.fontFamilyMonospace, fontSize: '13px', fontWeight: tokens.fontWeightSemibold },
   grid: {
     margin: 0,
     display: 'grid',
     gridTemplateColumns: 'max-content minmax(0, 1fr)',
     gap: `${tokens.spacingVerticalM} ${tokens.spacingHorizontalL}`,
   },
-  term: { fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground2 },
+  term: { fontWeight: tokens.fontWeightSemibold, color: tokens.colorNeutralForeground3 },
   value: { margin: 0, display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, flexWrap: 'wrap' },
   muted: { color: tokens.colorNeutralForeground3 },
   note: {
@@ -227,7 +266,6 @@ const useStyles = makeStyles({
 });
 
 const pageSize = 50;
-const longText = 160;
 const dayFormat = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 const icons: Record<HistoryEntry['kind'] | 'removed', ReactElement> = {
   created: <AddCircleRegular />,
@@ -313,18 +351,22 @@ function summary(entry: HistoryEntry, references: Record<string, CiReference>): 
   }
 }
 
-function Who({ by, size = 20 }: { by: HistoryActor | null; size?: 16 | 20 | 24 }) {
+/**
+ * Who made a change: initials and the name; in the timeline a former user gets the person icon, in the detail the
+ * name alone, in full weight (the boards). Nobody on record reads "Unknown".
+ */
+function Who({ by, detail = false }: { by: HistoryActor | null; detail?: boolean }) {
   const styles = useStyles();
   const name = whoName(by);
   if (!by) return <span className={styles.unknown}>Unknown</span>;
   return (
-    <span className={styles.who}>
+    <span className={detail ? styles.by : styles.who}>
       {by.displayName ? (
-        <Avatar size={size} name={by.displayName} aria-hidden />
-      ) : by.id ? (
-        <Avatar size={size} icon={<PersonRegular />} aria-hidden />
+        <Avatar size={20} name={by.displayName} aria-hidden />
+      ) : by.id && !detail ? (
+        <Avatar size={20} icon={<PersonRegular />} aria-hidden />
       ) : null}
-      <span>{name}</span>
+      <span className={detail ? styles.byName : undefined}>{name}</span>
     </span>
   );
 }
@@ -425,14 +467,22 @@ export function HistoryTab({
   if (!items) {
     return (
       <div aria-busy="true" className={mergeClasses(styles.root, wide && styles.wide)}>
-        <div className={styles.card}>
-          <Skeleton aria-label="Loading the history" className={styles.detail}>
+        <div role="group" aria-label="Timeline" className={styles.card}>
+          <Skeleton aria-label="Loading the history" className={styles.loading}>
+            <SkeletonItem size={16} className={styles.loadingDay} />
             {Array.from({ length: 6 }, (_, i) => (
-              <SkeletonItem key={i} size={16} />
+              <div key={i} className={styles.loadingEntry}>
+                <SkeletonItem size={16} className={styles.loadingTime} />
+                <SkeletonItem size={16} shape="square" className={styles.loadingIcon} />
+                <div className={styles.loadingText}>
+                  <SkeletonItem size={16} />
+                  <SkeletonItem size={12} className={styles.loadingShort} />
+                </div>
+              </div>
             ))}
           </Skeleton>
         </div>
-        {wide ? <div className={mergeClasses(styles.card, styles.detail)} /> : null}
+        {wide ? <div className={mergeClasses(styles.card, styles.detail, styles.emptyDetail)} /> : null}
       </div>
     );
   }
@@ -472,10 +522,11 @@ export function HistoryTab({
         className={mergeClasses(styles.card, wide && styles.list)}
         onKeyDown={onListKey}
       >
-        {days.map((day, d) => (
+        {days.map((day) => (
           <div key={day.label}>
-            <h2 className={mergeClasses(styles.day, d === 0 && styles.firstDay)}>{day.label}</h2>
-            <ul className={styles.entries}>
+            <h2 className={styles.day}>{day.label}</h2>
+            {/* role="list": a list without markers stays a list for VoiceOver. */}
+            <ul role="list" className={styles.entries}>
               {day.entries.map((entry) => {
                 const on = current !== undefined && key(entry) === key(current);
                 const { date, time } = utc(entry.at);
@@ -499,11 +550,11 @@ export function HistoryTab({
                         {attributeRemoval(entry) ? icons.removed : icons[entry.kind]}
                       </span>
                       <span className={styles.summary}>
-                        <span>{summary(entry, references)}</span>
+                        <span className={styles.what}>{summary(entry, references)}</span>
                         <span className={styles.who}>
                           <Who by={entry.by} />
                           {shownAbove && key(shownAbove) === key(entry) ? (
-                            <Badge appearance="tint" color="subtle" size="small">
+                            <Badge appearance="tint" color="subtle">
                               Shown above
                             </Badge>
                           ) : null}
@@ -537,7 +588,9 @@ export function HistoryTab({
                 {moreBusy ? `Loading ${pageSize} more…` : `Show ${pageSize} more`}
               </Button>
             ) : null}
-            <Text aria-live="polite">{countLine}</Text>
+            <Text aria-live="polite" className={styles.muted}>
+              {countLine}
+            </Text>
           </div>
         </div>
       </div>
@@ -574,19 +627,20 @@ function Detail({
         <div className={styles.meta}>
           <span>{localHint(entry.at)}</span>
           <span aria-hidden>·</span>
-          <span className={styles.who}>
-            by <Who by={entry.by} size={16} />
+          <span className={styles.by}>
+            by <Who by={entry.by} detail />
           </span>
         </div>
       </div>
       <div>
-        <Link href={viewPath} className={styles.viewLink} onClick={(event) => followLink(event, viewPath)}>
-          <HistoryRegular aria-hidden />
+        <Button as="a" href={viewPath} icon={<HistoryRegular />} onClick={(event) => followLink(event, viewPath)}>
           View this CI as of this time
-        </Link>
+        </Button>
       </div>
       {entry.kind === 'retired' || entry.kind === 'restored' ? (
-        <Text as="p">{entry.by ? `${name} ${entry.kind} this CI.` : `This CI was ${entry.kind}.`}</Text>
+        <Text as="p" size={400}>
+          {entry.by ? `${name} ${entry.kind} this CI.` : `This CI was ${entry.kind}.`}
+        </Text>
       ) : null}
       {attributeRemoval(entry) ? (
         <Text as="p">
@@ -596,25 +650,25 @@ function Detail({
       {relationship ? (
         <RelationshipDetail entry={entry} relationship={relationship} references={references} types={types} />
       ) : entry.changes.length > 0 ? (
-        <div className={styles.tableBox}>
+        // A Tab stop with a name, so the table can be scrolled sideways from the keyboard when it is wider than a phone.
+        <div className={styles.tableBox} tabIndex={0} role="group" aria-label="What changed, as a table">
           <table className={styles.table}>
-            <caption className={styles.caption}>
+            <caption className={styles.hidden}>
               What changed on {date} at {time} UTC
             </caption>
+            <colgroup>
+              <col className={styles.fieldColumn} />
+              <col className={styles.changeColumn} />
+              <col className={styles.beforeColumn} />
+              <col />
+            </colgroup>
             <thead>
               <tr>
-                <th scope="col" className={styles.th}>
-                  Field
-                </th>
-                <th scope="col" className={styles.th}>
-                  Change
-                </th>
-                <th scope="col" className={styles.th}>
-                  Before
-                </th>
-                <th scope="col" className={styles.th}>
-                  After
-                </th>
+                {['Field', 'Change', 'Before', 'After'].map((column) => (
+                  <th key={column} scope="col" className={mergeClasses(styles.th, styles.head)}>
+                    {column}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -624,7 +678,7 @@ function Detail({
                     <span className={styles.fieldCell}>
                       {change.label}
                       {change.attributeDeleted ? (
-                        <Badge appearance="tint" color="subtle" size="small">
+                        <Badge appearance="tint" color="subtle">
                           Attribute deleted
                         </Badge>
                       ) : null}
@@ -686,7 +740,7 @@ function RelationshipDetail({
         </dd>
         <dt className={styles.term}>Relationship</dt>
         <dd className={styles.value}>
-          <code>{relationship.type}</code>
+          <code className={styles.code}>{relationship.type}</code>
         </dd>
         <dt className={styles.term}>Direction</dt>
         <dd className={styles.value}>
@@ -698,11 +752,11 @@ function RelationshipDetail({
         <dd className={styles.value}>
           {group ? (
             <>
-              <span className={styles.muted}>Before</span>
+              <span className={styles.small}>Before</span>
               <span>{text(group.before)}</span>
               <span aria-hidden>→</span>
-              <span className={styles.muted}>After</span>
-              <span>{text(group.after)}</span>
+              <span className={styles.small}>After</span>
+              <span className={styles.strong}>{text(group.after)}</span>
             </>
           ) : (
             <span className={relationship.redundancyGroup ? undefined : styles.muted}>
@@ -720,7 +774,7 @@ function RelationshipDetail({
             {other ? <TypeIcon type={other.type} types={types} /> : null}
             {otherName}
           </Link>
-          {other ? <span className={styles.muted}>{other.type}</span> : null}
+          {other ? <span className={styles.small}>{other.type}</span> : null}
           {other?.lifecycleState === 'Retired' ? (
             <Badge appearance="tint" color="subtle">
               Retired
@@ -749,12 +803,13 @@ function Value({
   struck?: boolean;
 }): ReactNode {
   const styles = useStyles();
-  const [all, setAll] = useState(false);
   if (value === null || value === undefined || value === '') {
-    // "No value" in words, never a bare dash (the Notes board's keyboard and screen reader column).
+    // A dash on screen; "No value" for a screen reader, never a bare dash (the boards, and the Notes board's
+    // keyboard and screen reader column).
     return (
       <span className={styles.noValue}>
-        <span aria-hidden>— </span>No value
+        <span aria-hidden>—</span>
+        <span className={styles.hidden}>No value</span>
       </span>
     );
   }
@@ -783,17 +838,35 @@ function Value({
       : typeof value === 'string'
         ? value
         : JSON.stringify(value);
-  const shown = text.length > longText && !all ? `${text.slice(0, longText)}…` : text;
+  return <LongText text={text} struck={struck} />;
+}
+
+/**
+ * A value as text: three lines of it, and when there is more, "Show all" beneath (the boards); "Show less" folds it
+ * again (the boards draw only the folded state).
+ */
+function LongText({ text, struck }: { text: string; struck: boolean }) {
+  const styles = useStyles();
+  const [all, setAll] = useState(false);
+  const [more, setMore] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const element = box.current;
+    if (!element || all) return undefined;
+    // Is there more than the three lines show? Asked when the value is drawn and whenever its column's width changes.
+    const observer = new ResizeObserver(() => setMore(element.scrollHeight > element.clientHeight + 1));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [all, text]);
   return (
-    <span>
-      {struck ? <s>{shown}</s> : shown}
-      {text.length > longText ? (
-        <>
-          {' '}
-          <Button appearance="transparent" size="small" aria-expanded={all} onClick={() => setAll((open) => !open)}>
-            {all ? 'Show less' : 'Show all'}
-          </Button>
-        </>
+    <span className={styles.long}>
+      <span ref={box} className={all ? undefined : styles.clamp}>
+        {struck ? <s>{text}</s> : text}
+      </span>
+      {more ? (
+        <Link as="button" className={styles.showAll} aria-expanded={all} onClick={() => setAll((open) => !open)}>
+          {all ? 'Show less' : 'Show all'}
+        </Link>
       ) : null}
     </span>
   );

@@ -41,7 +41,7 @@ import { followLink, navigate, useLocation } from '../router';
 import { useSession } from '../session';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
-import { AsOfBanner, PastEmpty } from '../ui/asOf';
+import { AsOfBanner, PastEmpty, PastEmptyText } from '../ui/asOf';
 import { CiPanel } from '../ui/CiPanel';
 import { ErrorBar } from '../ui/common';
 import {
@@ -413,6 +413,22 @@ export function SearchPage() {
     />
   );
 
+  const searchBox = (
+    <div role="search" aria-label="Search CIs" className={styles.search}>
+      <SearchBox
+        size="large"
+        className={styles.search}
+        input={{ className: styles.searchInput, 'aria-label': 'Search by name' }}
+        placeholder="Search by name"
+        value={typed}
+        onChange={(_, data) => setTyped(data.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') apply({ ...query, q: typed });
+        }}
+      />
+    </div>
+  );
+
   return (
     <>
       {asOf ? <AsOfBanner asOf={asOf} /> : null}
@@ -420,7 +436,8 @@ export function SearchPage() {
         crumbs={[{ label: 'Inventory' }, { label: 'Search' }]}
         title="Search"
         actions={
-          empty ? undefined : (
+          // "There are no CIs yet" has its own New CI; "No CIs existed at that time" keeps the toolbar (the boards).
+          empty && !asOf ? undefined : (
             <div className={styles.toolbar}>
               {wide && !filtersHidden ? null : (
                 <Button
@@ -461,9 +478,12 @@ export function SearchPage() {
       {typesFailure ? <ErrorBar error={typesFailure} onRetry={reloadTypes} /> : null}
 
       {empty && asOf ? (
-        <PastEmpty asOf={asOf} title="No CIs existed at that time.">
-          <Text>Nothing had been entered in Goldmark yet.</Text>
-        </PastEmpty>
+        <>
+          {searchBox}
+          <PastEmpty asOf={asOf} roomy title="No CIs existed at that time.">
+            <PastEmptyText>Nothing had been entered in Goldmark yet.</PastEmptyText>
+          </PastEmpty>
+        </>
       ) : empty ? (
         <section className={mergeClasses(styles.empty, styles.emptyBox)} aria-labelledby="no-cis">
           <CubeRegular className={styles.emptyIcon} aria-hidden />
@@ -485,19 +505,7 @@ export function SearchPage() {
         </section>
       ) : (
         <>
-          <div role="search" aria-label="Search CIs" className={styles.search}>
-            <SearchBox
-              size="large"
-              className={styles.search}
-              input={{ className: styles.searchInput, 'aria-label': 'Search by name' }}
-              placeholder="Search by name"
-              value={typed}
-              onChange={(_, data) => setTyped(data.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') apply({ ...query, q: typed });
-              }}
-            />
-          </div>
+          {searchBox}
           {failure ? (
             <ErrorBar
               error={failure}

@@ -16,19 +16,40 @@ import {
   ToggleButton,
   Tooltip,
   makeStyles,
+  mergeClasses,
   tokens,
   useId,
 } from '@fluentui/react-components';
 import { ClockRegular, ErrorCircleRegular, HistoryRegular } from '@fluentui/react-icons';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
-import { formatMoment, hasPast, localHint, parseAsOf, setAsOf, shortMoment, useAsOf } from '../asOf';
+import { formatMoment, hasPast, localHint, setAsOf, shortMoment, useAsOf } from '../asOf';
 import { useLocation } from '../router';
 
 const useStyles = makeStyles({
   control: { whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' },
+  // A moment is chosen (the TopBarStates board): the brand tint and a thin brand border, the text as it was.
+  controlOn: {
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorNeutralForeground1,
+    border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandForeground1}`,
+    ':hover': {
+      backgroundColor: tokens.colorBrandBackground2Hover,
+      color: tokens.colorNeutralForeground1,
+      border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandForeground1}`,
+    },
+    ':hover:active': {
+      backgroundColor: tokens.colorBrandBackground2Pressed,
+      color: tokens.colorNeutralForeground1,
+      border: `${tokens.strokeWidthThin} solid ${tokens.colorBrandForeground1}`,
+    },
+  },
   // The banner stays in view while the page scrolls (the boards: sticky under the top bar).
   banner: { position: 'sticky', top: 0, zIndex: 2 },
+  // 28 px high, as the boards draw the banner's button and the quick choices (Fluent's medium is 32).
+  compact: { paddingTop: '3px', paddingBottom: '3px' },
+  quickButton: { minWidth: 0, fontWeight: tokens.fontWeightRegular },
+  surface: { maxWidth: '480px' },
   bannerText: { display: 'flex', flexWrap: 'wrap', columnGap: tokens.spacingHorizontalS },
   local: { color: tokens.colorNeutralForeground2, whiteSpace: 'nowrap' },
   form: { display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalM },
@@ -72,7 +93,7 @@ const useStyles = makeStyles({
   spacer: { flexGrow: 1 },
   empty: {
     boxSizing: 'border-box',
-    padding: `${tokens.spacingVerticalXXXL} ${tokens.spacingHorizontalXXL}`,
+    padding: `56px ${tokens.spacingHorizontalXXL}`,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -90,6 +111,8 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightSemibold,
     overflowWrap: 'anywhere',
   },
+  emptyRoomy: { paddingTop: '64px', paddingBottom: '64px' },
+  emptyText: { margin: 0, maxWidth: '520px', color: tokens.colorNeutralForeground2 },
   emptyActions: { display: 'flex', gap: tokens.spacingHorizontalS, flexWrap: 'wrap', justifyContent: 'center' },
 });
 
@@ -101,7 +124,10 @@ function fields(date: Date): { date: string; time: string } {
 }
 
 /** The fields as a moment the API takes ("2026-10-06T14:00Z"), or which field is wrong. */
-function moment(date: string, time: string): { value: string } | { error: string; bad: 'date' | 'time' | 'both' } {
+function moment(
+  date: string,
+  time: string,
+): { value: string; future: boolean } | { error: string; bad: 'date' | 'time' | 'both' } {
   const day = date.trim();
   const clock = time.trim().match(/^(\d{1,2}):(\d{2})$/);
   if (!day && !time.trim()) return { error: 'Enter a date and a time.', bad: 'both' };
@@ -110,10 +136,12 @@ function moment(date: string, time: string): { value: string } | { error: string
     return { error: 'Enter a date and a time.', bad: 'time' };
   const year = Number(day.slice(0, 4));
   if (year < 2000 || year > 9998) return { error: 'Use a year from 2000 to 9998.', bad: 'date' };
-  const value = parseAsOf(`${day}T${pad(Number(clock[1]))}:${clock[2]}Z`);
-  if (!value) return { error: 'Enter a date and a time.', bad: 'date' };
-  if (new Date(value).getTime() > Date.now()) return { error: 'That time is in the future.', bad: 'both' };
-  return { value };
+  const value = `${day}T${pad(Number(clock[1]))}:${clock[2]}Z`;
+  const at = new Date(value);
+  // A day the calendar has (not 30 February).
+  if (Number.isNaN(at.getTime()) || at.toISOString().slice(0, 10) !== day)
+    return { error: 'Enter a date and a time.', bad: 'date' };
+  return { value, future: at.getTime() > Date.now() };
 }
 
 /**
@@ -131,7 +159,12 @@ export function AsOfControl({ wide }: { wide: boolean }) {
   const [opened, setOpened] = useState(0);
   const value = asOf ? formatMoment(asOf) : 'Now';
   const label = wide ? `As of: ${value}` : asOf ? shortMoment(asOf) : 'Now';
-  const name = `As of: ${value}. Choose a point in time`;
+  // The name carries the whole moment. Where the label is the short one, the name has it too, as written, so the
+  // words on the button are in its name (WCAG 2.5.3, Label in Name; voice control says what it shows).
+  const name =
+    wide || !asOf
+      ? `As of: ${value}. Choose a point in time`
+      : `As of: ${shortMoment(asOf)} (${value}). Choose a point in time`;
   if (!hasPast(pathname)) {
     return (
       <Tooltip content="This page always shows the present." relationship="description">
@@ -139,6 +172,7 @@ export function AsOfControl({ wide }: { wide: boolean }) {
           appearance="outline"
           icon={<HistoryRegular />}
           disabledFocusable
+          aria-haspopup="dialog"
           aria-label={name}
           className={styles.control}
         >
@@ -162,7 +196,7 @@ export function AsOfControl({ wide }: { wide: boolean }) {
           icon={<HistoryRegular />}
           aria-haspopup="dialog"
           aria-label={name}
-          className={styles.control}
+          className={mergeClasses(styles.control, asOf !== null && styles.controlOn)}
         >
           {label}
         </ToggleButton>
@@ -200,18 +234,26 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
   };
   const apply = () => {
     const result = moment(date, time);
-    if ('error' in result) {
-      setProblem(result);
-      (result.bad === 'time' ? timeRef : dateRef).current?.focus();
+    const wrong =
+      'error' in result
+        ? result
+        : result.future
+          ? { error: 'That time is in the future.', bad: 'both' as const }
+          : null;
+    if (wrong || 'error' in result) {
+      setProblem(wrong);
+      (wrong?.bad === 'time' ? timeRef : dateRef).current?.focus();
       return;
     }
     onClose();
     setAsOf(result.value);
   };
-  const described = [problem ? errorId : null, hint ? hintId : null].filter(Boolean).join(' ') || undefined;
+  // The error is the fields' description while there is one, else the hint (the DialogStates board).
+  const quick = mergeClasses(styles.compact, styles.quickButton);
+  const described = problem ? errorId : hint ? hintId : undefined;
 
   return (
-    <DialogSurface aria-label="Choose a point in time">
+    <DialogSurface aria-label="Choose a point in time" className={styles.surface}>
       <form
         noValidate
         onSubmit={(event) => {
@@ -269,13 +311,13 @@ export function AsOfDialog({ asOf, onClose }: { asOf: string | null; onClose: ()
                 Quick choices
               </Text>
               <div className={styles.quickButtons}>
-                <Button size="small" onClick={() => fill(60 * 60 * 1000)}>
+                <Button className={quick} onClick={() => fill(60 * 60 * 1000)}>
                   1 hour ago
                 </Button>
-                <Button size="small" onClick={() => fill(24 * 60 * 60 * 1000)}>
+                <Button className={quick} onClick={() => fill(24 * 60 * 60 * 1000)}>
                   Yesterday
                 </Button>
-                <Button size="small" onClick={() => fill(7 * 24 * 60 * 60 * 1000)}>
+                <Button className={quick} onClick={() => fill(7 * 24 * 60 * 60 * 1000)}>
                   7 days ago
                 </Button>
               </div>
@@ -332,20 +374,33 @@ export function PastEmpty({
   asOf,
   title,
   headingLevel = 2,
+  roomy = false,
   children,
 }: {
   asOf: string;
   title: string;
   headingLevel?: 1 | 2;
+  /** 64 px above and below (Search's board) instead of 56 (the CI page's). */
+  roomy?: boolean;
   children?: ReactNode;
 }) {
   const styles = useStyles();
   const Heading = headingLevel === 1 ? 'h1' : 'h2';
   const headingId = useId('past-empty');
+  // As the page's h1 it takes the focus when the page opens, like PageHeader's, so the change is announced.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (headingLevel === 1) heading.current?.focus();
+  }, [headingLevel, title]);
   return (
-    <section aria-labelledby={headingId} className={styles.empty}>
+    <section aria-labelledby={headingId} className={mergeClasses(styles.empty, roomy && styles.emptyRoomy)}>
       <HistoryRegular aria-hidden className={styles.emptyIcon} />
-      <Heading id={headingId} className={styles.emptyTitle}>
+      <Heading
+        id={headingId}
+        ref={heading}
+        className={styles.emptyTitle}
+        {...(headingLevel === 1 ? { tabIndex: -1 } : {})}
+      >
         {title}
       </Heading>
       {children}
@@ -359,6 +414,12 @@ export function PastEmpty({
   );
 }
 
+/** The sentence under a PastEmpty's title. */
+export function PastEmptyText({ children }: { children: ReactNode }) {
+  const styles = useStyles();
+  return <p className={styles.emptyText}>{children}</p>;
+}
+
 /**
  * The banner of a past view (the boards; DEC-047 item 10: amber, Fluent's warning intent, with the clock-arrow
  * icon): what is shown, in UTC and in the person's own time, and the way back to the present.
@@ -366,14 +427,16 @@ export function PastEmpty({
 export function AsOfBanner({ asOf, subject = 'Viewing' }: { asOf: string; subject?: 'Viewing' | 'Graph' }) {
   const styles = useStyles();
   return (
-    <div className={styles.banner}>
+    // role="status": the change to a past view is announced once (the boards). Fluent's MessageBar is a group.
+    <div role="status" className={styles.banner}>
       <MessageBar intent="warning" icon={<HistoryRegular />} politeness="polite">
         <MessageBarBody className={styles.bannerText}>
           <strong>{`${subject} as of ${formatMoment(asOf)} (read-only)`}</strong>
           <span className={styles.local}>{localHint(asOf)}</span>
         </MessageBarBody>
         <MessageBarActions>
-          <Button size="small" onClick={() => setAsOf(null)}>
+          {/* size: MessageBarActions makes its buttons small (24 px) unless told; the boards draw 28 px. */}
+          <Button size="medium" className={styles.compact} onClick={() => setAsOf(null)}>
             Return to now
           </Button>
         </MessageBarActions>
