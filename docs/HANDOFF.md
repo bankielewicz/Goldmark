@@ -175,7 +175,9 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
 - **The shell's navigation** is 260 px wide and never shrinks (`AppShell.tsx`, `inlineNav`; DEC-047 item 11). Until
   slice 7 it shrank beside wide content, to nothing beside a table. `expectAccessible` (`web/e2e/session.ts`)
   checks its width on every screen the browser tests visit: a page that is too wide now scrolls in its own box
-  instead of squeezing the navigation, so give a wide table a scroll box (`overflowX: 'auto'`, `minWidth: 0`).
+  instead of squeezing the navigation, so put a wide table in a `ScrollBox` (`web/src/ui/common.tsx`): it scrolls
+  sideways and is a Tab stop with a name while it does. A visually hidden text inside one must have the box as
+  its container (`position: relative` on the box), or it makes the whole page as wide as the table.
 - **Browser tests:** after one test fails, the next ones fail at sign-in (the restarted worker forgets the TOTP
   step it used, and five wrong codes lock the smoke administrator for 15 minutes): read the first failure only.
   Switch the theme with `useScheme`, never `page.emulateMedia` alone: axe otherwise measures colours mid-change.

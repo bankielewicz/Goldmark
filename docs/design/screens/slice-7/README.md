@@ -81,28 +81,34 @@ winter), and the CI page's sample data follows its history (slice 6's boards are
   redundancy groups", "retired CIs left out") before "at that time" and "as of …"; the boards' text is shorter
   (owner, 2026-11-20, "A. Keep the full text (Recommended)"; DEC-047 item 11).
 
+- The Graph explorer's "Choose another time" is a button that opens the dialog, as on Search's board; the Graph
+  board draws a link (owner, 2026-11-20, "A. A button, as on Search (Recommended)").
+- Below 1100 px, with a moment chosen, the control's name is "As of: 06 Oct 14:00 (2026-10-06 14:00 UTC). Choose a
+  point in time": the short label it shows, then the whole moment. The Notes board gives the whole moment alone
+  as its name at every width, which fails WCAG 2.5.3 (Label in Name) where the label is the short one (owner,
+  2026-11-20, "A. Short label, then the full moment (Recommended)").
+
+Where the Notes board and a board's markup differ, the code follows the Notes board:
+- Below 1100 px the selected history entry opens in place ("Accordion, one panel open"); the markup draws the
+  detail between two lists.
+- The timeline's avatars are 20 px ("Avatar (size 20)"), a size Fluent has; the markup draws 18.
+- Errors use the shared error bar of the other screens ("the shared MessageBar with Retry and Reference ID"), with
+  its second text for a server error and its "Copy" button; the markup draws its own.
+- Below 1100 px a past view's More actions menu lists Edit and Retire… (or Restore) disabled, and on a CI that was
+  retired at the moment shown the note's Restore stays, disabled with the Tooltip (rule 10: disabled actions keep
+  their place); the markup leaves them out or enabled, and draws neither state.
+- In a past view the tab opens with the newest entry selected, as the handoff says for the tab; the `CiAsOfHistory`
+  board selects the entry marked "Shown above".
+
 Where the boards are silent, the code does this (assumptions, DEC-047 item 11):
 - The local-time hint names the date when the local day isn't the UTC day: "01:30 on 2026-10-07 your local time".
 - A long value's "Show all" becomes "Show less" once opened; the boards draw only the folded state.
 - A dependent's redundancy-group change reads "Changed redundancy group: depended on by X (type)", after the boards'
   "Added relationship: depended on by X (type)".
-- Below 1100 px, with a moment chosen, the control's name is "As of: 06 Oct 14:00 (2026-10-06 14:00 UTC). Choose a
-  point in time": the short label it shows, then the whole moment the boards give as its name, so the words on the
-  button are in its name (WCAG 2.5.3; axe refuses the boards' name there).
 - The timeline scrolls inside 70% of the window's height from 1100 px (the boards give a fixed artboard height).
-  Below 1100 px the selected entry opens in place, as the Notes board's "Accordion, one panel open" says; the
-  boards' markup draws the detail between two lists.
-- The timeline's avatars are 20 px, the Notes board's size and one Fluent has (the template draws 18).
-- In a past view the tab opens with the newest entry selected, as in the present (the handoff's rule); the
-  `CiAsOfHistory` board happens to select the entry marked "Shown above".
-- Errors use the shared error bar of the other screens, with its second text for a server error.
 - A past view's Relationships tab with nothing in it reads "X had no relationships at that time."
-- Below 1100 px a past view's More actions menu lists Edit and Retire… (or Restore) disabled, by the Notes board's
-  rule 10; the menu isn't drawn open.
-- On a CI that was retired at the moment shown, the note's Restore stays, disabled with the Tooltip (rule 10).
-- The Graph explorer's "Choose another time" is a button that opens the dialog, as on Search's board (the Graph
-  board draws a link).
-- The diff table scrolls sideways in its own box when it is wider than the screen; the box is a Tab stop.
+- A table wider than its place scrolls sideways in its own box, and the box is a Tab stop with a name while it
+  scrolls (the History diff on a phone; the Relationships and Types tables on a narrow window).
 
 ## What the API gives for them
 

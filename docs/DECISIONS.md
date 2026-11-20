@@ -2590,11 +2590,19 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     text (Recommended)"): the status line, the table's caption and the export summary still say ", plus redundancy
     groups" and "retired CIs left out" before "at that time" and "as of …". The boards' text is shorter; dropping
     the parts would hide what was counted or left out. Rejected: B, shortening as drawn.
-  - *Where the boards are silent*, the code's choices are listed in `docs/design/screens/slice-7/README.md` ("As
-    built"), each reversible: the local hint's date, "Show less", a dependent's group change, the timeline's
-    height, the 20 px avatars, the newest entry selected in a past view, the shared error bar, the empty
-    Relationships tab's text, the More actions menu and the retired note's Restore disabled by rule 10, "Choose
-    another time" as a button on the Graph explorer, the diff table's scroll box as a Tab stop.
+  - *"Choose another time" is a button on the Graph explorer too* (owner, 2026-11-20, "A. A button, as on Search
+    (Recommended)"): it opens the dialog, and Search's board draws a button; the Graph board draws a link.
+    Rejected: B, a link there.
+  - *Below 1100 px the control's name is its short label, then the whole moment* (owner, 2026-11-20, "A. Short
+    label, then the full moment (Recommended)"): "As of: 06 Oct 14:00 (2026-10-06 14:00 UTC). Choose a point in
+    time". The Notes board's name, the whole moment alone, fails WCAG 2.5.3 where the label is the short one
+    (axe, at 390 px). Rejected: B, showing the whole moment on narrow screens, which may not fit a phone's bar.
+  - *Where the Notes board and a board's markup differ, the Notes board is followed, and where the boards are
+    silent the code's choices are listed*, both in `docs/design/screens/slice-7/README.md` ("As built"), each
+    reversible: the entry opening in place below 1100 px, the 20 px avatars, the shared error bar, rule 10 for
+    the More actions menu and the retired note's Restore, the newest entry selected in a past view; the local
+    hint's date, "Show less", a dependent's group change, the timeline's height, the empty Relationships tab's
+    text, a scroll box as a Tab stop while it scrolls.
   - *The inline navigation is 260 px wide and never shrinks* (`AppShell.tsx`), as the boards have drawn it since
     slice 3. It was Fluent's Drawer at 320 px (the `size` given for the items' density also sets the width) and,
     as a flex item that hides its overflow, free to shrink: it measured 274 px on a CI's page, 150 px on the
