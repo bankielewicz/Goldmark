@@ -56,9 +56,33 @@ export async function recordViolations(page: Page) {
 /** The arrow at the right of a Fluent Combobox (the class Fluent gives its `expandIcon` slot). */
 export const COMBOBOX_ARROW = '.fui-Combobox__expandIcon';
 
+/** The inline navigation: Fluent's NavDrawer rendered as an inline Drawer (the classes Fluent gives the two). */
+export const INLINE_NAV = '.fui-NavDrawer.fui-InlineDrawer';
+
+/** The inline navigation's width on the boards (DEC-039; `src/shell/AppShell.tsx`). */
+export const INLINE_NAV_WIDTH = 260;
+
 export async function expectAccessible(page: Page, what: string) {
   // Measure the settled page: Fluent's drawers and dialogs fade in (Web Animations).
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+  // The inline navigation keeps its width on every screen. As a flex item that hides its overflow it once shrank
+  // beside wide content, to nothing beside a table: still in the accessibility tree, so axe and role queries saw
+  // nothing wrong, and out of a pointer's reach. history.spec.ts checks that the classes still exist.
+  // None below 1100 px (the rail), one from there, and never another width. Each look is one reading of the
+  // page; it is repeated until it settles, because just after the window narrows past 1100 px the inline
+  // navigation is still on its way out and can measure 0 for a moment (seen once in a run). One that stays
+  // collapsed still fails, after the wait.
+  await expect
+    .poll(
+      async () =>
+        (
+          await page
+            .locator(INLINE_NAV)
+            .evaluateAll((navs) => navs.map((nav) => Math.round(nav.getBoundingClientRect().width)))
+        ).filter((width) => width !== INLINE_NAV_WIDTH),
+      { message: `${what}: the inline navigation's width` },
+    )
+    .toEqual([]);
   // No Combobox arrow on the screen is a Tab stop (DEC-040, src/ui/combobox.ts). This reads the
   // rendered attribute, so it also sees what the source check (tests/combobox-expand-icon.test.mjs)
   // can't: a later property that overrides the first. auth.spec.ts checks that the class still exists.
@@ -84,6 +108,8 @@ export async function expectAccessible(page: Page, what: string) {
 export async function useScheme(page: Page, scheme: 'light' | 'dark') {
   await page.emulateMedia({ colorScheme: scheme });
   await page.waitForFunction((wanted) => document.documentElement.style.colorScheme === wanted, scheme);
+  // Fluent fades some colours to the new theme (the navigation's items): measure after that.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
 }
 
 /** A toast by its title. Fluent repeats the text in an aria-live announcer, so text alone matches twice. */

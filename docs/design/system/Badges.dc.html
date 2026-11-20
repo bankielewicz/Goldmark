@@ -53,7 +53,7 @@ body{margin:0}
   </table>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1220}}'>
 class Component extends DCLogic {
   renderVals() {
     const LIGHT = '--bg1:#ffffff;--fg1:#242424;--fg3:#616161;--st2:#e0e0e0;--rdfg:#bc2f32;--rdbg:#fdf6f6;--rdbd:#f1bbbc;--orfg:#c43501;--orbg:#fdf6f3;--orbd:#f4bfab;--gnfg:#0e700e;--gnbg:#f1faf1;--gnbd:#9fd89f;--infg:#616161;--inbg:#f0f0f0;--inbd:#e0e0e0;--sbfg:#616161;--sbbg:#ffffff;--sbbd:#e0e0e0;--brfg:#7d5200;--brbg:#fcefd8;--brbd:#f3d08f;';
@@ -75,7 +75,8 @@ class Component extends DCLogic {
       { label: 'Provenance (names the source)', badges: [b('vCenter vc01', 'sb'), b('SQL collector', 'sb'), b('CSV hr-assets', 'sb'), b('Manual', 'sb'), b('Overridden', 'br'), b('Stale · 3 days', 'in', 'clock')] },
       { label: 'Role', badges: [b('Admin', 'sb'), b('Editor', 'sb'), b('Viewer', 'sb'), b('Auditor', 'sb'), b('Collector', 'sb')] },
       { label: 'Two-factor authentication', badges: [b('Enrolled', 'gn', 'ok'), b('Not enrolled', 'in')] },
-      { label: 'Account state', badges: [b('Active', 'gn'), b('Locked', 'or', 'lock'), b('Disabled', 'in'), b('Pending first sign-in', 'in')] }
+      { label: 'Account state', badges: [b('Active', 'gn'), b('Locked', 'or', 'lock'), b('Disabled', 'in'), b('Pending first sign-in', 'in')] },
+      { label: 'History and past views (slice 7)', badges: [b('Added', 'sb'), b('Removed', 'sb'), b('Changed', 'sb'), b('Attribute deleted', 'sb'), b('Deleted since', 'sb'), b('Ended since', 'sb'), b('Shown above', 'sb')] }
     ];
     return {
       groups,

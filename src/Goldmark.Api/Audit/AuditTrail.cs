@@ -11,29 +11,23 @@ namespace Goldmark.Api.Audit;
 /// secret: no password, code, token or key, and no user name someone typed for an account that does
 /// not exist (it may be a password typed into the wrong field).
 /// </summary>
-internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http)
+internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http, ActingPrincipal acting)
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     /// <summary>Records <paramref name="action"/> by the signed-in person, or by an anonymous client.</summary>
-    public Task WriteAsync(string action, string? targetType = null, Guid? targetId = null, object? details = null)
-    {
-        var actorId = http.HttpContext?.User.Identity?.AuthenticationType == AuthSchemes.Session ? http.HttpContext.User.UserId() : null;
-        return actorId is { } id
+    public Task WriteAsync(string action, string? targetType = null, Guid? targetId = null, object? details = null) =>
+        acting.UserId is { } id
             ? WriteAsync(action, AuditActor.User(id), targetType, targetId, details)
             : WriteAsync(action, AuditActor.Anonymous, targetType, targetId, details);
-    }
 
     public Task WriteAsync(string action, AuditActor actor, string? targetType = null, Guid? targetId = null, object? details = null) =>
         WriteCoreAsync(action, actor, targetType, targetId?.ToString("D"), details);
 
     /// <summary>Records <paramref name="action"/> by the signed-in person about something with a numeric ID (a CI type).</summary>
-    public Task WriteAsync(string action, string targetType, int targetId, object? details)
-    {
-        var actorId = http.HttpContext?.User.Identity?.AuthenticationType == AuthSchemes.Session ? http.HttpContext.User.UserId() : null;
-        return WriteCoreAsync(action, actorId is { } id ? AuditActor.User(id) : AuditActor.Anonymous, targetType,
+    public Task WriteAsync(string action, string targetType, int targetId, object? details) =>
+        WriteCoreAsync(action, acting.UserId is { } id ? AuditActor.User(id) : AuditActor.Anonymous, targetType,
             targetId.ToString(System.Globalization.CultureInfo.InvariantCulture), details);
-    }
 
     private async Task WriteCoreAsync(string action, AuditActor actor, string? targetType, string? targetId, object? details)
     {

@@ -1,6 +1,6 @@
+using System.Globalization;
 using System.Text.Json;
 using Goldmark.Api.Audit;
-using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
@@ -31,6 +31,10 @@ internal static class CiEndpoints
             .RequireAccess(AccessPolicy.SignedIn)
             .WithDisplayName("CIs: get");
 
+        api.MapGet("/cis/{id:guid}/history", HistoryAsync)
+            .RequireAccess(AccessPolicy.SignedIn)
+            .WithDisplayName("CIs: history");
+
         api.MapPost("/cis", CreateAsync)
             .RequireAccess(AccessPolicy.CiEditor)
             .WithDisplayName("CIs: create");
@@ -56,20 +60,73 @@ internal static class CiEndpoints
 
     internal sealed record ChangeRequest(string? Name, JsonElement? Attributes);
 
+    /// <summary>The search, now or with <c>asOf</c> as it would have answered then (US-42): the CIs, names and types of that moment.</summary>
     private static async Task<IResult> SearchAsync(HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        var (search, errors) = CiSearch.Parse(context.Request.Query, await catalog.ListAsync());
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var (search, errors) = CiSearch.Parse(context.Request.Query, await catalog.ListAsync(asOf), asOf);
         return search is null ? Fields(errors) : Results.Ok(await store.SearchAsync(search));
     }
 
+    /// <summary>
+    /// The CI, now or with <c>asOf</c> as it was then: its values under the attributes its type had then, and the
+    /// CIs it linked to as they were. A past version is read-only, so it carries no ETag header.
+    /// </summary>
     private static async Task<IResult> GetAsync(Guid id, HttpContext context, CiTypeCatalog catalog, CiStore store)
     {
-        if (await store.FindAsync(id) is not { } row)
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
         {
-            return NotFound();
+            return refusal;
         }
 
-        return Detail(context, await store.DetailAsync(row, TypeOf(await catalog.ListAsync(), row)));
+        if (await store.FindAsync(id, asOf) is not { } row)
+        {
+            return await AsOf.NotThenAsync(store, id, asOf) ?? NotFound();
+        }
+
+        var detail = await store.DetailAsync(row, TypeOf(await catalog.ListAsync(asOf), row), asOf);
+        return asOf is null ? Detail(context, detail) : Results.Ok(detail);
+    }
+
+    /// <summary>
+    /// The CI's history (US-43), newest first: each version of the CI as created, changed, retired or restored with
+    /// its differences, and each relationship at either end as added, changed and ended, each with who did it. It is
+    /// the whole past, so it takes no <c>asOf</c>; an entry's <c>at</c> is the <c>asOf</c> that shows the CI from then.
+    /// </summary>
+    private static async Task<IResult> HistoryAsync(Guid id, HttpContext context, CiHistoryStore history)
+    {
+        if (AsOf.RefuseIfAsked(context) is { } refusal)
+        {
+            return refusal;
+        }
+
+        var query = context.Request.Query;
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var limit = CiHistoryStore.DefaultLimit;
+        if (query["limit"].ToString() is { Length: > 0 } l
+            && (!int.TryParse(l, NumberStyles.None, CultureInfo.InvariantCulture, out limit) || limit is < 1 or > CiHistoryStore.MaxLimit))
+        {
+            errors["limit"] = ["InvalidLimit"];
+        }
+
+        (DateTime At, string Tie)? after = null;
+        if (query["cursor"].ToString() is { Length: > 0 } c && (after = HistoryCursor.Decode(c)) is null)
+        {
+            errors["cursor"] = ["InvalidCursor"];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Fields(errors);
+        }
+
+        return await history.PageAsync(id, limit, after) is { } page ? Results.Ok(page) : NotFound();
     }
 
     private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,
@@ -80,7 +137,6 @@ internal static class CiEndpoints
             return ApiProblems.Field("type", request.Type is null ? "Required" : "UnknownType");
         }
 
-        var editor = context.User.UserId()!.Value;
         return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
         {
             if (await catalog.LockForSaveAsync(found.Id) is not { } type)
@@ -100,7 +156,7 @@ internal static class CiEndpoints
             }
 
             var id = Guid.CreateVersion7();
-            await store.InsertAsync(id, type.Id, name, check.Values.ToJsonString(), editor);
+            await store.InsertAsync(id, type.Id, name, check.Values.ToJsonString());
             await audit.WriteAsync(AuditActions.CiCreated, CiTarget, id, new { type = type.Name, name });
             var detail = await store.DetailAsync((await store.FindAsync(id))!, type);
             context.Response.Headers.ETag = Quote(detail.ETag);
@@ -116,7 +172,6 @@ internal static class CiEndpoints
             return IfMatchRequired();
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -156,7 +211,7 @@ internal static class CiEndpoints
                 var fields = (name == row.Name ? [] : NameField).Concat(AttributeValues.Changed(type, before, check.Values)).ToList();
                 if (fields.Count > 0)
                 {
-                    await store.UpdateAsync(id, name, check.Values.ToJsonString(), editor);
+                    await store.UpdateAsync(id, name, check.Values.ToJsonString());
                     await audit.WriteAsync(AuditActions.CiChanged, CiTarget, id, new { type = type.Name, name, fields });
                 }
 
@@ -180,7 +235,6 @@ internal static class CiEndpoints
         var store = services.GetRequiredService<CiStore>();
         var db = services.GetRequiredService<DbSession>();
         var audit = services.GetRequiredService<AuditTrail>();
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -205,7 +259,7 @@ internal static class CiEndpoints
                         : ApiProblems.Problem(StatusCodes.Status409Conflict, "not-retired", "This CI isn't retired.");
                 }
 
-                await store.SetLifecycleAsync(id, state, editor);
+                await store.SetLifecycleAsync(id, state);
                 await audit.WriteAsync(retiring ? AuditActions.CiRetired : AuditActions.CiRestored, CiTarget, id, new { type = type.Name, name = row.Name });
                 return Detail(context, await store.DetailAsync((await store.FindAsync(id))!, type));
             }));

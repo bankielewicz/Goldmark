@@ -41,16 +41,19 @@ import {
   FlowchartRegular,
   MoreHorizontalRegular,
 } from '@fluentui/react-icons';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactElement } from 'react';
 
 import { api, ApiError } from '../api';
+import { readOnlyTip, useAsOf, withAsOf } from '../asOf';
 import { formatAgo, formatUtc, formatUtcTime } from '../format';
 import { followLink, navigate, useLocation } from '../router';
 import { useSession } from '../session';
 import { useWide } from '../shell/AppShell';
-import { PageHeader } from '../shell/PageHeader';
+import { PageCrumbs, PageHeader } from '../shell/PageHeader';
+import { AsOfBanner, PastEmpty, PastEmptyText } from '../ui/asOf';
 import { CiPanel } from '../ui/CiPanel';
 import { CopyButton, ErrorBar } from '../ui/common';
+import { HistoryTab } from '../ui/HistoryTab';
 import { RelationshipPanel, type RelationshipPanelMode } from '../ui/RelationshipPanel';
 import { useRelationships } from '../ui/relationships';
 import { RelationshipsTab } from '../ui/RelationshipsTab';
@@ -142,8 +145,10 @@ type Change = 'retire' | 'restore';
  * Screen 5, CI detail (US-11, US-53 `/ci/{id}`, `/ci/{id}?tab=attributes`, `/ci/{id}?tab=relationships`; DEC-044,
  * DEC-046): the Attributes tab (the CI's general fields, its type's attributes and its custom attributes) and the
  * Relationships tab, its count loaded with the page; Edit, Retire… (confirmed) and Restore for Admins and Editors,
- * then View in graph for everyone. Later slices add tabs (history, identifiers, impact). An unknown ID, or one
- * that isn't a CI ID, gets the friendly not-found page.
+ * then View in graph for everyone. Slice 7 adds the History tab (`?tab=history`, `ui/HistoryTab.tsx`) and the past
+ * view (`asOf`, DEC-047): the CI as it was, read-only under the banner, an attribute deleted since marked "Deleted
+ * since", and a page that says when the CI was created if it didn't exist yet. Later slices add tabs (identifiers,
+ * impact). An unknown ID, or one that isn't a CI ID, gets the friendly not-found page.
  */
 export function CiPage({ id }: { id: string }) {
   if (!isCiId(id)) return <CiNotFound id={id} malformed />;
@@ -156,8 +161,15 @@ function CiView({ id }: { id: string }) {
   const canEdit = canEditCis(session.user);
   const wide = useWide();
   const { search } = useLocation();
-  const { types, relationshipTypes, failure: typesFailure, reload: reloadTypes } = useCiTypes();
-  const relationships = useRelationships(id);
+  const asOf = useAsOf();
+  // In a past view, the types as they were (labels, kinds, attributes deleted since); now otherwise.
+  const { types, relationshipTypes, failure: typesFailure, reload: reloadTypes } = useCiTypes(asOf);
+  const relationships = useRelationships(id, asOf);
+  // In a past view, the attributes the CI's type has now, to mark those deleted since (the CiAsOf board).
+  const [presentAttributes, setPresentAttributes] = useState<ReadonlySet<string> | null>(null);
+  // A CI that exists now and didn't at the moment shown: when it was created, and its name and type now.
+  // `named`: the lookup of the CI's present name has answered, with the CI or without it.
+  const [notYet, setNotYet] = useState<{ createdAt: string; ci: CiDetail | null; named: boolean } | null>(null);
   const [relationshipPanel, setRelationshipPanel] = useState<RelationshipPanelMode | null>(null);
   const toasterId = useId('ci-toaster');
   const { dispatchToast } = useToastController(toasterId);
@@ -184,15 +196,39 @@ function CiView({ id }: { id: string }) {
   const load = useCallback(async () => {
     setFailure(null);
     setMissing(false);
+    setNotYet(null);
     try {
-      const { data } = await api<CiDetail>('GET', `/api/v1/cis/${id}`);
+      const { data } = await api<CiDetail>(
+        'GET',
+        asOf ? `/api/v1/cis/${id}?asOf=${encodeURIComponent(asOf)}` : `/api/v1/cis/${id}`,
+      );
       setCi(data);
     } catch (error) {
       const problem = asApiError(error);
-      if (problem.status === 404) setMissing(true);
+      if (problem.status === 404 && problem.code === 'not-found-then' && typeof problem.body.createdAt === 'string') {
+        const createdAt = problem.body.createdAt;
+        setNotYet({ createdAt, ci: null, named: false });
+        const { data } = await api<CiDetail>('GET', `/api/v1/cis/${id}`).catch(() => ({ data: null }));
+        setNotYet({ createdAt, ci: data, named: true });
+      } else if (problem.status === 404) setMissing(true);
       else setFailure(problem);
     }
-  }, [id]);
+  }, [id, asOf]);
+
+  useEffect(() => {
+    setPresentAttributes(null);
+    if (!asOf || !ci) return undefined;
+    let cancelled = false;
+    api<{ types: CiType[] }>('GET', '/api/v1/types')
+      .then(({ data }) => {
+        const now = data.types.find((t) => t.name === ci.type);
+        if (!cancelled) setPresentAttributes(new Set(now?.attributes.map((a) => a.name) ?? []));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [asOf, ci]);
 
   useEffect(() => {
     setCi(null);
@@ -210,9 +246,12 @@ function CiView({ id }: { id: string }) {
   // An unknown ?tab= shows the Attributes tab and the address is corrected.
   const tab = search.get('tab');
   const onRelationships = tab === 'relationships';
+  const onHistory = tab === 'history';
   useEffect(() => {
-    if (tab !== null && tab !== 'attributes' && tab !== 'relationships') navigate(`/ci/${id}`, { replace: true });
-  }, [tab, id]);
+    if (tab !== null && tab !== 'attributes' && tab !== 'relationships' && tab !== 'history') {
+      navigate(withAsOf(`/ci/${id}`, asOf), { replace: true });
+    }
+  }, [tab, id, asOf]);
 
   const change = async (kind: Change) => {
     if (!ci) return;
@@ -238,6 +277,36 @@ function CiView({ id }: { id: string }) {
   };
 
   if (missing) return <CiNotFound id={id} malformed={false} />;
+  if (notYet && asOf) {
+    // The CiNotYet board: the banner and the CI's breadcrumb stay, and the page's h1 says the CI didn't exist then,
+    // with when it was created. The name and type are the CI's present ones; when they can't be read, the page
+    // says the same of "This CI", as the Graph explorer does.
+    const now = notYet.ci;
+    return (
+      <>
+        <AsOfBanner asOf={asOf} />
+        <PageCrumbs
+          crumbs={
+            now
+              ? [
+                  { label: 'Search', path: withAsOf('/search', asOf) },
+                  { label: now.type, path: withAsOf(`/search?type=${encodeURIComponent(now.type)}`, asOf) },
+                  { label: now.name },
+                ]
+              : [{ label: 'Search', path: withAsOf('/search', asOf) }, { label: 'CI' }]
+          }
+        />
+        {now || notYet.named ? (
+          <PastEmpty asOf={asOf} headingLevel={1} title={`${now?.name ?? 'This CI'} didn’t exist at that time.`}>
+            {now ? <TypeBadge type={now.type} types={types} /> : null}
+            <PastEmptyText>{`It was created on ${formatUtc(notYet.createdAt)} UTC, after the time you’re viewing.`}</PastEmptyText>
+          </PastEmpty>
+        ) : (
+          <CiSkeleton />
+        )}
+      </>
+    );
+  }
   if (failure && !ci) {
     return (
       <>
@@ -259,7 +328,14 @@ function CiView({ id }: { id: string }) {
   const retired = ci.lifecycleState === 'Retired';
   const type = types?.find((t) => t.name === ci.type);
   const who = ci.changedBy?.displayName ?? (ci.changedBy ? 'a removed account' : 'System');
-  const graphPath = `/graph?ci=${ci.id}`;
+  const graphPath = withAsOf(`/graph?ci=${ci.id}`, asOf);
+  // In a past view every change is disabled where it would show, with the one Tooltip (Notes default 10), under
+  // the button as the boards draw it: above, it would cover the banner.
+  const readOnly = (button: ReactElement) => (
+    <Tooltip key={button.key ?? undefined} content={readOnlyTip} relationship="description" positioning="below-start">
+      {button}
+    </Tooltip>
+  );
   const viewInGraph = (
     <Button
       key="graph"
@@ -276,83 +352,143 @@ function CiView({ id }: { id: string }) {
     : null;
   // "View in graph" comes after Edit and Retire… (DEC-046 item 11); Viewers see it alone; below 1100 px it is the
   // last item of More actions.
-  const actions = !wide
-    ? [
-        <Menu key="more">
-          <MenuTrigger disableButtonEnhancement>
-            <Tooltip content="More actions" relationship="label">
-              <Button icon={<MoreHorizontalRegular />} disabled={busy !== null} />
-            </Tooltip>
-          </MenuTrigger>
-          <MenuPopover>
-            <MenuList>
-              {canEdit ? (
-                retired ? (
-                  <MenuItem icon={<ArrowCounterclockwiseRegular />} onClick={() => void change('restore')}>
-                    Restore
-                  </MenuItem>
-                ) : (
-                  <>
-                    <MenuItem icon={<EditRegular />} disabled={!types} onClick={() => setEditing(true)}>
+  const actions = asOf
+    ? !wide
+      ? [
+          <Menu key="more">
+            <MenuTrigger disableButtonEnhancement>
+              <Tooltip content="More actions" relationship="label">
+                <Button icon={<MoreHorizontalRegular />} />
+              </Tooltip>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                {canEdit ? (
+                  retired ? (
+                    <MenuItem icon={<ArrowCounterclockwiseRegular />} disabled>
+                      Restore
+                    </MenuItem>
+                  ) : (
+                    <>
+                      <MenuItem icon={<EditRegular />} disabled>
+                        Edit
+                      </MenuItem>
+                      <MenuItem icon={<ArchiveRegular />} disabled>
+                        Retire…
+                      </MenuItem>
+                    </>
+                  )
+                ) : null}
+                <MenuItem icon={<FlowchartRegular />} onClick={() => navigate(graphPath)}>
+                  View in graph
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>,
+        ]
+      : [
+          ...(canEdit
+            ? retired
+              ? [
+                  readOnly(
+                    <Button key="restore" icon={<ArrowCounterclockwiseRegular />} disabledFocusable>
+                      Restore
+                    </Button>,
+                  ),
+                ]
+              : [
+                  readOnly(
+                    <Button key="edit" icon={<EditRegular />} disabledFocusable>
                       Edit
-                    </MenuItem>
-                    <MenuItem icon={<ArchiveRegular />} onClick={() => setConfirmRetire(true)}>
+                    </Button>,
+                  ),
+                  readOnly(
+                    <Button key="retire" icon={<ArchiveRegular />} disabledFocusable>
                       Retire…
+                    </Button>,
+                  ),
+                ]
+            : []),
+          viewInGraph,
+        ]
+    : !wide
+      ? [
+          <Menu key="more">
+            <MenuTrigger disableButtonEnhancement>
+              <Tooltip content="More actions" relationship="label">
+                <Button icon={<MoreHorizontalRegular />} disabled={busy !== null} />
+              </Tooltip>
+            </MenuTrigger>
+            <MenuPopover>
+              <MenuList>
+                {canEdit ? (
+                  retired ? (
+                    <MenuItem icon={<ArrowCounterclockwiseRegular />} onClick={() => void change('restore')}>
+                      Restore
                     </MenuItem>
-                  </>
-                )
-              ) : null}
-              <MenuItem icon={<FlowchartRegular />} onClick={() => navigate(graphPath)}>
-                View in graph
-              </MenuItem>
-            </MenuList>
-          </MenuPopover>
-        </Menu>,
-      ]
-    : canEdit
-      ? retired
-        ? [
-            <Button
-              key="restore"
-              icon={<ArrowCounterclockwiseRegular />}
-              disabled={busy !== null}
-              onClick={() => void change('restore')}
-            >
-              {busy === 'restore' ? <Spinner size="tiny" aria-label="Restoring" /> : null}
-              Restore
-            </Button>,
-            viewInGraph,
-          ]
-        : [
-            <Button
-              key="edit"
-              icon={<EditRegular />}
-              aria-haspopup="dialog"
-              disabled={!types}
-              onClick={() => setEditing(true)}
-            >
-              Edit
-            </Button>,
-            <Button
-              key="retire"
-              icon={<ArchiveRegular />}
-              aria-haspopup="dialog"
-              disabled={busy !== null}
-              onClick={() => setConfirmRetire(true)}
-            >
-              {busy === 'retire' ? <Spinner size="tiny" aria-label="Retiring" /> : null}
-              Retire…
-            </Button>,
-            viewInGraph,
-          ]
-      : [viewInGraph];
+                  ) : (
+                    <>
+                      <MenuItem icon={<EditRegular />} disabled={!types} onClick={() => setEditing(true)}>
+                        Edit
+                      </MenuItem>
+                      <MenuItem icon={<ArchiveRegular />} onClick={() => setConfirmRetire(true)}>
+                        Retire…
+                      </MenuItem>
+                    </>
+                  )
+                ) : null}
+                <MenuItem icon={<FlowchartRegular />} onClick={() => navigate(graphPath)}>
+                  View in graph
+                </MenuItem>
+              </MenuList>
+            </MenuPopover>
+          </Menu>,
+        ]
+      : canEdit
+        ? retired
+          ? [
+              <Button
+                key="restore"
+                icon={<ArrowCounterclockwiseRegular />}
+                disabled={busy !== null}
+                onClick={() => void change('restore')}
+              >
+                {busy === 'restore' ? <Spinner size="tiny" aria-label="Restoring" /> : null}
+                Restore
+              </Button>,
+              viewInGraph,
+            ]
+          : [
+              <Button
+                key="edit"
+                icon={<EditRegular />}
+                aria-haspopup="dialog"
+                disabled={!types}
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </Button>,
+              <Button
+                key="retire"
+                icon={<ArchiveRegular />}
+                aria-haspopup="dialog"
+                disabled={busy !== null}
+                onClick={() => setConfirmRetire(true)}
+              >
+                {busy === 'retire' ? <Spinner size="tiny" aria-label="Retiring" /> : null}
+                Retire…
+              </Button>,
+              viewInGraph,
+            ]
+        : [viewInGraph];
 
   return (
     <>
+      {asOf ? <AsOfBanner asOf={asOf} /> : null}
       <PageHeader
         crumbs={[
-          { label: 'Search', path: '/search' },
-          { label: ci.type, path: `/search?type=${encodeURIComponent(ci.type)}` },
+          { label: 'Search', path: withAsOf('/search', asOf) },
+          { label: ci.type, path: withAsOf(`/search?type=${encodeURIComponent(ci.type)}`, asOf) },
           { label: ci.name },
         ]}
         title={ci.name}
@@ -365,11 +501,18 @@ function CiView({ id }: { id: string }) {
         }
         actions={<>{actions}</>}
       />
-      <Tooltip content={`${formatUtc(ci.changedAt)} UTC`} relationship="description">
+      {asOf ? (
+        // A past version says when it was written (the CiAsOf board), not how long ago from now.
         <Text className={styles.changed}>
-          Changed {formatAgo(ci.changedAt)} by {who}
+          Changed {formatUtc(ci.changedAt)} UTC by {who}
         </Text>
-      </Tooltip>
+      ) : (
+        <Tooltip content={`${formatUtc(ci.changedAt)} UTC`} relationship="description">
+          <Text className={styles.changed}>
+            Changed {formatAgo(ci.changedAt)} by {who}
+          </Text>
+        </Tooltip>
+      )}
 
       {retired ? (
         <MessageBar intent="info">
@@ -379,9 +522,17 @@ function CiView({ id }: { id: string }) {
           </MessageBarBody>
           {canEdit ? (
             <MessageBarActions>
-              <Button size="small" disabled={busy !== null} onClick={() => void change('restore')}>
-                Restore
-              </Button>
+              {asOf ? (
+                readOnly(
+                  <Button size="small" disabledFocusable>
+                    Restore
+                  </Button>,
+                )
+              ) : (
+                <Button size="small" disabled={busy !== null} onClick={() => void change('restore')}>
+                  Restore
+                </Button>
+              )}
             </MessageBarActions>
           ) : null}
         </MessageBar>
@@ -398,15 +549,20 @@ function CiView({ id }: { id: string }) {
       ) : null}
 
       <TabList
-        selectedValue={onRelationships ? 'relationships' : 'attributes'}
+        selectedValue={onRelationships ? 'relationships' : onHistory ? 'history' : 'attributes'}
         aria-label="CI sections"
         onTabSelect={(_, data) =>
-          navigate(data.value === 'relationships' ? `/ci/${ci.id}?tab=relationships` : `/ci/${ci.id}`, {
-            replace: true,
-          })
+          navigate(
+            withAsOf(data.value === 'attributes' ? `/ci/${ci.id}` : `/ci/${ci.id}?tab=${String(data.value)}`, asOf),
+            { replace: true },
+          )
         }
       >
-        <Tab value="attributes" id="tab-attributes" aria-controls={onRelationships ? undefined : 'panel-attributes'}>
+        <Tab
+          value="attributes"
+          id="tab-attributes"
+          aria-controls={onRelationships || onHistory ? undefined : 'panel-attributes'}
+        >
           Attributes
         </Tab>
         <Tab
@@ -423,8 +579,15 @@ function CiView({ id }: { id: string }) {
             ) : null}
           </span>
         </Tab>
+        <Tab value="history" id="tab-history" aria-controls={onHistory ? 'panel-history' : undefined}>
+          History
+        </Tab>
       </TabList>
-      {onRelationships ? (
+      {onHistory ? (
+        <section id="panel-history" role="tabpanel" aria-labelledby="tab-history">
+          <HistoryTab ci={ci} asOf={asOf} wide={wide} types={types} />
+        </section>
+      ) : onRelationships ? (
         <section
           id="panel-relationships"
           role="tabpanel"
@@ -435,6 +598,7 @@ function CiView({ id }: { id: string }) {
             ci={ci}
             relationships={relationships}
             canEdit={canEdit}
+            asOf={asOf}
             types={types}
             relationshipTypes={relationshipTypes}
             onAdd={() => {
@@ -451,7 +615,7 @@ function CiView({ id }: { id: string }) {
         </section>
       ) : (
         <section id="panel-attributes" role="tabpanel" aria-labelledby="tab-attributes" className={styles.panel}>
-          <Attributes ci={ci} type={type} types={types} />
+          <Attributes ci={ci} type={type} types={types} asOf={asOf} presentAttributes={presentAttributes} />
         </section>
       )}
 
@@ -475,7 +639,8 @@ function CiView({ id }: { id: string }) {
         />
       ) : null}
 
-      {editing && types ? (
+      {/* Never in a past view, however the page got there (the browser's Back with the form open). */}
+      {editing && types && !asOf ? (
         <CiPanel
           mode={{ kind: 'edit', ci }}
           types={types}
@@ -488,7 +653,7 @@ function CiView({ id }: { id: string }) {
         />
       ) : null}
 
-      <Dialog open={confirmRetire} modalType="alert" onOpenChange={(_, data) => setConfirmRetire(data.open)}>
+      <Dialog open={confirmRetire && !asOf} modalType="alert" onOpenChange={(_, data) => setConfirmRetire(data.open)}>
         <DialogSurface aria-describedby="retire-body">
           <DialogBody>
             <DialogTitle>Retire {ci.name}?</DialogTitle>
@@ -533,7 +698,19 @@ function CiView({ id }: { id: string }) {
   );
 }
 
-function Attributes({ ci, type, types }: { ci: CiDetail; type: CiType | undefined; types: CiType[] | null }) {
+function Attributes({
+  ci,
+  type,
+  types,
+  asOf = null,
+  presentAttributes = null,
+}: {
+  ci: CiDetail;
+  type: CiType | undefined;
+  types: CiType[] | null;
+  asOf?: string | null;
+  presentAttributes?: ReadonlySet<string> | null;
+}) {
   const styles = useStyles();
   const builtIn = type?.attributes.filter((a) => a.builtIn) ?? [];
   const custom = type?.attributes.filter((a) => !a.builtIn) ?? [];
@@ -558,10 +735,24 @@ function Attributes({ ci, type, types }: { ci: CiDetail; type: CiType | undefine
         </dl>
       </div>
       {builtIn.length > 0 ? (
-        <AttributeGroup title={`${ci.type} attributes`} attributes={builtIn} ci={ci} types={types} />
+        <AttributeGroup
+          title={`${ci.type} attributes`}
+          attributes={builtIn}
+          ci={ci}
+          types={types}
+          asOf={asOf}
+          presentAttributes={presentAttributes}
+        />
       ) : null}
       {custom.length > 0 ? (
-        <AttributeGroup title="Custom attributes" attributes={custom} ci={ci} types={types} />
+        <AttributeGroup
+          title="Custom attributes"
+          attributes={custom}
+          ci={ci}
+          types={types}
+          asOf={asOf}
+          presentAttributes={presentAttributes}
+        />
       ) : null}
       {type && type.attributes.length === 0 ? (
         <div className={styles.noAttributes}>This type has no attributes yet.</div>
@@ -575,11 +766,15 @@ function AttributeGroup({
   attributes,
   ci,
   types,
+  asOf,
+  presentAttributes,
 }: {
   title: string;
   attributes: AttributeDef[];
   ci: CiDetail;
   types: CiType[] | null;
+  asOf: string | null;
+  presentAttributes: ReadonlySet<string> | null;
 }) {
   const styles = useStyles();
   return (
@@ -600,9 +795,9 @@ function AttributeGroup({
                 ) : reference ? (
                   <>
                     <Link
-                      href={`/ci/${reference.id}`}
+                      href={withAsOf(`/ci/${reference.id}`, asOf)}
                       className={styles.link}
-                      onClick={(event) => followLink(event, `/ci/${reference.id}`)}
+                      onClick={(event) => followLink(event, withAsOf(`/ci/${reference.id}`, asOf))}
                     >
                       <TypeIcon type={reference.type} types={types} />
                       {reference.name}
@@ -615,6 +810,11 @@ function AttributeGroup({
                 ) : (
                   text
                 )}
+                {asOf && presentAttributes && !presentAttributes.has(attribute.name) ? (
+                  <Badge appearance="tint" color="subtle">
+                    Deleted since
+                  </Badge>
+                ) : null}
               </dd>
             </div>
           );

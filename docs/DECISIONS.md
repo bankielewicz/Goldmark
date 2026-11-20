@@ -229,9 +229,11 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
 - **Settings allow-lists (review finding).** `.npmrc` may contain only
   `registry`, `ignore-scripts` and `engine-strict`, and `pnpm-workspace.yaml`
   only the settings above. Scoped registries (`@scope:registry`), auth tokens,
-  custom CAs, `strict-ssl`, `registries`, `overrides` and policy exclusions are
-  rejected; otherwise an allow-listed name@version could be fetched from
-  another source.
+  custom CAs, `strict-ssl`, `registries` and policy exclusions are rejected;
+  otherwise an allow-listed name@version could be fetched from another source.
+  `overrides` and `auditConfig.ignoreGhsas` were rejected too until 2026-11:
+  each is now accepted only for entries the allow-list names at an exact
+  version (the "Overrides" and "Audit exceptions" bullets below).
 - **`scripts/check-dependency-policy.mjs`** (no dependencies; runs before
   install in CI and in the Docker build) fails on any of the following:
   - a direct dependency that is not allow-listed, or is listed in the wrong section;
@@ -510,6 +512,17 @@ plan in DEC-021 and `docs/HANDOFF.md` is the working plan. PRD assumption A1
     on `main`, and weekly.
   - These also keep running: NuGetAudit, `pnpm audit`, Dependabot, the
     dependency policy check, SHA-pinned actions and locked restores.
+- **Required checks on `main` (owner, 2026-11-18, AskUserQuestion: "A. Require
+  CI, I set it up (Recommended)").** PR #64 merged while its Web job was red,
+  which also skipped the Compose smoke, and its SDK change broke every image
+  build until PR #79. GitHub's ruleset "CI must pass" (id 27573740, active on
+  the default branch) now requires 12 checks before a merge: the npm policy,
+  Web, .NET, SQL Server integration, migration, Compose smoke and Windows
+  service jobs, the three CodeQL jobs, CodeQL's code-scanning status and
+  Dependency review, each by its exact name. Repository admins may bypass. A
+  renamed or added job needs the ruleset updated in the same PR. A skipped job
+  counts as passing; that is harmless here, because the job it waits on is
+  itself required.
 
 ## DEC-019 Deferred to later slices
 
@@ -2435,3 +2448,240 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 - **Not verified in that survey:** Device42's and Lansweeper's graph libraries (documentation blocked or
   silent), ServiceNow's relationship-form fields (third-party mirrors only); Freshservice and Jira Assets were not
   covered.
+
+## DEC-047 Slice 7: who changed it from the session, a CI's history, and reads "as of"
+
+- **Status.** Approved by the owner on 2026-11-18 ("approved"), with "Make reasonable, reversible assumptions to
+  carry work forward and state them"; branch `slice/07-history` from `04f8862` (after PR #81). HANDOFF row 7:
+  "`SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads", done when "US-42/43" (screens 4, 5 and 6;
+  FR-CM-5, FR-IM-4). The backend and API were built first (rule 3 allows it), then the screens after their boards
+  (item 10).
+  The choices below were made without asking, each with its reason, and are the owner's to change in review,
+  except items 7 and 9, which the owner decided.
+- **1. `ChangedBy` comes from the connection (FR-CM-5).** `DbSession` puts the signed-in person's account ID in
+  the connection's `SESSION_CONTEXT` under `Goldmark.ChangedBy`, once, read-only (`@read_only = 1`), before the
+  first statement it runs for that person. Migration 0009 gives `cmdb.Ci.ChangedBy` and
+  `cmdb.Relationship.ChangedBy` that value as their default, and the app's statements write `ChangedBy` as
+  `DEFAULT`, on INSERT and UPDATE alike; no statement takes it as a parameter any more. The audit entry's actor
+  and `ChangedBy` come from one place (`ActingPrincipal`), so they can't name different people. The value is the
+  account ID as text, as before (DEC-044); slice 10 adds sources.
+  - *A write by nobody fails.* Both columns are NOT NULL, so on a connection that names nobody the insert or
+    update is refused (error 515). `cmdb.AttributeDef` and `cmdb.RelationshipType` allow null there (0007: null
+    means "never changed"), so they get no default: their statements read the session value themselves, after
+    `DbSession.RequireActor()` has refused a session with nobody.
+  - *Measured on SQL Server 2025* (`ChangedByTests`, 2026-11-18): the key can't be set again on the connection
+    (error 15664); a pooled connection handed to a session with no principal has the same `@@SPID` and an empty
+    key, and to another person's session that person's; the runtime login needs no new right; the migration
+    applies with versioning on, moves no `ValidFrom` and writes no history row.
+  - *No CHECK constraint ties `ChangedBy` to the session.* It would add nothing against a stolen runtime login
+    (which can open its own connection and set the key), and it would break migrations and fixtures that state
+    `ChangedBy` themselves. The default is a default.
+  - *`CiIdentifier` and `CiComponent`* (FR-CM-5 names them) don't exist yet; the slices that add them use the
+    same default.
+- **2. `asOf` is a past UTC moment with a `Z`** (US-42): `2026-11-01T14:30Z`, with seconds, or with up to seven
+  decimals. A time without a zone is refused (`InvalidTime`), since each client would read it differently; one in
+  the future is refused (`FutureTime`), judged by the database's clock, not the app's: every version's time is
+  SQL Server's, and with the database on another server (DEC-030) a clock a few seconds ahead would otherwise
+  have "show the CI as of the change I just saved" refused. A version's own time, as the history gives it, shows
+  that version.
+- **3. Which reads take `asOf`, and the rest refuse it.** `GET /cis`, `/cis/{id}`, `/cis/{id}/relationships`,
+  `/graph`, `POST /graph/export` and `GET /types` take it. `/cis/{id}/history`, `/relationships/{id}`,
+  `/cis/{id}/redundancy-groups` and `/types/usage` answer 400 `NotSupported` when it is sent. Reason: FR-IM-4 says
+  "The `asOf` parameter applies to all reads", and a read that silently ignored it would answer a question about
+  the past with today's data, which is the worst failure this slice could have. Those four have no past to show:
+  the history is all of it, and the other three serve editing.
+- **4. Everything in an as-of answer is of that moment**: each query reads every table `FOR SYSTEM_TIME AS OF`
+  it (CIs, their types, relationships, relationship types, attribute definitions). A CI shows the name, values
+  and state it had, under the attributes its type had (labels, kinds, order, attributes deleted since), linked
+  to CIs as they were named; the search finds by the names of then; the graph walks the relationships in force
+  then past CIs as they were, so one retired since is still in use (FR-IM-4). `GET /types?asOf=` exists so the
+  web app can label a past CI's values. The current-time statements are unchanged: the as-of ones are separate
+  constants, so no present read can slow down or change (NFR-PERF-2). Measured on the synthetic estate (25,000
+  CIs and 52,000 relationships, every one changed once after the moment read, 79,000 versions in the history
+  tables; `PerformanceTests`, GOLDMARK_PERF=1, SQL Server 2025 Express in WSL, 2026-11-19), p95 against NFR-PERF-2's
+  budgets: the list as of the moment 93 ms, a search by name 95 ms, newest changes first 87 ms (500 ms each), a
+  CI's detail 6 ms (300 ms), the largest team's 3,500 relationships 69 ms (500 ms).
+- **5. Details of the as-of answers.** A CI that exists now and didn't then is 404 `not-found-then` ("This CI
+  didn't exist at that time.") with `createdAt`, its first version's time, so the page can say so instead of "no
+  such CI", and when it was created (the boards' "It was created on …, after the time you're viewing"). A
+  relationship read as of a moment says whether it has ended since (`endedSince`, the boards' "Ended since"
+  badge); a present read leaves the property out. A past version is read-only and
+  carries no ETag header. A cursor carries its moment and is refused with another (`InvalidCursor`), since its
+  keys order a different list. An export of the past records `asOf` in its audit entry's filters.
+- **6. A CI's history is `GET /api/v1/cis/{id}/history`** (PRD §5.7 names it; SignedIn, as the CI itself),
+  newest first, 50 entries a page (200 at most), built from every version of the CI and of the relationships at
+  either end of it:
+  - `created`, `changed`, `retired`, `restored`, each with what differed from the version before: the name, and
+    each attribute as `added`, `removed` or `changed` with the values before and after, as the API sends a CI's
+    (a number as a decimal string, DEC-044 item 12; a link as the CI's ID, with the CI as it is now in
+    `references`). `created` lists what the CI started with.
+  - `relationshipAdded`, `relationshipChanged` (the redundancy group, before and after) and `relationshipEnded`,
+    with the relationship's type, its direction as this CI sees it and the CI at the other end.
+  - Each entry says who (`by`: the account and its name; anything else `ChangedBy` holds as text, for slice 10's
+    sources; null for nobody) and when (`at`, which is also the `asOf` that shows the CI from then on).
+  - A value reads under the label and kind its attribute had when the version was written. A value that left
+    because its attribute was deleted reads under the definition in force until just before, since the delete
+    and the removal are one transaction (DEC-045 item 6), and is marked `attributeDeleted`, so the page can say
+    the attribute went, not that someone cleared the value.
+  - Versions that lasted no time (two changes in one transaction) aren't entries: `FOR SYSTEM_TIME ALL` leaves
+    them out, though the history table keeps them (measured).
+  - The entries are built in memory from all of the CI's versions and its relationships' versions, and paged
+    there. Slice 10's collectors write no version for a re-read that changes nothing (US-21). A side agent's note
+    relayed by the owner (2026-11-19) asked how that holds for a CI with thousands of relationships; measured with
+    the reads above (p95, budget 500 ms as a list): the largest team, 3,500 relationships and 9,200 entries, 73 ms
+    for its first page and 57 ms for the second; a typical VM 17 ms; a CI that every one of the 25,000 CIs relates
+    to, half of those relationships regrouped (37,460 entries), 213 ms. So the paging stays in memory; if it ever
+    has to move into SQL, the API doesn't change.
+- **7. Who ended a relationship is shown to everyone signed in (owner, 2026-11-19, AskUserQuestion: "A.
+  Everyone signed in (Recommended)").** For a relationship ended before item 9's stamp existed, the name comes
+  from its `relationship.deleted` audit entry, although the audit log itself is AuditReader's: it is the same
+  kind of fact as `ChangedBy`, which everyone already sees. Rejected: B, Admins and Auditors only, with no name
+  for the others.
+- **8. Migration 0009** adds, besides the two defaults: `IX_CiHistory_Id (Id, ValidFrom)`,
+  `IX_RelationshipHistory_FromCi` and `_ToCi (…, ValidFrom)`, because the history tables had only their period
+  index and a read by CI scanned them whole; and `IX_AuditLog_Target (TargetType, TargetId)` for item 7's lookup.
+  It changes no row.
+- **9. Who ended a relationship is kept with its history (owner, 2026-11-19, AskUserQuestion: "C. Keep it in
+  the history (Recommended)"; a side agent's note relayed by the owner, 2026-11-18).** The audit log is purged
+  after its retention period (365 days at the shortest, DEC-041), and the delete left only the last writer's
+  `ChangedBy` (DEC-046 item 1), so after the purge the history could name nobody for an ending, while every
+  other "who" lives in the versioned tables for good. Now the delete first writes `ChangedBy = DEFAULT` (the
+  person ending it) and then deletes, in one transaction: the relationship's last version is that stamp, which
+  lasted no time. The history table keeps it; a CI's history reads it from that table and shows it as who ended
+  the relationship. This reverses DEC-046 item 1's "Never UPDATE `ChangedBy` and then DELETE", whose worry was
+  that version showing up: no `FOR SYSTEM_TIME` read returns a version of no length (measured, item 6), so no
+  "as of" view and no history entry shows a change by the person who ended it (tested). A relationship ended
+  before this has no stamp: its audit entry's actor is shown while that entry is kept, then nobody; the last
+  writer is never shown as the one who ended it (tested). Rejected: A, leaving it to the audit log; B, a table
+  of endings, which the runtime login could rewrite unless it got its own DENY and allow-list entries.
+- **10. The screens (owner, 2026-11-19, AskUserQuestion).** The boards were approved as drawn ("A. Approve as
+  drawn (Recommended)"): Claude Design canvas https://claude.ai/artifact/BKdXWuabswWXgQ98WaNC7b, version
+  `1795092518-f2f7`, copied byte for byte into `docs/design/screens/slice-7/` (its README lists them), with the
+  Notes board's 12 defaults: one As-of control in the top bar, for Search, a CI's page and the Graph explorer (not
+  one per screen, as HANDOFF row 7 had it); on other screens the control is disabled and the moment kept for the
+  browser session; the History tab as a timeline with a detail pane; "Ended since" on a relationship in a past view;
+  disabled actions that stay visible and focusable; and the others listed there. Rejected: B, approving without
+  "Ended since"; C, not yet. Two details the Notes board left open:
+  - *The past-view banner stays amber, Fluent's warning intent, as drawn* ("A. Amber (warning), as drawn
+    (Recommended)"). The design system's "As of" state was drawn grey (info); it changes to match, with the
+    clock-arrow icon, the local-time hint and a 28 px "Return to now". Asked twice: the first time the question
+    called the design system's info banner blue, and the owner chose it ("A. Blue (info), as approved
+    (Recommended)"); info is neutral grey in Fluent v9 and in the design system, so the question was asked again
+    with the right colours. Reason: someone who set a moment and moved on to another screen (the moment is kept)
+    must not take old data for current, and amber is what Goldmark already uses for a Retired CI, which isn't the
+    live record either. Rejected: grey, as the design system had it.
+  - *The search text in the count line takes single quotes in a past view too* ("A. Single ‘erp’ for both
+    (Recommended)"), as slice 5 was approved and built; the board's double quotes came from the handoff.
+    Rejected: double quotes for both, which would have changed the built Search page.
+  - *The dialog's Date is the browser's date field and its Time is typed, 24-hour* ("A. Browser date field, typed
+    time (Recommended)"). The board draws Fluent's DatePicker and TimePicker, noted as "the compat packages the
+    audit log already uses"; they aren't installed (the audit log uses the browser's date-time field), and drawing
+    them would add three 0.x npm packages. So no new package: the Date field shows the browser's calendar and its
+    date format, Time is typed as HH:MM, and the quick choices fill both. Rejected: B, Fluent's pickers as drawn;
+    C, typed fields only, with no calendar.
+- **11. The screens as built (2026-11-20).** Three read-only reviews compared the built screens with the boards,
+  file against file; what differed was changed to match (the control's brand tint while a moment is chosen, the
+  banner as `role="status"` with a 28 px button, the dialog 480 px wide, "That time is in the future." reachable,
+  Search's toolbar and search box kept on "No CIs existed at that time.", the "didn't exist" page's breadcrumb and
+  h1, the History tab's sizes, table and loading state, the Tooltip under its button, the top bar on a phone with the
+  mark alone so the control fits). The browser test also visits the History tab and a past view at 390 px and
+  seven pages at 1100 px, and fails naming whatever makes a page wider than its window. What remains:
+  - *A past Graph explorer keeps the present's full text* (owner, 2026-11-20, AskUserQuestion: "A. Keep the full
+    text (Recommended)"): the status line, the table's caption and the export summary still say ", plus redundancy
+    groups" and "retired CIs left out" before "at that time" and "as of …". The boards' text is shorter; dropping
+    the parts would hide what was counted or left out. Rejected: B, shortening as drawn.
+  - *"Choose another time" is a button on the Graph explorer too* (owner, 2026-11-20, "A. A button, as on Search
+    (Recommended)"): it opens the dialog, and Search's board draws a button; the Graph board draws a link.
+    Rejected: B, a link there.
+  - *Below 1100 px the control's name is its short label, then the whole moment* (owner, 2026-11-20, "A. Short
+    label, then the full moment (Recommended)"): "As of: 06 Oct 14:00 (2026-10-06 14:00 UTC). Choose a point in
+    time". The Notes board's name, the whole moment alone, fails WCAG 2.5.3 where the label is the short one
+    (axe, at 390 px). Rejected: B, showing the whole moment on narrow screens, which may not fit a phone's bar.
+  - *Where the Notes board and a board's markup differ, the Notes board is followed, and where the boards are
+    silent the code's choices are listed*, both in `docs/design/screens/slice-7/README.md` ("As built"), each
+    reversible: the entry opening in place below 1100 px, the 20 px avatars, the shared error bar, rule 10 for
+    the More actions menu and the retired note's Restore, the newest entry selected in a past view; the local
+    hint's date, "Show less", a dependent's group change, the timeline's height, the empty Relationships tab's
+    text, a scroll box as a Tab stop while it scrolls.
+  - *The inline navigation is 260 px wide and never shrinks* (`AppShell.tsx`), as the boards have drawn it since
+    slice 3. It was Fluent's Drawer at 320 px (the `size` given for the items' density also sets the width) and,
+    as a flex item that hides its overflow, free to shrink: it measured 274 px on a CI's page, 150 px on the
+    Graph explorer and nothing on Search, the Relationships tab, the audit log and Users & roles (screenshots and
+    measurements at 1280 px), still in the accessibility tree, so axe and the role queries saw nothing, and out of a pointer's
+    reach. The layout rule was unchanged since slice 3; slice 7's browser test was the first to click the
+    navigation from a page with a table. Two things followed from pages getting their real width at 1280 px: the
+    Users grid's actions cell no longer takes focus itself (Fluent's `focusMode="none"` for a cell holding one
+    button; an open row menu left too little of the cell below uncovered to count as a target; the browser test
+    reaches the button with the arrow keys, opens its menu with Enter and closes it with Escape), and the widest
+    tables scroll sideways in their own boxes where the window leaves them less than they need: the audit log's
+    (1,000 px) by 30 px at 1280 px, and at 1100 px also the Users grid (960 px) and the Relationships tables
+    (900 px), seen in the browser test's screenshots. A box that scrolls is a Tab stop with a name while it does
+    (`ScrollBox`, `web/src/ui/common.tsx`), so the keyboard reaches what is cut off. Whether 1100 px is still the
+    right width for the inline navigation is in the follow-up issue.
+    `expectAccessible` now checks the navigation's width on every screen the browser tests visit. `main` has the
+    same layout rule, so the same fault, until this merges; the fix stays in this PR (owner, 2026-11-20, "A. Keep
+    it in PR #82 (Recommended)"; rejected: B, a separate fix PR first, with a second review and CI cycle).
+  - *Six differences from earlier slices' boards, found by the reviews, go to one issue* (owner, 2026-11-20, "A.
+    One issue, later (Recommended)"): "Copy ID" with its text, the CI toolbar's name, Search's Changed column
+    between 1024 and 1100 px, the export dialog's note without its box, the Relationships tab's empty state, and
+    the 320 px navigation drawer below 1100 px. Rejected: B, fixing them in this PR; C, leaving them.
+- **12. Review round 1 (2026-11-20): nothing of one moment stays on the page of another, and only the database
+  judges the future.** The owner ran Codex's adversarial review on the PR and chose "A. Fix now, count as round 1
+  (Recommended)" for its seven findings (rejected: B, fixing them without counting a round; C, the review's output
+  only). All seven held against the code. Codex's automatic review of the same commits raised four of them again
+  (the CI's late answer, the types of another moment, the browser's clock, Search's rows of another moment); they
+  are answered here, in the same round.
+  - *A change of moment left the other moment's state on the page* (four findings). Back in the present, the
+    past's types stayed until the present's arrived, and Edit opened on them: a save built from the past's
+    attribute list dropped the value of an attribute added since (the save replaces every attribute, DEC-044 item
+    11). The browser's Back into a past view left an open New CI or Edit form in place, still able to write. A CI's
+    page took whichever answer came last, so the present's late answer replaced the past's CI under the past's
+    banner. A past search that failed kept the present's rows under "at that time". Now: a CI's page is one page
+    per moment (`App` puts the moment in its key, as it does the CI's ID); `useCiTypes` gives the types of the
+    moment asked for or none, and drops an answer a newer request overtook; Search keeps its rows, counts and "no
+    CI at all" with the moment they were read for; a form or dialog that writes is never rendered in a past view,
+    and a change of moment closes New CI. Search and the Graph explorer are not started again on a change of
+    moment: that would move the keyboard focus from the As-of control, where the dialog returns it, to the page's
+    heading.
+  - *The browser's clock judged the future*, against item 2: a link to a history entry's moment, opened in a
+    browser whose clock ran behind, showed the present with every action enabled, and the dialog refused a
+    recent time as "in the future". Now the browser checks only how a moment is written. The API's `FutureTime`
+    is the one judgement: the dialog asks it on Apply (the types as of the moment, the lightest read that takes
+    `asOf`) and shows "That time is in the future." from its answer; a page that meets it (a link, or a moment
+    the session kept) shows the present in the same history entry and forgets the moment, in one place
+    (`presentInsteadOfFuture`, called by `api`), and only while the address still shows that moment.
+  - *An attribute older than the definitions' history showed before it was created.* Migration 0007 started the
+    period of every definition that existed when it ran at 1900-01-01: right for the built-in ones, wrong for a
+    custom attribute an Admin had added on slice 5, before 0007. The types as of a moment now count such a row
+    from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`); the built-in attributes stay "always there". It
+    affects only an installation that ran slice 5 with a custom attribute before slice 5b; a merged migration is
+    never edited (DEC-028), so the read carries the rule.
+  - *A CI that didn't exist yet loaded for ever when its present name couldn't be read.* The page now says "This
+    CI didn't exist at that time." with when it was created, as the Graph explorer does.
+  - *Two faults in this round's own changes*, found by the stop-time review before the round closed. Search asked
+    "is there no CI at all?" after it had shown an empty list, so until that answer came, or for good when it
+    failed, the page said "No CIs existed at that time." on the previous answer's word: the rows, the counts and
+    that answer are now read first and shown as one. And an answer to the dialog's Apply that arrived after the
+    browser's Back replaced the moment the person had gone back to. Apply's answer now counts only for the Apply
+    that asked, with the fields as they were, while the dialog is open and the address hasn't moved since
+    (`navigationCount` in `web/src/router.tsx` counts every move, so Back and Forward to the same address count
+    too); otherwise it applies nothing and the dialog stays as it is.
+  - Assumptions, open to veto: on Search, a change of moment shows the loading state until that moment's rows
+    arrive, where the previous rows used to stay (the boards draw no transition); Apply waits for the API's
+    answer before the dialog closes, and when that request fails for another reason the moment is applied and the
+    page shows the failure.
+  - Each fix has a test that failed on the code before it: a second browser test in `web/e2e/history.spec.ts`,
+    in thirteen parts (answers delayed or failed with Playwright's routes, the browser's Back, a page whose
+    clock runs an hour slow, the focus after choosing a moment on Search). Eight failed on the image built before
+    the fixes; two (the dialog on a slow clock, the focus) on a build with those two behaviours put back; three
+    (Search's empty state, the late Apply after Back, and after Back and Forward) on the builds of the round's
+    earlier pushes. An answer that must come late is held back by the test until the moves are done (a gate the
+    test opens), not by a delay a slow machine could outlast; the two parts that gate a CI's late answer and
+    Apply's failed again on a build with those faults put back. `expectAccessible` now repeats its reading of the
+    navigation's width until it settles: just after the window narrows past 1100 px it measured 0 once. And
+    `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
+    gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
+- **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
+  Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
+  them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
+  10; the handoff was `tmp/screen-handoff-slice7.md`, rule 3).

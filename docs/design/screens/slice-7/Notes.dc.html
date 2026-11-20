@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark slice 7 notes: components, details to approve, design system changes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; min-height: 2900px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 28px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">Goldmark · slice 7 · DEC-047 · US-42, US-43, FR-CM-5, FR-IM-4</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">Notes: components, details to approve, design system changes</h1>
+    <p style="margin: 0; max-width: 900px; color: #424242">Slices 3 to 6 are unchanged when no moment is chosen. The Search, CI and Graph pages here are the approved components with an as-of state added; the History tab and the As-of dialog are new.</p>
+  </div>
+
+  <section aria-labelledby="n-approve" style="display: flex; flex-direction: column; gap: 12px">
+    <h2 id="n-approve" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Details these boards settle that the owner hasn’t decided</h2>
+    <p style="margin: 0; color: #424242">Each is drawn as the default. Approving the boards approves these; say which to change.</p>
+    <ol style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px">
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>1. One As-of control, in the top bar.</b><span>It works on Search, a CI’s page and the Graph explorer.</span><span style="color: #424242"><b>Why:</b> the design system already reserves the slot; the moment is one thing that travels between three screens, so one control in one place says so. <b>A control per screen (HANDOFF row 7) would cost:</b> three toolbars to change (Search’s and the Graph’s options bar are already full at 1024, so it would land in the Filters drawer there), three places for the on-state, and a person moving from Search to a CI would have to re-find it. HANDOFF row 7 needs its wording updated if this is approved.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>2. On other screens the control is disabled and the moment is kept.</b><span>It reads “As of: Now” there (the page shows the present) with the Tooltip “This page always shows the present.” Going back to Search, a CI or the Graph by the navigation restores the moment.</span><span style="color: #424242"><b>Why:</b> a person checking the audit log mid-investigation shouldn’t lose their place. <b>Against clearing on leave:</b> simpler to build, but a detour silently drops the past view. The moment is kept for the browser session only; a link without asOf opens the present.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>3. History is a timeline with a detail pane at 1100 and up.</b><span>Below that, one column where an entry expands in place, one open at a time.</span><span style="color: #424242"><b>Why:</b> the diff table needs width, and a pane lets Dana arrow down the list and watch the detail change. <b>Against expanding in place everywhere:</b> one layout to build, but the list jumps as entries open and a four-column diff is cramped inside a 40% column.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>4. “Created” lists every starting value, each as Added.</b><span style="color: #424242"><b>Why:</b> for Ingrid the first version is evidence like any other, and it is the only place a value that never changed appears in the history. Showing only “Created” would be less to read but would send her to “View this CI as of this time” for the same facts.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>5. No filter or search inside a CI’s history.</b><span style="color: #424242"><b>Why:</b> most CIs have tens of changes, day headings and “Show 50 more” are enough, and the filter by source arrives with sources in slices 10 and 11. A busy host (132 changes on esx-mx-014) is where this will be felt first.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>6. Quick choices: 1 hour ago, Yesterday, 7 days ago.</b><span>Each fills the fields; the person still presses Apply. “Yesterday” and “7 days ago” keep the current time of day.</span><span style="color: #424242"><b>Why:</b> they cover “what just changed”, “before last night’s window” and “last week” without typing. Filling rather than applying lets the person adjust the time first.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>7. Minutes, not seconds, in the picker.</b><span>The picker’s moment is the start of that minute. “View this CI as of this time” on a history entry uses the entry’s exact moment, so the address can carry seconds while the top bar and banner show minutes.</span><span style="color: #424242"><b>Why:</b> nobody plans to the second, but two changes in the same minute (the two at 09:12 here) must still be separable from the history.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>8. An ending nobody is on record for.</b><span>Who reads “Unknown” (subtle, no avatar), and the detail carries the note “The audit entry that recorded who ended it is no longer kept.”</span><span style="color: #424242"><b>Why:</b> it states the cause (retention) and doesn’t suggest a fault or a hidden actor.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>9. A subtle badge “Ended since” on a relationship in a past view.</b><span style="color: #424242">Not in the handoff. <b>Why:</b> it is the relationships’ twin of “Deleted since” on an attribute, and stops someone planning against a dependency that is gone. Drop it if a past view should show nothing about the present.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>10. Disabled actions stay visible and focusable.</b><span>Edit, Retire, Restore, New CI, Add relationship and each row’s Edit and Delete keep their place, greyed, aria-disabled, with the one Tooltip on hover and on focus. A role that never had the action still doesn’t see it.</span><span style="color: #424242"><b>Why:</b> the layout doesn’t jump between now and then, and keyboard users can reach the explanation.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>11. The banner’s icon is the clock-arrow, not the warning triangle.</b><span style="color: #424242"><b>Why:</b> it matches the control that put the person there, and nothing is wrong. Intent stays warning (amber), as the handoff says.</span></li>
+      <li style="background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px"><b>12. Small wording choices.</b><span>The short label keeps the year when it isn’t this year (“01 Mar 2019 09:00”). “Nothing existed yet” adds “Nothing had been entered in Goldmark yet.” The “didn’t exist” page adds when the CI was created. A history entry’s relationship keeps the handoff’s present-tense Direction (“This CI depends on esx-mx-011”) under an “Ended” badge.</span></li>
+    </ol>
+  </section>
+
+  <section aria-labelledby="n-check" style="display: flex; flex-direction: column; gap: 10px">
+    <h2 id="n-check" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Three things in the handoff to check</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
+      <li><b>The local-time hint for the history heading.</b> The handoff gives “16:12 your local time” for 09:12 UTC, but “16:00 your local time” for 14:00 UTC. Those are two different offsets. The boards use UTC+2 throughout, so the heading reads “11:12 your local time”.</li>
+      <li><b>The sample CI’s data.</b> Slice 6 drew app-erp-db01 with Cost centre CC-4410 and runs_on esx-mx-014 since 2026-10-02. This slice’s history says Cost centre was deleted on 2026-10-09 and the move to esx-mx-014 was on 2026-10-15, so the CI page here follows the history. Slice 6’s boards aren’t touched.</li>
+      <li><b>Quotation marks in the count line.</b> The approved Search page writes ‘erp’; this handoff writes “erp”. The as-of count line follows this handoff; the present-time line is left as approved, so the two differ until one is chosen.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="n-ds" style="display: flex; flex-direction: column; gap: 10px">
+    <h2 id="n-ds" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Changes to the design system this slice needed</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px">
+      <li><b>States board, “As of”:</b> the design system draws it as an info MessageBar with a 24 px button and no local time. The handoff asks for a warning MessageBar, so the boards use the warning tokens the Retired state already has, a 28 px “Return to now”, the clock-arrow icon and the local-time hint. The States board should be redrawn to match.</li>
+      <li><b>Shell board, the top-bar slot:</b> filled, after the search box and before the theme toggle. The Shell board should replace its empty slot with the three states on the top-bar board here.</li>
+      <li><b>Badge vocabulary:</b> four subtle (tint-subtle) badges join it: “Deleted since”, “Ended since”, “Shown above”, and the diff’s “Added / Removed / Changed” (one style, the word carries the meaning).</li>
+      <li><b>Icon set:</b> one icon per kind of change (created, changed, removed, retired, restored, relationship added, changed, ended) and the clock-arrow. All bundled Fluent icons: AddCircle, Edit, SubtractCircle, Archive, ArrowCounterclockwise, Link, ArrowSwap, LinkDismiss, History.</li>
+      <li><b>No new tokens, colours or components.</b> Disabled buttons use Fluent’s disabled neutrals.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="n-comp" style="display: flex; flex-direction: column; gap: 12px">
+    <h2 id="n-comp" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Fluent v9 components, by board</h2>
+    <div style="overflow-x: auto; background: #ffffff; border: 1px solid #e0e0e0; border-radius: 6px">
+      <table style="width: 100%; border-collapse: collapse">
+        <thead>
+          <tr style="text-align: left">
+            <th scope="col" style="padding: 10px 16px; border-bottom: 1px solid #d1d1d1; width: 250px">Boards</th>
+            <th scope="col" style="padding: 10px 16px; border-bottom: 1px solid #d1d1d1">Components</th>
+            <th scope="col" style="padding: 10px 16px; border-bottom: 1px solid #d1d1d1; width: 380px">Keyboard and screen reader</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">Top bar · As-of control</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">ToggleButton (outline; checked when a moment is chosen) with the History icon; Tooltip; Button disabledFocusable on screens with no past.</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Accessible name always carries the full moment (“As of: 2026-10-06 14:00 UTC. Choose a point in time”), also when the label is shortened. aria-haspopup="dialog".</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">Dialog “Show Goldmark as of”</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Dialog (modal), DialogTitle, DialogContent, DialogActions; Field with DatePicker and TimePicker (compat; typed entry allowed, 24-hour, minute step); Button (primary Apply, secondary Cancel and Return to now; small outline for the quick choices).</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Focus starts in Date and is trapped; Esc cancels; focus returns to the top-bar button. The hint is a polite live region; the error is role="alert" and is the fields’ description.</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">The banner (all three screens)</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">MessageBar intent warning, MessageBarBody, MessageBarActions with a Button “Return to now”; sticky under the top bar.</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">role="status", so the change to a past view is announced once. It wraps; on a phone the button takes its own line.</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">4 · Search · as of</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">As approved (PageHeader, SearchBox, filter panel with Checkbox, DataGrid, Switch, “Load more”). New CI is a primary Button disabledFocusable with Tooltip. The empty state is the shared pattern with two Buttons.</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">The count line stays the polite live region: “1,231 CIs matched “erp” at that time”. Row links keep asOf.</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">5 · CI detail · as of</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">As approved (PageHeader, TypeBadge, lifecycle Badge, Toolbar, TabList, description list, CI link, relationship Tables). Badge (tint, subtle) for “Deleted since” and “Ended since”. Disabled Buttons with Tooltip. The “didn’t exist” state replaces the page body and keeps the banner and breadcrumb.</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Disabled actions stay in the tab order (aria-disabled) and are described by the Tooltip. Links to other CIs and View in graph keep asOf.</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0; text-align: left">5 · History tab</th><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Tab “History” in the page’s TabList. Timeline: a list of Buttons under day headings, each with a kind icon, Persona-style Avatar (size 20) and a Tooltip on the time. Detail: Card with a heading, a Button “View this CI as of this time”, Table (Field, Change, Before, After) with Badge, the CI link with TypeIcon, Link “Show all”; a description list for relationships; MessageBar intent info for the retention note. Skeleton while loading; the shared MessageBar with Retry and Reference ID on error; Button with Spinner for “Show 50 more”. Below 1100: Accordion, one panel open.</td><td style="padding: 10px 16px; border-bottom: 1px solid #e0e0e0">Up and Down move between entries, Enter or Space selects (aria-current on the selected one; aria-expanded in the accordion). The detail is a region labelled by its heading and announced politely. The diff is a real table with column headers and row headers; Before is struck through and “Added / Removed / Changed” is text. An empty Before or After reads “No value”.</td></tr>
+          <tr style="vertical-align: top"><th scope="row" style="padding: 10px 16px; text-align: left">6 · Graph explorer · as of</th><td style="padding: 10px 16px">As approved (options bar with Combobox, Slider, RadioGroup, Dropdown, Switch, ToggleButton pair; Cytoscape canvas; Table view; Card for the selection; Dialog for Export CSV). The Dialog’s MessageBar names the moment.</td><td style="padding: 10px 16px">The summary line stays the polite live region and gains “at that time”. The table view is the graph’s equivalent, at the same moment.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="n-not" style="display: flex; flex-direction: column; gap: 10px">
+    <h2 id="n-not" style="margin: 0; font-size: 20px; line-height: 28px; font-weight: 600">Not drawn, on purpose</h2>
+    <p style="margin: 0; max-width: 1000px; color: #424242">Impact “as of” (slice 19); source badges on values and a history filter by source (slices 10 and 11); the estate-wide change history, screen 15 (slice 23); a filter or search inside a CI’s history; comparing two moments; restoring an old version; the Components, Identifiers and Impact tabs; saved filters, the column chooser and Search’s CSV export (slice 20). Also not drawn but covered by a rule above: Restore disabled on a CI that was retired at the chosen moment (same treatment as Edit), and the More actions menu at 1024 with its disabled items.</p>
+  </section>
+  <div style="font-size: 12px; line-height: 16px; color: #616161">Sample data (fictional), *.corp.example.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

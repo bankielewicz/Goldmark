@@ -1,6 +1,5 @@
 using System.Globalization;
 using Goldmark.Api.Audit;
-using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
@@ -61,10 +60,17 @@ internal static class RelationshipEndpoints
 
     /// <summary>
     /// The tab's sections: without <c>direction</c> the first page of both, each with its total; with <c>direction</c>
-    /// (<c>dependencies</c> or <c>dependents</c>) one page of that section, after <c>cursor</c>.
+    /// (<c>dependencies</c> or <c>dependents</c>) one page of that section, after <c>cursor</c>. With <c>asOf</c>, the
+    /// relationships in force at that moment (US-42, FR-IM-4), ended since or not, between the CIs as they were then.
     /// </summary>
     private static async Task<IResult> ListAsync(Guid id, HttpContext context, CiStore cis, RelationshipStore store)
     {
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
         var query = context.Request.Query;
         var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var direction = query["direction"].ToString();
@@ -81,7 +87,7 @@ internal static class RelationshipEndpoints
         }
 
         RelationshipCursor? after = null;
-        if (query["cursor"].ToString() is { Length: > 0 } c && (direction.Length == 0 || (after = RelationshipCursor.Decode(c, direction)) is null))
+        if (query["cursor"].ToString() is { Length: > 0 } c && (direction.Length == 0 || (after = RelationshipCursor.Decode(c, direction, asOf)) is null))
         {
             errors["cursor"] = ["InvalidCursor"];
         }
@@ -96,21 +102,27 @@ internal static class RelationshipEndpoints
             return CiNotFound();
         }
 
+        if (asOf is not null && await cis.FindAsync(id, asOf) is null && await AsOf.NotThenAsync(cis, id, asOf) is { } notThen)
+        {
+            return notThen;
+        }
+
         return direction.Length > 0
-            ? Results.Ok(await store.SectionAsync(id, direction, limit, after))
+            ? Results.Ok(await store.SectionAsync(id, direction, limit, after, asOf))
             : Results.Ok(new
             {
-                dependencies = await store.SectionAsync(id, RelationshipDirections.Dependencies, limit, null),
-                dependents = await store.SectionAsync(id, RelationshipDirections.Dependents, limit, null),
+                dependencies = await store.SectionAsync(id, RelationshipDirections.Dependencies, limit, null, asOf),
+                dependents = await store.SectionAsync(id, RelationshipDirections.Dependents, limit, null, asOf),
             });
     }
 
-    /// <summary>The panel's suggestions: the groups on the CI's relationships as the dependent (DEC-046 item 2).</summary>
-    private static async Task<IResult> GroupsAsync(Guid id, CiStore cis, RelationshipStore store) =>
-        await cis.TypeIdAsync(id) is null ? CiNotFound() : Results.Ok(new { groups = await store.GroupsAsync(id) });
+    /// <summary>The panel's suggestions: the groups on the CI's relationships as the dependent (DEC-046 item 2). They are for adding, so there is no past.</summary>
+    private static async Task<IResult> GroupsAsync(Guid id, HttpContext context, CiStore cis, RelationshipStore store) =>
+        AsOf.RefuseIfAsked(context) ?? (await cis.TypeIdAsync(id) is null ? CiNotFound() : Results.Ok(new { groups = await store.GroupsAsync(id) }));
 
+    // One relationship is read to change or delete it, so there is no past: a CI's relationships take asOf.
     private static async Task<IResult> GetAsync(Guid id, HttpContext context, RelationshipStore store) =>
-        await store.FindAsync(id) is { } relationship ? Detail(context, relationship) : NotFound();
+        AsOf.RefuseIfAsked(context) ?? (await store.FindAsync(id) is { } relationship ? Detail(context, relationship) : NotFound());
 
     private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, CiTypeCatalog catalog, CiStore cis,
         RelationshipStore store, DbSession db, AuditTrail audit)
@@ -142,7 +154,6 @@ internal static class RelationshipEndpoints
             return CiEndpoints.Fields(errors);
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await CiEndpoints.RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -194,7 +205,7 @@ internal static class RelationshipEndpoints
                 }
 
                 var id = Guid.CreateVersion7();
-                await store.InsertAsync(id, from.Value, to.Value, locked.Id, group, editor);
+                await store.InsertAsync(id, from.Value, to.Value, locked.Id, group);
                 var added = (await store.FindAsync(id))!;
                 await audit.WriteAsync(AuditActions.RelationshipAdded, RelationshipTarget, id, Recorded(added));
                 context.Response.Headers.ETag = CiEndpoints.Quote(added.ETag);
@@ -222,7 +233,6 @@ internal static class RelationshipEndpoints
             return ApiProblems.Field("redundancyGroup", groupError);
         }
 
-        var editor = context.User.UserId()!.Value;
         try
         {
             return await CiEndpoints.RetryOnDeadlockAsync(() => db.InTransactionAsync(async () =>
@@ -240,7 +250,7 @@ internal static class RelationshipEndpoints
                 // The text is stored as typed, so a change of case is a change.
                 if (!string.Equals(group, row.RedundancyGroup, StringComparison.Ordinal))
                 {
-                    await store.UpdateAsync(id, group, editor);
+                    await store.UpdateAsync(id, group);
                     await audit.WriteAsync(AuditActions.RelationshipChanged, RelationshipTarget, id, new
                     {
                         type = row.Type,

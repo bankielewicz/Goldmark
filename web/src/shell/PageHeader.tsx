@@ -35,6 +35,28 @@ export interface Crumb {
   path?: string;
 }
 
+/** The breadcrumb alone, for a page whose h1 isn't the header's (a CI that didn't exist yet at the moment shown). */
+export function PageCrumbs({ crumbs }: { crumbs: Crumb[] }) {
+  return (
+    <Breadcrumb aria-label="Breadcrumb">
+      {crumbs.map((crumb, index) => (
+        <Fragment key={crumb.label}>
+          {index > 0 ? <BreadcrumbDivider /> : null}
+          <BreadcrumbItem>
+            {crumb.path ? (
+              <BreadcrumbButton href={crumb.path} onClick={(event) => followLink(event, crumb.path ?? '/')}>
+                {crumb.label}
+              </BreadcrumbButton>
+            ) : (
+              <BreadcrumbButton current={index === crumbs.length - 1}>{crumb.label}</BreadcrumbButton>
+            )}
+          </BreadcrumbItem>
+        </Fragment>
+      ))}
+    </Breadcrumb>
+  );
+}
+
 /** Breadcrumb, h1 (focused when the page opens, so the change is announced), badges beside it and the page's actions. */
 export function PageHeader({
   crumbs,
@@ -56,22 +78,7 @@ export function PageHeader({
   }, [title]);
   return (
     <>
-      <Breadcrumb aria-label="Breadcrumb">
-        {crumbs.map((crumb, index) => (
-          <Fragment key={crumb.label}>
-            {index > 0 ? <BreadcrumbDivider /> : null}
-            <BreadcrumbItem>
-              {crumb.path ? (
-                <BreadcrumbButton href={crumb.path} onClick={(event) => followLink(event, crumb.path ?? '/')}>
-                  {crumb.label}
-                </BreadcrumbButton>
-              ) : (
-                <BreadcrumbButton current={index === crumbs.length - 1}>{crumb.label}</BreadcrumbButton>
-              )}
-            </BreadcrumbItem>
-          </Fragment>
-        ))}
-      </Breadcrumb>
+      <PageCrumbs crumbs={crumbs} />
       <div className={styles.top}>
         <div className={styles.titleGroup}>
           <h1 ref={heading} tabIndex={-1} className={mergeClasses(styles.title, titleClassName)}>

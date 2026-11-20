@@ -1,0 +1,420 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-11-18T12:00:00Z"
+ },
+ "title": "Goldmark slice 7: point-in-time view and change history",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "TopBarStates.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 1000,
+   "title": "Top bar · the As-of control: Now, a moment chosen, disabled with its Tooltip; dark; 1024 and phone"
+  },
+  "DialogStates.dc.html": {
+   "x": 1520,
+   "y": 0,
+   "w": 1440,
+   "h": 1560,
+   "title": "Dialog “Show Goldmark as of” · empty, typed, reopened, each error (light); dark"
+  },
+  "SearchAsOfDialog.dc.html": {
+   "x": 3040,
+   "y": 0,
+   "w": 1440,
+   "h": 900,
+   "title": "Dialog in place · light · reopened with a moment chosen, over Search"
+  },
+  "SearchAsOf.dc.html": {
+   "x": 0,
+   "y": 2100,
+   "w": 1440,
+   "h": 900,
+   "title": "4 · Search · as of · light · “erp” at 2026-10-06 14:00 UTC, as an Editor"
+  },
+  "SearchAsOfDark.dc.html": {
+   "x": 1520,
+   "y": 2100,
+   "w": 1440,
+   "h": 900,
+   "title": "4 · Search · as of · dark"
+  },
+  "SearchAsOfTip.dc.html": {
+   "x": 3040,
+   "y": 2100,
+   "w": 1440,
+   "h": 900,
+   "title": "4 · Search · as of · light · New CI disabled, its Tooltip on focus"
+  },
+  "SearchNothing.dc.html": {
+   "x": 4560,
+   "y": 2100,
+   "w": 1440,
+   "h": 900,
+   "title": "4 · Search · as of · light · nothing existed yet (2019-03-01)"
+  },
+  "SearchAsOf1024.dc.html": {
+   "x": 6080,
+   "y": 2100,
+   "w": 1024,
+   "h": 768,
+   "title": "4 · Search · as of · 1024 · light"
+  },
+  "SearchAsOfPhone.dc.html": {
+   "x": 7184,
+   "y": 2100,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Search · as of · phone · light · Return to now on its own line"
+  },
+  "CiAsOf.dc.html": {
+   "x": 0,
+   "y": 3500,
+   "w": 1440,
+   "h": 900,
+   "title": "5 · CI detail · as of · light · Attributes, Cost centre “Deleted since”, Edit disabled with its Tooltip"
+  },
+  "CiAsOfDark.dc.html": {
+   "x": 1520,
+   "y": 3500,
+   "w": 1440,
+   "h": 900,
+   "title": "5 · CI detail · as of · dark · Attributes"
+  },
+  "CiAsOfRels.dc.html": {
+   "x": 3040,
+   "y": 3500,
+   "w": 1440,
+   "h": 900,
+   "title": "5 · CI detail · as of · light · Relationships, runs_on esx-mx-011 ended since"
+  },
+  "CiNotYet.dc.html": {
+   "x": 4560,
+   "y": 3500,
+   "w": 1440,
+   "h": 900,
+   "title": "5 · CI detail · as of · light · app-erp-db02 didn’t exist yet"
+  },
+  "CiAsOfPhone.dc.html": {
+   "x": 6080,
+   "y": 3500,
+   "w": 390,
+   "h": 1100,
+   "title": "5 · CI detail · as of · phone · light"
+  },
+  "CiAsOfHistory.dc.html": {
+   "x": 6550,
+   "y": 3500,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · CI detail · as of · light · History marks the entry “Shown above”"
+  },
+  "Main.dc.html": {
+   "x": 0,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · a CI change selected, its diff table (also the page’s TabList: Attributes, Relationships 7, History)"
+  },
+  "HistDark.dc.html": {
+   "x": 1520,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · dark · a CI change selected"
+  },
+  "HistNewest.dc.html": {
+   "x": 3040,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · as the tab opens: the newest entry selected"
+  },
+  "HistRel.dc.html": {
+   "x": 4560,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · “Added relationship” selected"
+  },
+  "HistGroup.dc.html": {
+   "x": 6080,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · redundancy group changed, Before and After"
+  },
+  "HistUnknown.dc.html": {
+   "x": 7600,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · “Ended relationship” by Unknown, with its note"
+  },
+  "HistAttrDel.dc.html": {
+   "x": 9120,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · “Removed Cost centre (attribute deleted)”"
+  },
+  "HistRetired.dc.html": {
+   "x": 10640,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · “Retired”: a sentence, no table"
+  },
+  "HistCreated.dc.html": {
+   "x": 12160,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · “Created” lists every starting value, long text with Show all"
+  },
+  "HistLoading.dc.html": {
+   "x": 13680,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · loading"
+  },
+  "HistError.dc.html": {
+   "x": 15200,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · error"
+  },
+  "HistMore.dc.html": {
+   "x": 16720,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · esx-mx-014, scrolled to the end of the first 50: Show 50 more"
+  },
+  "HistMoreLoading.dc.html": {
+   "x": 18240,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · Show 50 more, loading"
+  },
+  "HistMoreError.dc.html": {
+   "x": 19760,
+   "y": 5100,
+   "w": 1440,
+   "h": 1100,
+   "title": "5 · History tab · light · Show 50 more failed: the entries stay"
+  },
+  "Hist1024.dc.html": {
+   "x": 21280,
+   "y": 5100,
+   "w": 1024,
+   "h": 1500,
+   "title": "5 · History tab · 1024 · light · one column, one entry expanded"
+  },
+  "HistPhone.dc.html": {
+   "x": 22384,
+   "y": 5100,
+   "w": 390,
+   "h": 1900,
+   "title": "5 · History tab · phone · light · one entry expanded"
+  },
+  "GraphAsOf.dc.html": {
+   "x": 0,
+   "y": 7500,
+   "w": 1440,
+   "h": 1060,
+   "title": "6 · Graph explorer · as of · light · 3 hops from app-erp-db01 at that time"
+  },
+  "GraphAsOfDark.dc.html": {
+   "x": 1520,
+   "y": 7500,
+   "w": 1440,
+   "h": 1060,
+   "title": "6 · Graph explorer · as of · dark"
+  },
+  "GraphAsOfTable.dc.html": {
+   "x": 3040,
+   "y": 7500,
+   "w": 1440,
+   "h": 1060,
+   "title": "6 · Graph explorer · as of · light · table view, the same relationships"
+  },
+  "GraphNotYet.dc.html": {
+   "x": 4560,
+   "y": 7500,
+   "w": 1440,
+   "h": 1060,
+   "title": "6 · Graph explorer · as of · light · the focus CI didn’t exist yet"
+  },
+  "GraphAsOfExport.dc.html": {
+   "x": 6080,
+   "y": 7500,
+   "w": 1440,
+   "h": 1060,
+   "title": "6 · Graph explorer · as of · light · Export CSV… says which moment"
+  },
+  "Notes.dc.html": {
+   "x": 0,
+   "y": 9060,
+   "w": 1440,
+   "h": 2900,
+   "title": "Notes · details to approve, design system changes, components"
+  },
+  "TopBar.dc.html": {
+   "x": 0,
+   "y": 12460,
+   "w": 1440,
+   "h": 48,
+   "title": "Component · top bar with the As-of control"
+  },
+  "Nav.dc.html": {
+   "x": 1520,
+   "y": 12460,
+   "w": 260,
+   "h": 852,
+   "title": "Component · navigation (as approved)"
+  },
+  "AsOfDialog.dc.html": {
+   "x": 1860,
+   "y": 12460,
+   "w": 480,
+   "h": 400,
+   "title": "Component · dialog “Show Goldmark as of”"
+  },
+  "HistoryTab.dc.html": {
+   "x": 2420,
+   "y": 12460,
+   "w": 1084,
+   "h": 780,
+   "title": "Component · History tab: timeline and detail"
+  },
+  "SearchPage.dc.html": {
+   "x": 3584,
+   "y": 12460,
+   "w": 1440,
+   "h": 900,
+   "title": "Component · Search page (approved, plus the as-of state)"
+  },
+  "CiPage.dc.html": {
+   "x": 5104,
+   "y": 12460,
+   "w": 1440,
+   "h": 900,
+   "title": "Component · CI detail page (approved, plus History and the as-of state)"
+  },
+  "GraphPage.dc.html": {
+   "x": 6624,
+   "y": 12460,
+   "w": 1440,
+   "h": 1000,
+   "title": "Component · Graph explorer page (approved, plus the as-of state)"
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "TopBarStates.dc.html",
+  "DialogStates.dc.html",
+  "SearchAsOfDialog.dc.html",
+  "SearchAsOf.dc.html",
+  "SearchAsOfDark.dc.html",
+  "SearchAsOfTip.dc.html",
+  "SearchNothing.dc.html",
+  "SearchAsOf1024.dc.html",
+  "SearchAsOfPhone.dc.html",
+  "CiAsOf.dc.html",
+  "CiAsOfDark.dc.html",
+  "CiAsOfRels.dc.html",
+  "CiNotYet.dc.html",
+  "CiAsOfPhone.dc.html",
+  "CiAsOfHistory.dc.html",
+  "HistDark.dc.html",
+  "HistNewest.dc.html",
+  "HistRel.dc.html",
+  "HistGroup.dc.html",
+  "HistUnknown.dc.html",
+  "HistAttrDel.dc.html",
+  "HistRetired.dc.html",
+  "HistCreated.dc.html",
+  "HistLoading.dc.html",
+  "HistError.dc.html",
+  "HistMore.dc.html",
+  "HistMoreLoading.dc.html",
+  "HistMoreError.dc.html",
+  "Hist1024.dc.html",
+  "HistPhone.dc.html",
+  "GraphAsOf.dc.html",
+  "GraphAsOfDark.dc.html",
+  "GraphAsOfTable.dc.html",
+  "GraphNotYet.dc.html",
+  "GraphAsOfExport.dc.html",
+  "Notes.dc.html",
+  "TopBar.dc.html",
+  "Nav.dc.html",
+  "AsOfDialog.dc.html",
+  "HistoryTab.dc.html",
+  "SearchPage.dc.html",
+  "CiPage.dc.html",
+  "GraphPage.dc.html"
+ ],
+ "notes": {
+  "rowShell": {
+   "x": 0,
+   "y": -280,
+   "text": "App shell · the As-of control and its dialog",
+   "kind": "title1",
+   "maxW": 4480
+  },
+  "rowSearch": {
+   "x": 0,
+   "y": 1820,
+   "text": "Screen 4 · Search · as of",
+   "kind": "title1",
+   "maxW": 7574
+  },
+  "rowCi": {
+   "x": 0,
+   "y": 3220,
+   "text": "Screen 5 · CI detail · as of",
+   "kind": "title1",
+   "maxW": 7990
+  },
+  "rowHist": {
+   "x": 0,
+   "y": 4820,
+   "text": "Screen 5 · CI detail · the History tab (US-43)",
+   "kind": "title1",
+   "maxW": 22774
+  },
+  "rowGraph": {
+   "x": 0,
+   "y": 7220,
+   "text": "Screen 6 · Graph explorer · as of",
+   "kind": "title1",
+   "maxW": 7520
+  },
+  "rowNotes": {
+   "x": 0,
+   "y": 8780,
+   "text": "Details to approve and design system changes",
+   "kind": "title1",
+   "maxW": 1440
+  },
+  "rowParts": {
+   "x": 0,
+   "y": 12180,
+   "text": "Components the boards are built from",
+   "kind": "title1",
+   "maxW": 8064
+  }
+ },
+ "designSystems": []
+}

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark top bar: the As-of control in each state</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">App shell · fills the design system’s “As of · slice 7” slot</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">The As-of control in the top bar</h1>
+    <p style="margin: 0; color: #424242">Fluent v9 ToggleButton (appearance outline; checked = brand tint and the moment in its text) opening a Dialog. Disabled it is a Button with disabledFocusable, so the Tooltip is reachable by keyboard.</p>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · 1440 · “As of: Now” (Search, a CI’s page, Graph explorer)</div>
+    <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{1326}}" asof="now" hint-size="1326px,48px"></dc-import></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · 1440 · a moment chosen: brand tint, brand border, and the text names the moment</div>
+    <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{1326}}" asof="on" hint-size="1326px,48px"></dc-import></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px; padding-bottom: 28px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · 1440 · a screen with no past (Dashboard, Audit log, Users &amp; roles, Types &amp; attributes, the account pages): disabled, Tooltip on focus or hover</div>
+    <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{1326}}" asof="disabled" tip="{{true}}" hint-size="1326px,48px"></dc-import></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Dark · 1440 · “As of: Now”</div>
+    <div style="border: 1px solid #525252"><dc-import name="TopBar" dark="{{true}}" width="{{1326}}" asof="now" hint-size="1326px,48px"></dc-import></div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Dark · 1440 · a moment chosen</div>
+    <div style="border: 1px solid #525252"><dc-import name="TopBar" dark="{{true}}" width="{{1326}}" asof="on" hint-size="1326px,48px"></dc-import></div>
+  </div>
+
+  <div style="display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">1024 (rail) · “Now”</div>
+      <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{640}}" search="icon" asof="now" hint-size="640px,48px"></dc-import></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">1024 (rail) · “06 Oct 14:00” (the accessible name keeps the full moment)</div>
+      <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{640}}" search="icon" asof="on" hint-size="640px,48px"></dc-import></div>
+    </div>
+  </div>
+  <div style="display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Phone · “Now”</div>
+      <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{390}}" search="icon" asof="now" hint-size="390px,48px"></dc-import></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Phone · “06 Oct 14:00”</div>
+      <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{390}}" search="icon" asof="on" hint-size="390px,48px"></dc-import></div>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Phone · a moment in another year keeps its year</div>
+      <div style="border: 1px solid #e0e0e0"><dc-import name="TopBar" width="{{390}}" search="icon" asof="early" hint-size="390px,48px"></dc-import></div>
+    </div>
+  </div>
+  <div style="font-size: 12px; line-height: 16px; color: #616161">Sample data (fictional). Times are UTC; the local hint assumes a viewer at UTC+2.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

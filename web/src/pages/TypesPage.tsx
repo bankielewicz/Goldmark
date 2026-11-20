@@ -61,7 +61,7 @@ import { followLink, navigate, useLocation } from '../router';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
 import { comboboxExpandIcon } from '../ui/combobox';
-import { ErrorBar, Notice } from '../ui/common';
+import { ErrorBar, Notice, ScrollBox } from '../ui/common';
 import {
   asApiError,
   categories,
@@ -833,7 +833,7 @@ function TypeDetails({
           <Button onClick={onAddAttribute}>Add attribute</Button>
         </div>
       ) : (
-        <div className={styles.tableWrap}>
+        <ScrollBox className={styles.tableWrap} label={`Attributes of ${type.name}, as a table`}>
           <Table aria-label={`Attributes of ${type.name}`} sortable className={styles.table}>
             <TableHeader>
               <TableRow>
@@ -883,7 +883,7 @@ function TypeDetails({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </ScrollBox>
       )}
     </>
   );
@@ -1012,7 +1012,7 @@ function RelationshipTypes({
       {catalog === null ? (
         <DetailSkeleton />
       ) : (
-        <div className={styles.tableWrap}>
+        <ScrollBox className={styles.tableWrap} label="Relationship types, as a table">
           <Table aria-label="Relationship types" className={styles.relTable}>
             <TableHeader>
               <TableRow>
@@ -1081,7 +1081,7 @@ function RelationshipTypes({
               })}
             </TableBody>
           </Table>
-        </div>
+        </ScrollBox>
       )}
     </>
   );

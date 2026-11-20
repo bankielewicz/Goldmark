@@ -3,13 +3,15 @@
 Add-ons and other tools can link into Goldmark's screens. These addresses are a public contract,
 version 1: a later release only adds to them (new parameters, new tab values, new pages), and an
 address that works now keeps working (US-54's rule for `/api/v1`, applied to the web app's addresses).
-Slice 5 (DEC-044) ships the first two, slice 6 (DEC-046) the CI page's Relationships tab and the graph explorer;
-the rest of US-53 follows in the slices named below.
+Slice 5 (DEC-044) ships the first two, slice 6 (DEC-046) the CI page's Relationships tab and the graph explorer,
+slice 7 (DEC-047) the History tab and `asOf` on the three screens below; the rest of US-53 follows in the slices
+named below.
 
 | Address | Opens | Since |
 |---|---|---|
 | `/ci/{id}` | The CI's page (screen 5) | slice 5 |
-| `/ci/{id}?tab={tab}` | The CI's page on that tab | slice 5 (`attributes`), slice 6 (`relationships`) |
+| `/ci/{id}?tab={tab}` | The CI's page on that tab | slice 5 (`attributes`), slice 6 (`relationships`), slice 7 (`history`) |
+| `…&asOf={moment}` on `/ci/{id}`, `/search` and `/graph` | That page as it was at the moment, read-only | slice 7 |
 | `/search?q={text}` | Search (screen 4) with CIs whose name contains the text | slice 5 |
 | `/graph?ci={id}` | The graph explorer (screen 6) around the CI | slice 6 |
 | `/impact?ci={id}[&ci={id}…]` | Impact analysis for those CIs (screen 7) | slice 19 |
@@ -17,10 +19,21 @@ the rest of US-53 follows in the slices named below.
 `{id}` is the CI's ID as the API returns it (`/api/v1/cis/{id}`): a UUID such as
 `0192f3a4-7c1e-7d40-9a51-2b7e0c9d1f20`. It never changes, whatever happens to the CI's name.
 
+## `asOf`: a past moment
+
+`/ci/{id}`, `/search` and `/graph` take `asOf`, a moment in UTC with a `Z`: `2026-10-06T14:00Z`, with seconds, or
+with up to seven decimals (a history entry's own moment). The page then shows what Goldmark recorded at that
+moment (US-42, DEC-047): the CIs, their names, types, states and values, the relationships in force, read-only under
+a banner with "Return to now". A link from such a page to another of the three keeps the moment. A moment that isn't
+one of these forms is ignored, and the page shows the present. So is one in the future, which Goldmark's database
+judges by its own clock, not the browser's: the page then shows the present and `asOf` leaves the address. A CI that
+didn't exist yet at the moment opens a page that says when it was created.
+
 ## `/ci/{id}`
 
 - `tab` is one of the CI page's tabs. Slice 5 has `attributes` (the default); slice 6 adds
-  `relationships` (what the CI depends on and what depends on it), slice 7 `history`, slice 10 `identifiers` and slice 19 `impact`. A value the page
+  `relationships` (what the CI depends on and what depends on it), slice 7 `history` (the CI's changes, with who
+  made each and what differed), slice 10 `identifiers` and slice 19 `impact`. A value the page
   doesn't know shows the Attributes tab and the address is corrected, so a link made for a later release
   still opens the CI.
 - An ID no CI has, and text that isn't an ID, open a friendly "We can't find that CI" page with a search
