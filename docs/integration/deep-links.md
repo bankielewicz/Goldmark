@@ -25,8 +25,9 @@ named below.
 with up to seven decimals (a history entry's own moment). The page then shows what Goldmark recorded at that
 moment (US-42, DEC-047): the CIs, their names, types, states and values, the relationships in force, read-only under
 a banner with "Return to now". A link from such a page to another of the three keeps the moment. A moment that isn't
-one of these forms, or is in the future, is ignored, and the page shows the present. A CI that didn't exist yet at
-the moment opens a page that says when it was created.
+one of these forms is ignored, and the page shows the present. So is one in the future, which Goldmark's database
+judges by its own clock, not the browser's: the page then shows the present and `asOf` leaves the address. A CI that
+didn't exist yet at the moment opens a page that says when it was created.
 
 ## `/ci/{id}`
 

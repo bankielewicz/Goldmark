@@ -109,6 +109,12 @@ Where the boards are silent, the code does this (assumptions, DEC-047 item 11):
 - A past view's Relationships tab with nothing in it reads "X had no relationships at that time."
 - A table wider than its place scrolls sideways in its own box, and the box is a Tab stop with a name while it
   scrolls (the History diff on a phone; the Relationships and Types tables on a narrow window).
+- On Search, a change of moment shows the loading state until that moment's rows arrive; rows of another moment
+  are never shown under the new one, even when the new request fails (DEC-047 item 12).
+- The dialog's Apply asks the API whether the moment is in the future and waits for its answer; "That time is in
+  the future." comes from the database's clock, not the browser's.
+- A CI that didn't exist yet, when its present name can't be read: "This CI didn't exist at that time.", with no
+  type badge and the breadcrumb "Search > CI".
 
 ## What the API gives for them
 

@@ -169,6 +169,13 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   amber banner on Search, a CI's page and the Graph explorer in a past view, every change disabled there with one
   Tooltip, and the CI page's History tab (`web/src/ui/HistoryTab.tsx`); `web/e2e/history.spec.ts` covers them with axe
   in both themes; `docs/integration/deep-links.md` has `tab=history` and `asOf`.
+- **One moment per page (DEC-047 item 12, review round 1).** Nothing read for one moment may show under another: a
+  CI's page has the moment in its key (`App.tsx`), `useCiTypes(asOf)` answers for the moment asked or with null,
+  Search keeps its rows with the moment they were read for, and a form or dialog that writes is rendered only when
+  `asOf` is null. A new page or hook that takes `asOf` follows one of these. Whether a moment is in the future is
+  the API's to say (`FutureTime`), never `Date.now()`: `api()` turns that refusal into "show the present"
+  (`presentInsteadOfFuture`), and the dialog asks the API on Apply. The types as of a moment count a custom
+  attribute that predates migration 0007 from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`).
 
 - **Design system:** slice 7's changes (the "As of" state amber, the Shell's As-of control, four badges, nine
   icons) are in `docs/design/system/` and on its canvas (version `1795124389-026c`).

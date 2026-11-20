@@ -2625,6 +2625,46 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     One issue, later (Recommended)"): "Copy ID" with its text, the CI toolbar's name, Search's Changed column
     between 1024 and 1100 px, the export dialog's note without its box, the Relationships tab's empty state, and
     the 320 px navigation drawer below 1100 px. Rejected: B, fixing them in this PR; C, leaving them.
+- **12. Review round 1 (2026-11-20): nothing of one moment stays on the page of another, and only the database
+  judges the future.** The owner ran Codex's adversarial review on the PR and chose "A. Fix now, count as round 1
+  (Recommended)" for its seven findings (rejected: B, fixing them without counting a round; C, the review's output
+  only). All seven held against the code.
+  - *A change of moment left the other moment's state on the page* (four findings). Back in the present, the
+    past's types stayed until the present's arrived, and Edit opened on them: a save built from the past's
+    attribute list dropped the value of an attribute added since (the save replaces every attribute, DEC-044 item
+    11). The browser's Back into a past view left an open New CI or Edit form in place, still able to write. A CI's
+    page took whichever answer came last, so the present's late answer replaced the past's CI under the past's
+    banner. A past search that failed kept the present's rows under "at that time". Now: a CI's page is one page
+    per moment (`App` puts the moment in its key, as it does the CI's ID); `useCiTypes` gives the types of the
+    moment asked for or none, and drops an answer a newer request overtook; Search keeps its rows, counts and "no
+    CI at all" with the moment they were read for; a form or dialog that writes is never rendered in a past view,
+    and a change of moment closes New CI. Search and the Graph explorer are not started again on a change of
+    moment: that would move the keyboard focus from the As-of control, where the dialog returns it, to the page's
+    heading.
+  - *The browser's clock judged the future*, against item 2: a link to a history entry's moment, opened in a
+    browser whose clock ran behind, showed the present with every action enabled, and the dialog refused a
+    recent time as "in the future". Now the browser checks only how a moment is written. The API's `FutureTime`
+    is the one judgement: the dialog asks it on Apply (the types as of the moment, the lightest read that takes
+    `asOf`) and shows "That time is in the future." from its answer; a page that meets it (a link, or a moment
+    the session kept) shows the present in the same history entry and forgets the moment, in one place
+    (`presentInsteadOfFuture`, called by `api`), and only while the address still shows that moment.
+  - *An attribute older than the definitions' history showed before it was created.* Migration 0007 started the
+    period of every definition that existed when it ran at 1900-01-01: right for the built-in ones, wrong for a
+    custom attribute an Admin had added on slice 5, before 0007. The types as of a moment now count such a row
+    from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`); the built-in attributes stay "always there". It
+    affects only an installation that ran slice 5 with a custom attribute before slice 5b; a merged migration is
+    never edited (DEC-028), so the read carries the rule.
+  - *A CI that didn't exist yet loaded for ever when its present name couldn't be read.* The page now says "This
+    CI didn't exist at that time." with when it was created, as the Graph explorer does.
+  - Assumptions, open to veto: on Search, a change of moment shows the loading state until that moment's rows
+    arrive, where the previous rows used to stay (the boards draw no transition); Apply waits for the API's
+    answer before the dialog closes, and when that request fails for another reason the moment is applied and the
+    page shows the failure.
+  - Each fix has a test that failed on the code before it: eight parts of a second browser test in
+    `web/e2e/history.spec.ts` (answers delayed or failed with Playwright's routes, the browser's Back, a page
+    whose clock runs an hour slow), all eight failing on the image built before the fixes, and
+    `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
+    gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
