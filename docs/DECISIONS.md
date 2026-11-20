@@ -2611,7 +2611,8 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     reach. The layout rule was unchanged since slice 3; slice 7's browser test was the first to click the
     navigation from a page with a table. Two things followed from pages getting their real width at 1280 px: the
     Users grid's actions cell no longer takes focus itself (Fluent's `focusMode="none"` for a cell holding one
-    button; an open row menu left too little of the cell below uncovered to count as a target), and the widest
+    button; an open row menu left too little of the cell below uncovered to count as a target; the browser test
+    reaches the button with the arrow keys, opens its menu with Enter and closes it with Escape), and the widest
     tables scroll sideways in their own boxes where the window leaves them less than they need: the audit log's
     (1,000 px) by 30 px at 1280 px, and at 1100 px also the Users grid (960 px) and the Relationships tables
     (900 px), seen in the browser test's screenshots. A box that scrolls is a Tab stop with a name while it does

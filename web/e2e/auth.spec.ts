@@ -312,7 +312,32 @@ test.describe('slice 4a screens', () => {
 
     // The administrator resets Sam's password: the dialog, with and without two-factor, then the link.
     await page.reload();
-    await page.getByRole('button', { name: 'Actions for Sam Rivera' }).click();
+    // By keyboard: the Actions cell takes no focus of its own (UsersPage), so the row's last stop is the button,
+    // one arrow key per column from the first cell; Enter opens its menu and Escape gives the focus back.
+    const samRow = page.getByRole('row', { name: /Sam Rivera/ });
+    const samActions = page.getByRole('button', { name: 'Actions for Sam Rivera' });
+    const samCells = samRow.getByRole('gridcell');
+    // count() doesn't wait: the list is still loading after the reload.
+    await expect(samActions).toBeVisible();
+    const columnCount = await samCells.count();
+    expect(columnCount).toBeGreaterThan(1);
+    await samCells.first().focus();
+    for (let column = 1; column < columnCount; column++) {
+      await expect(samActions).not.toBeFocused();
+      await page.keyboard.press('ArrowRight');
+    }
+    await expect(samActions).toBeFocused();
+    await page.keyboard.press('ArrowLeft');
+    await expect(samCells.nth(columnCount - 2)).toBeFocused();
+    await page.keyboard.press('ArrowRight');
+    await expect(samActions).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('menuitem', { name: 'Reset password…' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menuitem', { name: 'Reset password…' })).toHaveCount(0);
+    await expect(samActions).toBeFocused();
+
+    await samActions.click();
     await page.getByRole('menuitem', { name: 'Reset password…' }).click();
     const reset = page.getByRole('alertdialog', { name: 'Reset the password for Sam Rivera?' });
     await expect(reset).toBeVisible();
