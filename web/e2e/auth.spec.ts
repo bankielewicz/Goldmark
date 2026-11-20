@@ -143,7 +143,7 @@ test.describe('slice 4 screen', () => {
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/action=auth\.sign-in\.succeeded/);
     await expect(page.getByRole('button', { name: 'Clear filters' })).toBeVisible();
-    await page.emulateMedia({ colorScheme: 'dark' });
+    await useScheme(page, 'dark');
     await expectAccessible(page, 'audit log, filtered (dark)');
 
     // An export downloads the CSV and is recorded in the log itself.

@@ -101,6 +101,11 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightBold,
   },
   body: { flexGrow: 1, display: 'flex', minHeight: 0 },
+  // The inline navigation is 260 px wide and never shrinks, as the boards draw it (DEC-039). Fluent's Drawer would
+  // be 320 px (the `size` given for the items' density also sets its width) and, as a flex item that hides its
+  // overflow, free to shrink: beside a page whose content is very wide when laid out on one line (a table), it
+  // shrank to nothing, still there for a screen reader and out of a pointer's reach.
+  inlineNav: { width: '260px', flexShrink: 0 },
   rail: {
     width: '48px',
     flexShrink: 0,
@@ -316,6 +321,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       onOpenChange={(_, data) => setOverlayOpen(data.open)}
       aria-label="Main"
       size="small"
+      {...(type === 'inline' ? { className: styles.inlineNav } : {})}
     >
       <NavDrawerBody>
         {['Overview', 'Inventory', 'Administration'].map((group) => {
