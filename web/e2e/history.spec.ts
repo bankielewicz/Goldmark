@@ -347,7 +347,7 @@ test.describe('slice 7 screens', () => {
         '/users',
         () => page.getByRole('grid').getByRole('row', { name: new RegExp(admin.userName.replace('.', '\\.')) }),
       ],
-      ['types', '/types', () => page.getByRole('table', { name: /^Attributes of / })],
+      ['types', '/types', () => page.getByRole('listbox', { name: 'CI types' }).getByRole('option').first()],
     ];
     for (const [name, path, shows] of pages) {
       await page.goto(path);

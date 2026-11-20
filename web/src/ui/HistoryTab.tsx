@@ -31,7 +31,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Reac
 import { api, type ApiError } from '../api';
 import { localHint, withAsOf } from '../asOf';
 import { followLink } from '../router';
-import { ErrorBar } from './common';
+import { ErrorBar, ScrollBox } from './common';
 import { asApiError, TypeIcon, type CiDetail, type CiReference, type CiType } from './inventory';
 
 /**
@@ -177,6 +177,9 @@ const useStyles = makeStyles({
   },
   inline: {
     padding: tokens.spacingHorizontalL,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: tokens.spacingVerticalM,
     backgroundColor: tokens.colorNeutralBackground2,
     borderTop: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
     boxShadow: `inset 3px 0 0 ${tokens.colorBrandForeground1}`,
@@ -650,8 +653,7 @@ function Detail({
       {relationship ? (
         <RelationshipDetail entry={entry} relationship={relationship} references={references} types={types} />
       ) : entry.changes.length > 0 ? (
-        // A Tab stop with a name, so the table can be scrolled sideways from the keyboard when it is wider than a phone.
-        <div className={styles.tableBox} tabIndex={0} role="group" aria-label="What changed, as a table">
+        <ScrollBox className={styles.tableBox} label="What changed, as a table">
           <table className={styles.table}>
             <caption className={styles.hidden}>
               What changed on {date} at {time} UTC
@@ -699,7 +701,7 @@ function Detail({
               ))}
             </tbody>
           </table>
-        </div>
+        </ScrollBox>
       ) : null}
       {entry.kind === 'relationshipEnded' && !entry.by ? (
         <div role="note" className={styles.note}>

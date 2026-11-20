@@ -28,7 +28,7 @@ import { useState } from 'react';
 import { api, type ApiError } from '../api';
 import { readOnlyTip, withAsOf } from '../asOf';
 import { followLink } from '../router';
-import { ErrorBar, Notice } from './common';
+import { ErrorBar, Notice, ScrollBox } from './common';
 import { asApiError, TypeIcon, type CiDetail, type CiType, type RelationshipType } from './inventory';
 import {
   relationshipLabel,
@@ -355,7 +355,7 @@ function Section({
       <h2 id={id} className={styles.sectionTitle}>
         {title} ({total.toLocaleString('en-US')})
       </h2>
-      <div className={styles.scroll}>
+      <ScrollBox className={styles.scroll} label={`${title}, as a table`}>
         <Table className={styles.table} size="medium">
           <caption className={styles.caption}>
             {title}: {outgoing ? `the CIs ${ci.name} depends on` : `the CIs that depend on ${ci.name}`}
@@ -477,7 +477,7 @@ function Section({
             })}
           </TableBody>
         </Table>
-      </div>
+      </ScrollBox>
       {rest > 0 && section.next ? (
         <div className={styles.more}>
           <Button disabled={busy} onClick={onMore}>

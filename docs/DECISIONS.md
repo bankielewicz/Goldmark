@@ -2603,8 +2603,12 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     reach. The layout rule was unchanged since slice 3; slice 7's browser test was the first to click the
     navigation from a page with a table. Two things followed from pages getting their real width at 1280 px: the
     Users grid's actions cell no longer takes focus itself (Fluent's `focusMode="none"` for a cell holding one
-    button; an open row menu left too little of the cell below uncovered to count as a target), and the audit
-    log's table (1,000 px at least) scrolls sideways in its box by 30 px at 1280 px.
+    button; an open row menu left too little of the cell below uncovered to count as a target), and the widest
+    tables scroll sideways in their own boxes where the window leaves them less than they need: the audit log's
+    (1,000 px) by 30 px at 1280 px, and at 1100 px also the Users grid (960 px) and the Relationships tables
+    (900 px), seen in the browser test's screenshots. A box that scrolls is a Tab stop with a name while it does
+    (`ScrollBox`, `web/src/ui/common.tsx`), so the keyboard reaches what is cut off. Whether 1100 px is still the
+    right width for the inline navigation is in the follow-up issue.
     `expectAccessible` now checks the navigation's width on every screen the browser tests visit. `main` has the
     same layout rule, so the same fault, until this merges; the fix stays in this PR (owner, 2026-11-20, "A. Keep
     it in PR #82 (Recommended)"; rejected: B, a separate fix PR first, with a second review and CI cycle).
