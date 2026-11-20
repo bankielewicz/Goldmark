@@ -325,19 +325,22 @@ export function SearchPage() {
     try {
       const { data } = await api<CiPageData>('GET', `/api/v1/cis?${text}`);
       if (listRequest.current !== request) return;
-      pageQuery.current = text;
-      setResultsAsOf(asOf);
-      setPage(data);
-      setCounts(data.types);
+      // "No CI at all" is asked before anything is shown, so the rows, the counts and it are one answer: an
+      // empty list never borrows the last answer's word for it, and a lookup that fails leaves the error alone.
+      let any = true;
       if (data.total === 0 && !query.q.trim() && query.types.length === 0 && !query.retired) {
         const { data: retired } = await api<CiPageData>(
           'GET',
           `/api/v1/cis?retired=true&limit=1${asOf ? `&asOf=${encodeURIComponent(asOf)}` : ''}`,
         );
-        if (listRequest.current === request) setAnyCi((retired.total ?? 0) > 0);
-      } else {
-        setAnyCi(true);
+        if (listRequest.current !== request) return;
+        any = (retired.total ?? 0) > 0;
       }
+      pageQuery.current = text;
+      setResultsAsOf(asOf);
+      setPage(data);
+      setCounts(data.types);
+      setAnyCi(any);
     } catch (error) {
       // The last list stays under the error (the board), so only the failure is set.
       if (listRequest.current === request) setFailure(asApiError(error));

@@ -526,6 +526,63 @@ test.describe('slice 7 screens', () => {
       await expect(page.getByRole('link', { name: 'race-vm-later' })).toHaveCount(0);
     });
 
+    // "No CIs existed at that time." is said on the word of the moment shown, never on another moment's: here the
+    // first moment's list comes back empty (made by the test) and whether any CI existed then can't be read.
+    await part('Search doesn’t say no CIs existed on another moment’s word', async () => {
+      await page.goto(`/search?${past}`);
+      await expect(banner).toBeVisible();
+      await expect(rows).toBeVisible();
+      await page.getByRole('button', { name: `As of: ${shown(moment)}. Choose a point in time` }).click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a point in time' });
+      await dialog.getByLabel('Date').fill('2001-01-01');
+      await dialog.getByLabel('Time').fill('00:00');
+      await dialog.getByRole('button', { name: 'Apply' }).click();
+      const none = page.getByRole('heading', { name: 'No CIs existed at that time.' });
+      await expect(none).toBeVisible();
+      await page.route(
+        (url) => url.pathname === '/api/v1/cis' && url.searchParams.get('asOf') === moment,
+        (route) =>
+          new URL(route.request().url()).searchParams.has('retired')
+            ? route.fulfill(serverError)
+            : route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({ items: [], total: 0, types: [], next: null }),
+              }),
+      );
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await expect(page.getByText('Couldn’t load the CIs: something went wrong on the server.')).toBeVisible();
+      await expect(none).toHaveCount(0);
+    });
+
+    // Apply asks the API before it applies. An answer that comes after the person went Back applies nothing.
+    await part('an answer to Apply after the browser’s Back applies nothing', async () => {
+      await page.goto(`/search?${past}`);
+      await expect(banner).toBeVisible();
+      await returnToNow.click();
+      await expect(banner).toHaveCount(0);
+      await page.getByRole('button', { name: 'As of: Now. Choose a point in time' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a point in time' });
+      await dialog.getByLabel('Date').fill('2001-01-01');
+      await dialog.getByLabel('Time').fill('00:00');
+      const check = (url: URL) =>
+        url.pathname === '/api/v1/types' && url.searchParams.get('asOf') === '2001-01-01T00:00Z';
+      await page.route(check, async (route) => {
+        await wait(3000);
+        await route.continue();
+      });
+      const answer = page.waitForResponse((response) => check(new URL(response.url())));
+      await dialog.getByRole('button', { name: 'Apply' }).click();
+      await page.goBack();
+      await expect(banner).toBeVisible();
+      await (await answer).finished();
+      await page.waitForTimeout(500);
+      expect(new URL(page.url()).searchParams.get('asOf')).toBe(moment);
+      await expect(banner).toBeVisible();
+      await page.keyboard.press('Escape');
+    });
+
     // The present's answer, arriving after the past view is back, doesn't replace the past's CI.
     await part('the present’s late answer is dropped', async () => {
       await page.goto(`/ci/${vm}?${past}`);

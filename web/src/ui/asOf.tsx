@@ -252,13 +252,15 @@ export function AsOfDialog({
       return;
     }
     // The types as of the moment: the lightest read that takes `asOf`. Any other failure is the page's to show.
+    // The answer applies to the address Apply was pressed on: after the browser's Back or a link it applies nothing.
+    const pressedOn = window.location.href;
     setChecking(true);
     const future = await api('GET', `/api/v1/types?asOf=${encodeURIComponent(result.value)}`).then(
       () => false,
       (error: unknown) => isFutureTime(error),
     );
     setChecking(false);
-    if (!showing.current) return;
+    if (!showing.current || window.location.href !== pressedOn) return;
     if (future) {
       setProblem({ error: 'That time is in the future.', bad: 'both' });
       dateRef.current?.focus();
