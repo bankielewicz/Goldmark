@@ -2628,7 +2628,9 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
 - **12. Review round 1 (2026-11-20): nothing of one moment stays on the page of another, and only the database
   judges the future.** The owner ran Codex's adversarial review on the PR and chose "A. Fix now, count as round 1
   (Recommended)" for its seven findings (rejected: B, fixing them without counting a round; C, the review's output
-  only). All seven held against the code.
+  only). All seven held against the code. Codex's automatic review of the same commits raised four of them again
+  (the CI's late answer, the types of another moment, the browser's clock, Search's rows of another moment); they
+  are answered here, in the same round.
   - *A change of moment left the other moment's state on the page* (four findings). Back in the present, the
     past's types stayed until the present's arrived, and Edit opened on them: a save built from the past's
     attribute list dropped the value of an attribute added since (the save replaces every attribute, DEC-044 item
@@ -2660,9 +2662,10 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     arrive, where the previous rows used to stay (the boards draw no transition); Apply waits for the API's
     answer before the dialog closes, and when that request fails for another reason the moment is applied and the
     page shows the failure.
-  - Each fix has a test that failed on the code before it: eight parts of a second browser test in
-    `web/e2e/history.spec.ts` (answers delayed or failed with Playwright's routes, the browser's Back, a page
-    whose clock runs an hour slow), all eight failing on the image built before the fixes, and
+  - Each fix has a test that failed on the code before it: a second browser test in `web/e2e/history.spec.ts`,
+    in ten parts (answers delayed or failed with Playwright's routes, the browser's Back, a page whose clock runs
+    an hour slow, the focus after choosing a moment on Search). Eight failed on the image built before the fixes;
+    the other two (the dialog on a slow clock, the focus) failed on a build with those two behaviours put back. And
     `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
     gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).

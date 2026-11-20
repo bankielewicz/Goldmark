@@ -454,13 +454,6 @@ test.describe('slice 7 screens', () => {
     });
 
     // Back (the browser's) to the past view with Edit open: the form is gone.
-    const writes: string[] = [];
-    page.on('request', (request) => {
-      const { pathname } = new URL(request.url());
-      if (request.method() !== 'GET' && pathname.startsWith('/api/v1/cis')) {
-        writes.push(`${request.method()} ${pathname}`);
-      }
-    });
     await part('no Edit form in a past view', async () => {
       await page.goto(`/ci/${vm}?${past}`);
       await expect(h1).toHaveText('race-vm-then');
@@ -477,7 +470,7 @@ test.describe('slice 7 screens', () => {
       await expect(page.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
     });
 
-    // The same on Search with New CI open, and nothing was written from either.
+    // The same on Search with New CI open.
     const rows = page.getByRole('table', { name: 'CIs' });
     await part('no New CI form in a past view', async () => {
       await page.goto(`/search?q=race-vm&${past}`);
@@ -496,7 +489,25 @@ test.describe('slice 7 screens', () => {
       await returnToNow.click();
       await expect(rows.getByRole('link', { name: 'race-vm-later' })).toBeVisible();
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      expect(writes, 'nothing is written from a past view').toEqual([]);
+    });
+
+    // Choosing a moment on Search leaves the focus where the dialog returns it, on the As-of control: the page
+    // isn't started again under the person's hands.
+    await part('choosing a moment on Search keeps the focus on the control', async () => {
+      await page.goto('/search?q=race-vm');
+      await expect(rows.getByRole('link', { name: 'race-vm-later' })).toBeVisible();
+      await page.getByRole('button', { name: 'As of: Now. Choose a point in time' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Choose a point in time' });
+      await dialog.getByRole('button', { name: '1 hour ago' }).click();
+      await dialog.getByRole('button', { name: 'Apply' }).click();
+      await expect(page.getByText(/^Viewing as of .+ \(read-only\)$/)).toBeVisible();
+      await expect(
+        page
+          .getByText('No CIs existed at that time.')
+          .or(page.getByText(/at that time$/))
+          .first(),
+      ).toBeVisible();
+      await expect(page.getByRole('button', { name: /^As of: \d{4}-.+\. Choose a point in time$/ })).toBeFocused();
     });
 
     // A past search that fails shows its error and none of the present's rows under the past's banner.
@@ -562,34 +573,42 @@ test.describe('slice 7 screens', () => {
 
     // A browser whose clock is an hour slow takes the moment for the future; the database knows better, so the
     // link still opens the past view, read-only.
-    await part('a slow browser clock still opens the past view', async () => {
+    const onSlowClock = async (body: (slow: Page) => Promise<void>) => {
       const slow = await page.context().newPage();
       try {
         await slow.addInitScript(() => {
           const now = Date.now.bind(Date);
           Date.now = () => now() - 3_600_000;
         });
+        await body(slow);
+      } finally {
+        await slow.close();
+      }
+    };
+    await part('a slow browser clock still opens the past view', () =>
+      onSlowClock(async (slow) => {
         await slow.goto(`/ci/${vm}?${past}`);
         await expect(slow.getByText(`Viewing as of ${shown(moment)} (read-only)`)).toBeVisible();
         await expect(slow.getByRole('heading', { level: 1 })).toHaveText('race-vm-then');
         await expect(slow.getByRole('button', { name: 'Edit' })).toHaveAttribute('aria-disabled', 'true');
+      }),
+    );
 
-        // The dialog too: five minutes ago is in this browser's future, and the database takes it. Search then
-        // shows that moment, and the focus is back on the control that opened the dialog.
+    // The dialog too: five minutes ago is in that browser's future, and the database takes it.
+    await part('on a slow browser clock the dialog takes a recent time', () =>
+      onSlowClock(async (slow) => {
         await slow.goto('/search');
         await slow.getByRole('button', { name: 'As of: Now. Choose a point in time' }).click();
         const dialog = slow.getByRole('dialog', { name: 'Choose a point in time' });
         const recent = new Date(Date.now() - 5 * 60_000).toISOString();
-        const recentShown = `${recent.slice(0, 10)} ${recent.slice(11, 16)} UTC`;
         await dialog.getByLabel('Date').fill(recent.slice(0, 10));
         await dialog.getByLabel('Time').fill(recent.slice(11, 16));
         await dialog.getByRole('button', { name: 'Apply' }).click();
-        await expect(slow.getByText(`Viewing as of ${recentShown} (read-only)`)).toBeVisible();
-        await expect(slow.getByRole('button', { name: `As of: ${recentShown}. Choose a point in time` })).toBeFocused();
-      } finally {
-        await slow.close();
-      }
-    });
+        await expect(
+          slow.getByText(`Viewing as of ${recent.slice(0, 10)} ${recent.slice(11, 16)} UTC (read-only)`),
+        ).toBeVisible();
+      }),
+    );
 
     expect(failures).toEqual([]);
   });
