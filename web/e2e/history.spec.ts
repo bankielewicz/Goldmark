@@ -432,7 +432,6 @@ test.describe('slice 7 screens', () => {
         );
       }
     };
-    page.setDefaultTimeout(10_000);
 
     // Back in the present with the present's types still on their way: Edit waits for them, so a save can't be
     // built from the past's attribute list and drop the value of an attribute added since.
@@ -593,13 +592,18 @@ test.describe('slice 7 screens', () => {
           await route.continue();
         });
         const asked = page.waitForRequest((request) => check(new URL(request.url())));
-        const answer = page.waitForResponse((response) => check(new URL(response.url())));
         await dialog.getByRole('button', { name: 'Apply' }).click();
         await asked;
         await move();
+        // Waited for from here, not from Apply: its time limit mustn't run while the answer is held back.
+        const answer = page.waitForResponse((response) => check(new URL(response.url())));
         answerToApply.open();
-        await (await answer).finished();
-        await page.waitForTimeout(500);
+        // The API took the moment (200): a refusal would apply nothing whatever the code does with a late answer.
+        const given = await answer;
+        expect(given.status()).toBe(200);
+        await given.finished();
+        // The dialog has taken the answer once Apply is no longer waiting (or the dialog is gone).
+        await expect(dialog.locator('button[aria-disabled="true"]', { hasText: 'Apply' })).toHaveCount(0);
       } finally {
         answerToApply.open();
       }
@@ -623,8 +627,29 @@ test.describe('slice 7 screens', () => {
       await expect(page.getByText(/^Viewing as of /)).toHaveCount(0);
     });
 
-    // The present's answer, arriving after the past view is back, doesn't replace the past's CI.
+    // The present's answer, arriving after the past view is back, doesn't replace the past's CI. The check is made
+    // only once the app has taken that answer, which the page itself reports: each answer the app reads is counted
+    // a task after its text is handed over, so after the code waiting for it has run. A change of tab, made after
+    // that, is then on the page only when everything the app asked of React before it is too.
     await part('the present’s late answer is dropped', async () => {
+      await page.addInitScript(() => {
+        const taken: Record<string, number> = {};
+        (window as unknown as { answersTaken: Record<string, number> }).answersTaken = taken;
+        const fetchAsBefore = window.fetch.bind(window);
+        window.fetch = async (input, init) => {
+          const response = await fetchAsBefore(input, init);
+          const path = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+          const textAsBefore = response.text.bind(response);
+          response.text = async () => {
+            const text = await textAsBefore();
+            setTimeout(() => {
+              taken[path] = (taken[path] ?? 0) + 1;
+            }, 0);
+            return text;
+          };
+          return response;
+        };
+      });
       await page.goto(`/ci/${vm}?${past}`);
       await expect(h1).toHaveText('race-vm-then');
       // The present's CI is held back until the past view is back and loaded.
@@ -638,16 +663,25 @@ test.describe('slice 7 screens', () => {
           },
         );
         const asked = page.waitForRequest((request) => live(new URL(request.url()), `/api/v1/cis/${vm}`));
-        const lateAnswer = page.waitForResponse((response) => live(new URL(response.url()), `/api/v1/cis/${vm}`));
         await returnToNow.click();
         await expect(banner).toHaveCount(0);
         await asked;
         await page.goBack();
         await expect(banner).toBeVisible();
         await expect(h1).toHaveText('race-vm-then');
+        // Waited for from here: its time limit mustn't run while the answer is held back. It must be the
+        // present's CI itself (200, under its present name): an error would be dropped by any code.
+        const lateAnswer = page.waitForResponse((response) => live(new URL(response.url()), `/api/v1/cis/${vm}`));
         presentCi.open();
-        await (await lateAnswer).finished();
-        await page.waitForTimeout(500);
+        const late = await lateAnswer;
+        expect(late.status()).toBe(200);
+        expect(((await late.json()) as { name: string }).name).toBe(nowName);
+        await page.waitForFunction(
+          (path) => ((window as unknown as { answersTaken: Record<string, number> }).answersTaken[path] ?? 0) > 0,
+          `/api/v1/cis/${vm}`,
+        );
+        await page.getByRole('tab', { name: 'History' }).click();
+        await expect(page.getByRole('tab', { name: 'History' })).toHaveAttribute('aria-selected', 'true');
         await expect(banner).toBeVisible();
         await expect(h1).toHaveText('race-vm-then');
       } finally {
