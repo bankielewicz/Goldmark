@@ -461,7 +461,11 @@ export function UsersPage() {
         <DataGridBody<UserRow>>
           {({ item, rowId }) => (
             <DataGridRow<UserRow> key={rowId}>
-              {({ renderCell }) => <DataGridCell>{renderCell(item)}</DataGridCell>}
+              {({ renderCell, columnId }) => (
+                // The actions cell holds one button, so the cell itself takes no focus (Fluent's focusMode "none"):
+                // as a target of its own, the part of it a row menu left uncovered was too small to count as one.
+                <DataGridCell focusMode={columnId === 'actions' ? 'none' : 'cell'}>{renderCell(item)}</DataGridCell>
+              )}
             </DataGridRow>
           )}
         </DataGridBody>

@@ -63,6 +63,8 @@ internal static class GoldmarkApplication
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton<SqlConnectionFactory>();
+        builder.Services.AddScoped<ActingPrincipal>();
+        builder.Services.AddScoped<CiHistoryStore>();
         builder.Services.AddScoped<DbSession>();
         builder.Services.AddHttpContextAccessor();
         builder.Services.AddScoped<AuditTrail>();

@@ -29,34 +29,53 @@ internal static class GraphEndpoints
         return api;
     }
 
-    private static async Task<IResult> ReadAsync(HttpContext context, CiTypeCatalog catalog, GraphStore graph)
+    /// <summary>The graph, now or with <c>asOf</c> as it was then (US-42, FR-IM-4): the filters name the types of that moment.</summary>
+    private static async Task<IResult> ReadAsync(HttpContext context, CiTypeCatalog catalog, CiStore cis, GraphStore graph)
     {
-        var types = await catalog.ListAsync();
-        var relationshipTypes = await catalog.RelationshipTypesAsync();
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var types = await catalog.ListAsync(asOf);
+        var relationshipTypes = await catalog.RelationshipTypesAsync(asOf);
         var (query, errors) = GraphQuery.Parse(context.Request.Query, types, relationshipTypes);
         if (query is null)
         {
             return CiEndpoints.Fields(errors);
         }
 
-        return await graph.WalkAsync(query, types, relationshipTypes) is { } result ? Results.Ok(result) : CiNotFound();
+        return await graph.WalkAsync(query with { AsOf = asOf }, types, relationshipTypes) is { } result
+            ? Results.Ok(result)
+            : await NotFoundAsync(cis, query.Ci, asOf);
     }
 
-    private static async Task<IResult> ExportAsync(HttpContext context, CiTypeCatalog catalog, GraphStore graph, DbSession db, AuditTrail audit)
+    private static async Task<IResult> NotFoundAsync(CiStore cis, Guid ci, DateTime? asOf) =>
+        await AsOf.NotThenAsync(cis, ci, asOf) ?? CiNotFound();
+
+    private static async Task<IResult> ExportAsync(HttpContext context, CiTypeCatalog catalog, CiStore cis, GraphStore graph, DbSession db, AuditTrail audit)
     {
-        var types = await catalog.ListAsync();
-        var relationshipTypes = await catalog.RelationshipTypesAsync();
-        var (query, errors) = GraphQuery.Parse(context.Request.Query, types, relationshipTypes);
-        if (query is null)
+        var (asOf, refusal) = await AsOf.ReadAsync(context);
+        if (refusal is not null)
+        {
+            return refusal;
+        }
+
+        var types = await catalog.ListAsync(asOf);
+        var relationshipTypes = await catalog.RelationshipTypesAsync(asOf);
+        var (parsed, errors) = GraphQuery.Parse(context.Request.Query, types, relationshipTypes);
+        if (parsed is null)
         {
             return CiEndpoints.Fields(errors);
         }
 
+        var query = parsed with { AsOf = asOf };
         return await db.InTransactionAsync(async () =>
         {
             if (await graph.WalkAsync(query, types, relationshipTypes) is not { } result)
             {
-                return CiNotFound();
+                return await NotFoundAsync(cis, query.Ci, asOf);
             }
 
             if (result.Truncated)

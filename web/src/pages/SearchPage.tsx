@@ -35,11 +35,13 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { api, ApiError } from '../api';
+import { readOnlyTip, useAsOf, withAsOf } from '../asOf';
 import { formatAgo, formatUtc } from '../format';
 import { followLink, navigate, useLocation } from '../router';
 import { useSession } from '../session';
 import { useWide } from '../shell/AppShell';
 import { PageHeader } from '../shell/PageHeader';
+import { AsOfBanner, PastEmpty, PastEmptyText } from '../ui/asOf';
 import { CiPanel } from '../ui/CiPanel';
 import { ErrorBar } from '../ui/common';
 import {
@@ -174,12 +176,13 @@ function pageAddress(query: Query): string {
   return `/search${text ? `?${text}` : ''}`;
 }
 
-/** The API's query: one record for the list (and, in slice 20, the CSV export: #47). */
-function apiQuery(query: Query): URLSearchParams {
+/** The API's query: one record for the list (and, in slice 20, the CSV export: #47); as of a moment in a past view. */
+function apiQuery(query: Query, asOf: string | null): URLSearchParams {
   const params = new URLSearchParams({ limit: '100', sort: query.sort });
   if (query.q.trim()) params.set('q', query.q.trim());
   query.types.forEach((t) => params.append('type', t));
   if (query.retired) params.set('retired', 'true');
+  if (asOf) params.set('asOf', asOf);
   return params;
 }
 
@@ -189,7 +192,12 @@ interface Column {
   sort: 'name' | 'type' | 'changed' | null;
   /** Kept below 1100 px only if `narrow` is true. */
   narrow: boolean;
-  render: (ci: CiSummary, types: CiType[] | null, styles: ReturnType<typeof useStyles>) => ReactNode;
+  render: (
+    ci: CiSummary,
+    types: CiType[] | null,
+    styles: ReturnType<typeof useStyles>,
+    asOf: string | null,
+  ) => ReactNode;
 }
 
 /** The list's columns, as data: slice 20's column chooser (#46) adds visibility to this array. */
@@ -199,12 +207,12 @@ const columns: Column[] = [
     label: 'Name',
     sort: 'name',
     narrow: true,
-    render: (ci, _types, styles) => (
+    render: (ci, _types, styles, asOf) => (
       <Link
         id={`ci-link-${ci.id}`}
-        href={`/ci/${ci.id}`}
+        href={withAsOf(`/ci/${ci.id}`, asOf)}
         className={styles.name}
-        onClick={(event) => followLink(event, `/ci/${ci.id}`)}
+        onClick={(event) => followLink(event, withAsOf(`/ci/${ci.id}`, asOf))}
       >
         {ci.name}
       </Link>
@@ -234,11 +242,15 @@ const columns: Column[] = [
     label: 'Changed',
     sort: 'changed',
     narrow: false,
-    render: (ci) => (
-      <Tooltip content={`${formatUtc(ci.changedAt)} UTC`} relationship="description">
-        <span>{formatAgo(ci.changedAt)}</span>
-      </Tooltip>
-    ),
+    // In a past view, when the version shown was written (the SearchAsOf board), not how long ago from now.
+    render: (ci, _types, _styles, asOf) =>
+      asOf ? (
+        <span>{`${formatUtc(ci.changedAt)} UTC`}</span>
+      ) : (
+        <Tooltip content={`${formatUtc(ci.changedAt)} UTC`} relationship="description">
+          <span>{formatAgo(ci.changedAt)}</span>
+        </Tooltip>
+      ),
   },
 ];
 
@@ -246,7 +258,8 @@ const columns: Column[] = [
  * Screen 4, CI search / list (US-11, US-53 `/search?q=`; DEC-044 items 1, 2 and 6): CIs whose name
  * contains the search text in any case, narrowed by type, with retired CIs only when asked, sorted, and
  * paged with "Load more". Admins and Editors start a new CI here. Built on the approved boards
- * (`docs/design/screens/slice-5/`).
+ * (`docs/design/screens/slice-5/`). With `asOf` it answers as it would have at that moment, read-only, under the
+ * past view's banner (slice 7, `docs/design/screens/slice-7/`): the CIs, names, types and states of then.
  */
 export function SearchPage() {
   const styles = useStyles();
@@ -255,10 +268,14 @@ export function SearchPage() {
   const { search } = useLocation();
   const searchText = search.toString();
   const query = useMemo(() => readQuery(new URLSearchParams(searchText)), [searchText]);
+  const asOf = useAsOf();
   const wide = useWide();
-  const { types, failure: typesFailure, reload: reloadTypes } = useCiTypes();
-  const [page, setPage] = useState<CiPageData | null>(null);
-  const [counts, setCounts] = useState<CiPageData['types']>(null);
+  const { types, failure: typesFailure, reload: reloadTypes } = useCiTypes(asOf);
+  // The rows, the counts and "no CI at all" belong to the moment they were read for: after a change of moment
+  // they aren't shown until that moment's own answer arrives, even when its request fails (DEC-047 item 12).
+  const [resultsAsOf, setResultsAsOf] = useState<string | null | undefined>(undefined);
+  const [loadedPage, setPage] = useState<CiPageData | null>(null);
+  const [loadedCounts, setCounts] = useState<CiPageData['types']>(null);
   const [failure, setFailure] = useState<ApiError | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [moreFailure, setMoreFailure] = useState<ApiError | null>(null);
@@ -269,14 +286,18 @@ export function SearchPage() {
   const [filtersHidden, setFiltersHidden] = useState(false);
   const [creating, setCreating] = useState(false);
   // No CI at all, rather than none that isn't retired: asked only when the list is empty.
-  const [anyCi, setAnyCi] = useState<boolean | null>(null);
+  const [loadedAnyCi, setAnyCi] = useState<boolean | null>(null);
+  const ofThisMoment = resultsAsOf === asOf;
+  const page = ofThisMoment ? loadedPage : null;
+  const counts = ofThisMoment ? loadedCounts : null;
+  const anyCi = ofThisMoment ? loadedAnyCi : null;
   // The query the shown page was loaded with: Load more continues that one, never a newer one still loading.
   const pageQuery = useRef('');
   const [replacing, setReplacing] = useState(false);
   const listRequest = useRef(0);
   const [focusRow, setFocusRow] = useState<string | null>(null);
 
-  const apply = useCallback((next: Query) => navigate(pageAddress(next), { replace: true }), []);
+  const apply = useCallback((next: Query) => navigate(withAsOf(pageAddress(next), asOf), { replace: true }), [asOf]);
 
   // A link's types as this Goldmark names them. One it doesn't have is dropped from the address, so the
   // filters, the list and the page agree (docs/integration/deep-links.md).
@@ -300,30 +321,40 @@ export function SearchPage() {
     setMoreFailure(null);
     setLoadingMore(false);
     setReplacing(true);
-    const text = apiQuery(query).toString();
+    const text = apiQuery(query, asOf).toString();
     try {
       const { data } = await api<CiPageData>('GET', `/api/v1/cis?${text}`);
       if (listRequest.current !== request) return;
+      // "No CI at all" is asked before anything is shown, so the rows, the counts and it are one answer: an
+      // empty list never borrows the last answer's word for it, and a lookup that fails leaves the error alone.
+      let any = true;
+      if (data.total === 0 && !query.q.trim() && query.types.length === 0 && !query.retired) {
+        const { data: retired } = await api<CiPageData>(
+          'GET',
+          `/api/v1/cis?retired=true&limit=1${asOf ? `&asOf=${encodeURIComponent(asOf)}` : ''}`,
+        );
+        if (listRequest.current !== request) return;
+        any = (retired.total ?? 0) > 0;
+      }
       pageQuery.current = text;
+      setResultsAsOf(asOf);
       setPage(data);
       setCounts(data.types);
-      if (data.total === 0 && !query.q.trim() && query.types.length === 0 && !query.retired) {
-        const { data: retired } = await api<CiPageData>('GET', '/api/v1/cis?retired=true&limit=1');
-        if (listRequest.current === request) setAnyCi((retired.total ?? 0) > 0);
-      } else {
-        setAnyCi(true);
-      }
+      setAnyCi(any);
     } catch (error) {
       // The last list stays under the error (the board), so only the failure is set.
       if (listRequest.current === request) setFailure(asApiError(error));
     } finally {
       if (listRequest.current === request) setReplacing(false);
     }
-  }, [query, types, typesFailure, typesSettled]);
+  }, [query, asOf, types, typesFailure, typesSettled]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // A change of moment closes New CI: it is never open in a past view, and doesn't come back with the present.
+  useEffect(() => setCreating(false), [asOf]);
 
   // The address changed (Back, a shared link): the box follows it, keeping a space still being typed.
   useEffect(() => setTyped((current) => (current.trim() === query.q.trim() ? current : query.q)), [query.q]);
@@ -373,10 +404,11 @@ export function SearchPage() {
   const loading = page === null && failure === null;
   const empty = page !== null && anyCi === false;
   const total = page?.total ?? 0;
+  // A past view says what matched then (the SearchAsOf board; single quotes as now: DEC-047 item 10).
   const countText =
     page === null
       ? ''
-      : `${total.toLocaleString('en-US')} ${total === 1 ? 'CI' : 'CIs'}${query.q.trim() ? ` match ‘${query.q.trim()}’` : ''}${query.retired ? ', including retired' : ''}`;
+      : `${total.toLocaleString('en-US')} ${total === 1 ? 'CI' : 'CIs'}${query.q.trim() ? ` ${asOf ? 'matched' : 'match'} ‘${query.q.trim()}’` : ''}${query.retired ? ', including retired' : ''}${asOf ? ' at that time' : ''}`;
   const filterCount = query.types.length;
   const shownColumns = columns.filter((c) => wide || c.narrow);
 
@@ -395,13 +427,31 @@ export function SearchPage() {
     />
   );
 
+  const searchBox = (
+    <div role="search" aria-label="Search CIs" className={styles.search}>
+      <SearchBox
+        size="large"
+        className={styles.search}
+        input={{ className: styles.searchInput, 'aria-label': 'Search by name' }}
+        placeholder="Search by name"
+        value={typed}
+        onChange={(_, data) => setTyped(data.value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') apply({ ...query, q: typed });
+        }}
+      />
+    </div>
+  );
+
   return (
     <>
+      {asOf ? <AsOfBanner asOf={asOf} /> : null}
       <PageHeader
         crumbs={[{ label: 'Inventory' }, { label: 'Search' }]}
         title="Search"
         actions={
-          empty ? undefined : (
+          // "There are no CIs yet" has its own New CI; "No CIs existed at that time" keeps the toolbar (the boards).
+          empty && !asOf ? undefined : (
             <div className={styles.toolbar}>
               {wide && !filtersHidden ? null : (
                 <Button
@@ -417,7 +467,13 @@ export function SearchPage() {
                 checked={query.retired}
                 onChange={(_, data) => apply({ ...query, retired: data.checked })}
               />
-              {canEdit ? (
+              {canEdit && asOf ? (
+                <Tooltip content={readOnlyTip} relationship="description">
+                  <Button appearance="primary" icon={<AddRegular />} disabledFocusable>
+                    New CI
+                  </Button>
+                </Tooltip>
+              ) : canEdit ? (
                 <Button
                   appearance="primary"
                   icon={<AddRegular />}
@@ -435,7 +491,14 @@ export function SearchPage() {
 
       {typesFailure ? <ErrorBar error={typesFailure} onRetry={reloadTypes} /> : null}
 
-      {empty ? (
+      {empty && asOf ? (
+        <>
+          {searchBox}
+          <PastEmpty asOf={asOf} roomy title="No CIs existed at that time.">
+            <PastEmptyText>Nothing had been entered in Goldmark yet.</PastEmptyText>
+          </PastEmpty>
+        </>
+      ) : empty ? (
         <section className={mergeClasses(styles.empty, styles.emptyBox)} aria-labelledby="no-cis">
           <CubeRegular className={styles.emptyIcon} aria-hidden />
           <h2 id="no-cis" className={styles.emptyTitle}>
@@ -456,19 +519,7 @@ export function SearchPage() {
         </section>
       ) : (
         <>
-          <div role="search" aria-label="Search CIs" className={styles.search}>
-            <SearchBox
-              size="large"
-              className={styles.search}
-              input={{ className: styles.searchInput, 'aria-label': 'Search by name' }}
-              placeholder="Search by name"
-              value={typed}
-              onChange={(_, data) => setTyped(data.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') apply({ ...query, q: typed });
-              }}
-            />
-          </div>
+          {searchBox}
           {failure ? (
             <ErrorBar
               error={failure}
@@ -541,11 +592,11 @@ export function SearchPage() {
                               className={mergeClasses(styles.row, ci.lifecycleState === 'Retired' && styles.retired)}
                               onClick={(event) => {
                                 if ((event.target as HTMLElement).closest('a')) return;
-                                navigate(`/ci/${ci.id}`);
+                                navigate(withAsOf(`/ci/${ci.id}`, asOf));
                               }}
                             >
                               {shownColumns.map((column) => (
-                                <TableCell key={column.id}>{column.render(ci, types, styles)}</TableCell>
+                                <TableCell key={column.id}>{column.render(ci, types, styles, asOf)}</TableCell>
                               ))}
                             </TableRow>
                           ))}
@@ -600,7 +651,8 @@ export function SearchPage() {
         </OverlayDrawer>
       )}
 
-      {creating && types ? (
+      {/* Never in a past view, however the page got there (the browser's Back with the form open). */}
+      {creating && types && !asOf ? (
         <CiPanel mode={{ kind: 'new' }} types={types} onTypesChanged={reloadTypes} onClose={() => setCreating(false)} />
       ) : null}
     </>

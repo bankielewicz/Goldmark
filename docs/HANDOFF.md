@@ -5,7 +5,7 @@ slice PR (status, open issues, new gotchas). Decisions and their rationale stay
 in [`DECISIONS.md`](DECISIONS.md); requirements are in [`PRD.md`](PRD.md)
 (draft v0.2; the build plan below supersedes PRD §11, see DEC-021).
 
-**As of 2026-10-23:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
+**As of 2026-11-18:** slices 1 (PR #1), 2 (PR #14), 2b (PR #17), 2c (PR #22), 3 (PR #24), 4
 (PR #32), 4a (PR #38), 4b (PR #39) and **5 (PR #49)** are merged, with the handoff and docs PRs #11, #13, #16, #21 and #23, and the dependency PRs #28
 (CodeQL action 4.38.3 and a Dependabot group), #29, #44, #50 (React 19.3.1 with React DOM, axe 4.14 and
 Playwright 1.64.1, a Dependabot `react` group) and #51. Slice 3 brought first-run
@@ -14,8 +14,10 @@ screens (DEC-037 to DEC-040; two Codex review rounds, 5 then 4 findings, all fix
 the audit log and screen 16 (DEC-041). Slice 4a brought password recovery and dual control (DEC-042).
 Slice 4b brought the Windows service distribution (DEC-036, DEC-043). Slice 5 brought CIs with their types
 and attributes, the CI API, search and each CI's page (DEC-044; merged 2026-10-23). Slice 5b brought the Types &
-attributes screen and history for the definitions (DEC-045; merged 2026-10-23). **Slice 6**, relationships (approved
-2026-10-24, DEC-046), is built and in review as PR #59 on `slice/06-relationships`. Docker Compose is the first distribution, not the target deployment (DEC-030, rule 8).
+attributes screen and history for the definitions (DEC-045; merged 2026-10-23). Slice 6 brought relationships, the
+relationship tab and the graph explorer (DEC-046; PR #59, merged 2026-11-18 as `1393c33`). After it, PR #79 put the
+.NET SDK pins back in step (SDK 10.0.404, runtime 10.0.15, DEC-004) and PR #81 took Fluent UI to 9.75.2 (DEC-011,
+DEC-040). **Slice 7**, history and "as of" (approved 2026-11-18), is in progress on `slice/07-history`. Docker Compose is the first distribution, not the target deployment (DEC-030, rule 8).
 
 ## 1. Slice plan and status
 
@@ -36,8 +38,8 @@ slice with screens needs a design handoff before any UI code (rule 3 below).
 | 4b | **done** (PR #39, merged as `bc1e817`, DEC-043) | `slice/04b-windows-service` | Windows service distribution (DEC-036): service host, installer wizard, Windows authentication to SQL Server (gMSA; the principal audit for Windows logins and groups), the credential-file paths on a DPAPI-protected store, a log sink for a service (file or Event Log), service recovery in place of the Docker `HEALTHCHECK`, the `rotate-db-credentials` command, a Windows CI job. Ports what slices 3, 4 and 4a store (sign-in keys, audit log output, the recovery setting `Goldmark:Auth:RecoverAdmin`); #34, the retention period checked before `bootstrap-db` changes anything (DEC-042 item 1). Availability groups are not in it (#20); #6 moved here from slice 24 (DEC-043) | Owner, 2026-10-22 (DEC-043): (1) `Install-Goldmark.ps1` in a zip installs the service on Windows Server 2022/2025 against SQL Server 2025, Windows authentication or a SQL login; the operator's own Windows login runs `bootstrap-db migrate`; gMSA, or a domain user as fallback, `NT SERVICE\Goldmark` only with SQL Server on the same server, never LocalSystem or NetworkService; `/health/ready` 200 and the sign-in page; upgrade = run again; uninstall keeps the data. (2) Windows authentication: the service account's login in `goldmark_runtime`, no password, no DDL; the principal audit covers Windows logins and group rights; the password path only for SQL logins. (3) Folders for sign-in keys, TLS key, credential files, logs and settings: service account, SYSTEM and Administrators only, inheritance off, a start refuses wider; key ring and runtime credential file DPAPI-NG to the service account; administrator and migration passwords never stored on Windows; #6 closed. (4) JSON log files per day in `%ProgramData%\Goldmark\logs`; a configuration failure also to the Application log (setting names only); tested that 3001 and 3004 never reach the Event Log. (5) Service recovery restarts after a crash; a configuration error (exit 2) stops without a loop. (6) `rotate-db-credentials` (Docker and Windows): every generated SQL login, file before login, audited as System, then a restart (the wizard restarts the service); nothing to rotate under Windows authentication. (7) The recovery setting in the settings file from (3); the link's path in the log file. (8) #34's two criteria. (9) Windows CI (windows-2025): build, in-process tests, SQL Server 2025 Express on the runner, install smoke with Windows authentication as `NT SERVICE\Goldmark` (`/health/ready`, ACLs, log file), a SQL-login install with rotate, uninstall; the gMSA checked by hand per the ops guide. (10) `docs/ops/windows-service.md`; the installer's prompts as a text spec in the PR; rule 7; rule 8 both ways | — |
 | 5 | **done** (PR #49, merged as `783f526`, DEC-044) | `slice/05-ci-crud` | CI types/attributes metadata (the built-in CI and relationship types, only the attributes the PRD names; the API to add custom attributes, its screen in 5b), CI CRUD API, list/detail UI with retire and restore (retired CIs hidden unless shown; other lifecycle changes in slice 20), deep-link routes (`/ci/{id}`, `/ci/{id}?tab=`, `/search?q=`), `docs/integration/deep-links.md`, friendly not-found for unknown Ids (Dapper and the NFR-SEC-3 gate arrive in slice 3, DEC-038) | US-10; US-11 for CIs; US-53 except `/impact` and alias redirect; search p95 on 25k synthetic CIs | 4, 5 |
 | 5b | **done** (PR #54, merged as `7e9077a`, DEC-045) | `slice/05b-types-admin` | Types & attributes admin screen: custom CI types (add, hide, delete if unused), custom attributes (add, change, delete with typed confirmation), relationship types (built-in listed; custom added, edited, deleted if unused); promoted attributes wait (#53) | Admin can manage CI types, attributes and relationship types through the UI | 14 |
-| 6 | **in progress** (approved 2026-10-24, DEC-046; boards approved 2026-10-25, `docs/design/screens/slice-6/`; built, PR #59) | `slice/06-relationships` | Relationships CRUD (several CIs in one Add; deleting ends a relationship, its history keeps it), relationship tab, graph explorer (two walks plus redundancy-group members, many same-type neighbours grouped behind a switch, PNG and CSV export, depth 3); migration 0008 `Relationship.CreatedAt` for "Since" (DEC-046 items 1 to 14). Later: a phrase per direction for relationship types (#57), keyboard selection on the canvas (#58) | US-11 for relationships; US-40 | 5 (tab), 6 |
-| 7 | pending | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | 4 (as-of picker), 5 (history tab), 6 (as-of control) |
+| 6 | **done** (PR #59, merged as `1393c33`, DEC-046; boards approved 2026-10-25, `docs/design/screens/slice-6/`) | `slice/06-relationships` | Relationships CRUD (several CIs in one Add; deleting ends a relationship, its history keeps it), relationship tab, graph explorer (two walks plus redundancy-group members, many same-type neighbours grouped behind a switch, PNG and CSV export, depth 3); migration 0008 `Relationship.CreatedAt` for "Since" (DEC-046 items 1 to 14). Later: a phrase per direction for relationship types (#57), keyboard selection on the canvas (#58) | US-11 for relationships; US-40 | 5 (tab), 6 |
+| 7 | **in review** (PR #82; approved 2026-11-18; boards approved 2026-11-19, `docs/design/screens/slice-7/`) | `slice/07-history` | `SESSION_CONTEXT` ChangedBy, history tab with diff, `asOf` on reads | US-42/43 | the top bar's As-of control for 4, 5 and 6 (one control, DEC-047 item 10), 5 (History tab) |
 | 8 | pending | `slice/08-api-tokens-openapi` | Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests, Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH (#48, DEC-044 item 11) | US-06/54; US-50 infrastructure (later UI functions keep parity per rule 7); CI fails on an unreviewed breaking OpenAPI diff; #48 closed | 18 |
 | 9 | pending | `slice/09-identity-spec` | `identity-vectors.json`, C# + PowerShell normalization, both suites | All §5.2 vectors pass in both languages | — |
 | 10 | pending | `slice/10-ingest-api` | Ingest API (async batches, parts, idempotency), CiIdentifier matching, change suppression; how a collector ends the relationships it no longer sees, a policy (ServiceNow offers Keep, Delete, Delete relations, Mark absent, Mark retired), and what a person's removal of a discovered relationship means then (GLPI and Lansweeper treat it specially; a research session's note relayed by the owner, 2026-10-24, DEC-046 item 1) | US-20/21; re-ingest → 0 history rows | — |
@@ -82,7 +84,11 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    raised after that is listed for the owner with a fix-now/defer
    recommendation and, unless the owner says otherwise, becomes an issue
    labelled for the owning slice (or `deferred`) instead of another round.
-   Precedent: PR #1 ended this way (#2–#4, #7).
+   Precedent: PR #1 ended this way (#2–#4, #7). Codex's stop-time review
+   (run when the agent ends a turn) uses no round: its findings about a
+   round's own changes belong to that round. The first batch is fixed in
+   it; any later batch in the same round goes to the owner as fix-now or
+   defer (owner, 2026-11-21; DEC-047 item 12).
 3. **Design handoffs, batched.** Before any user-facing screen or component,
    stop and output one block titled "DESIGN HANDOFF — paste into Claude
    Design" covering **all** the slice's screens together (not one stop per
@@ -131,7 +137,71 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
 
 ## 3. Next slice: notes
 
-Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) is **in review** (PR #59), with its approved screens in
+Slice **7** (`slice/07-history`, approved 2026-11-18, DEC-047) is **in progress**: the backend and API are built and
+tested, and the boards were approved on 2026-11-19 (`docs/design/screens/slice-7/`, canvas version
+`1795092518-f2f7`; DEC-047 item 10): one As-of control in the top bar for Search, a CI's page and the Graph
+explorer, an amber banner in a past view, and the CI page's History tab. The design handoff was
+`tmp/screen-handoff-slice7.md` (git-ignored; rule 3). DEC-047 lists the choices made without asking, each with its
+reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
+
+**What slice 7 has so far:**
+- **Migration 0009:** `cmdb.Ci.ChangedBy` and `cmdb.Relationship.ChangedBy` default to the connection's
+  `SESSION_CONTEXT(N'Goldmark.ChangedBy')`; indexes on the two history tables by CI and on the audit log by target.
+  It changes no row.
+- **Who changed it (FR-CM-5):** `Data/DbSession.cs` sets that key once per connection for the signed-in person,
+  read-only; every write gives `ChangedBy` as `DEFAULT` (the definition tables read the key themselves, after
+  `DbSession.RequireActor()`). `Data/ActingPrincipal.cs` is the one answer to "who is acting", for the audit trail too.
+  A write on a connection that names nobody fails (error 515). A test's fixture may still state `ChangedBy` itself.
+- **`asOf`** (`Inventory/AsOf.cs`): a past UTC moment with a `Z`, on `GET /cis`, `/cis/{id}`, `/cis/{id}/relationships`,
+  `/graph`, `POST /graph/export` and `GET /types`; every other inventory read answers 400 `NotSupported` to it. Each
+  as-of statement is its own constant beside the current one (`…AsOfSql`), reading every table
+  `FOR SYSTEM_TIME AS OF @at`; add both when adding a read. A CI that didn't exist yet is 404 `not-found-then`.
+- **History:** `GET /cis/{id}/history` (`Inventory/CiHistory.cs` builds the entries from versions, with no database,
+  and is unit-tested; `CiHistoryStore.cs` reads them). Who ended a relationship: the delete stamps the row with the
+  person ending it and then deletes it, in one transaction, so the history table keeps a last version of no length
+  (DEC-047 item 9, reversing DEC-046 item 1's "never update, then delete"); the audit entry's actor is the fallback
+  for relationships ended before that.
+- **Tests:** `ChangedByTests` (the measurements the design rests on), `HistoryApiTests`, `CiHistoryTests`, and
+  `PerformanceTests.The_reads_as_of_a_moment_and_a_CIs_history_meet_their_p95_on_the_synthetic_estate` (GOLDMARK_PERF=1;
+  DEC-047 items 4 and 6 have its figures).
+- **Measured, worth knowing:** `FOR SYSTEM_TIME ALL` leaves out a version that lasted no time (two changes in one
+  transaction), while the history table keeps the row. `INSERT … SELECT` can't use the `DEFAULT` keyword: leave the
+  column out. A raw string literal (`"""`) can't continue after an interpolated constant on the same line: build such
+  SQL constants with ordinary strings and `+`.
+
+- **Web:** the top bar's As-of control and its dialog (`web/src/ui/asOf.tsx`, the moment in `web/src/asOf.ts`), the
+  amber banner on Search, a CI's page and the Graph explorer in a past view, every change disabled there with one
+  Tooltip, and the CI page's History tab (`web/src/ui/HistoryTab.tsx`); `web/e2e/history.spec.ts` covers them with axe
+  in both themes; `docs/integration/deep-links.md` has `tab=history` and `asOf`.
+- **One moment per page (DEC-047 item 12, review round 1).** Nothing read for one moment may show under another: a
+  CI's page has the moment in its key (`App.tsx`), `useCiTypes(asOf)` answers for the moment asked or with null,
+  Search keeps its rows with the moment they were read for, and a form or dialog that writes is rendered only when
+  `asOf` is null. A new page or hook that takes `asOf` follows one of these. Whether a moment is in the future is
+  the API's to say (`FutureTime`), never `Date.now()`: `api()` turns that refusal into "show the present"
+  (`presentInsteadOfFuture`), and the dialog asks the API on Apply. The types as of a moment count a custom
+  attribute that predates migration 0007 from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`). The History tab
+  is one per version of the CI (`CiPage` keys it by the CI's ETag), so a change made on the page shows in it at once
+  (DEC-047 item 13, review round 2).
+
+- **Design system:** slice 7's changes (the "As of" state amber, the Shell's As-of control, four badges, nine
+  icons) are in `docs/design/system/` and on its canvas (version `1795124389-026c`).
+- **The shell's navigation** is 260 px wide and never shrinks (`AppShell.tsx`, `inlineNav`; DEC-047 item 11). Until
+  slice 7 it shrank beside wide content, to nothing beside a table. `expectAccessible` (`web/e2e/session.ts`)
+  checks its width on every screen the browser tests visit: a page that is too wide now scrolls in its own box
+  instead of squeezing the navigation, so put a wide table in a `ScrollBox` (`web/src/ui/common.tsx`): it scrolls
+  sideways and is a Tab stop with a name while it does. A visually hidden text inside one must have the box as
+  its container (`position: relative` on the box), or it makes the whole page as wide as the table.
+- **Browser tests:** after one test fails, the next ones fail at sign-in (the restarted worker forgets the TOTP
+  step it used, and five wrong codes lock the smoke administrator for 15 minutes): read the first failure only.
+  Switch the theme with `useScheme`, never `page.emulateMedia` alone: axe otherwise measures colours mid-change.
+  An answer the test holds back with a gate is waited for from just before the gate opens, and the page is
+  checked only once the app has taken the answer, never after a fixed wait: the page reports it
+  (`answersTaken` in `history.spec.ts`, an init script counting each `response.text()` a task later), or a
+  control stops waiting (Apply no longer `aria-disabled`).
+
+### Slice 6 (merged), for reference
+
+Slice **6** (`slice/06-relationships`, approved 2026-10-24, DEC-046) merged on 2026-11-18 (PR #59), with its approved screens in
 `docs/design/screens/slice-6/` (canvas version `1794767106-ecfd`). The decisions are DEC-046 items 1 to 19, with the
 owner's words.
 
@@ -176,7 +246,8 @@ owner's words.
   The CI types and relationship types filters stop the walk as Show retired does (DEC-046 item 15), so every line,
   row and CSV row is a real relationship; slice 19's impact walk follows the same rule.
 - Deleting a relationship copies its last version to the history with the last writer's `ChangedBy`; who ended it is
-  the `relationship.deleted` entry's actor (DEC-046 item 1). Slice 7's history view reads it from the audit log.
+  the `relationship.deleted` entry's actor (DEC-046 item 1). Since slice 7 the delete also leaves a stamp in the
+  history that names who ended it (DEC-047 item 9); the audit entry is the fallback for earlier endings.
 - Cytoscape.js needs `ensureCytoscapeStylesheet()` before its first `cytoscape()` (DEC-046 item 3); its node icons are
   images, so a new type icon key needs `node web/scripts/graph-icons.mjs`.
 
@@ -562,6 +633,15 @@ Labels in use: `slice-2` (covers 2, 2b and 2c), `deferred`.
   only), SQL Server integration tests (Testcontainers, about 2 min), Migration
   immutability, Compose smoke, Dependency review, CodeQL ×3 + the CodeQL
   status, code scanning, submit-nuget. Smoke is the long pole.
+- **`main` requires 12 of them before a merge** (owner, 2026-11-18; GitHub
+  ruleset "CI must pass", id 27573740; repository admins may bypass; DEC-018):
+  npm policy, Web, .NET, SQL Server integration tests, Migration immutability,
+  Compose smoke, Windows service, CodeQL ×3, the CodeQL code-scanning status and
+  Dependency review, matched by each job's exact name (submit-nuget is not
+  required). When a CI job is renamed or added, update the
+  ruleset in the same PR (`gh api repos/bankielewicz/Goldmark/rulesets/27573740`),
+  or every PR waits for a check that never reports. A step's name can change
+  freely.
 - The `migrations` job needs `fetch-depth: 0` to read the base revision's
   `db/migrations.sha256`; it compares with the PR base, or with
   `github.event.before` on pushes to `main`.

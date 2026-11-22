@@ -524,6 +524,36 @@ export function WizardProgress({ steps, current }: { steps: string[]; current: n
   );
 }
 
+/**
+ * For a box that scrolls sideways when its content (a table) is wider than it: the ref for the box, and whether it
+ * scrolls now. While it does, make it a Tab stop with a name, so the keyboard can scroll it (WCAG 2.1.1) even when
+ * nothing inside takes focus; while it doesn't, it is no stop at all.
+ */
+export function useSidewaysScroll(): { box: Ref<HTMLDivElement>; scrolls: boolean } {
+  const box = useRef<HTMLDivElement>(null);
+  const [scrolls, setScrolls] = useState(false);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return undefined;
+    // Asked when the box or what it holds changes size.
+    const observer = new ResizeObserver(() => setScrolls(element.scrollWidth > element.clientWidth + 1));
+    observer.observe(element);
+    if (element.firstElementChild) observer.observe(element.firstElementChild);
+    return () => observer.disconnect();
+  }, []);
+  return { box, scrolls };
+}
+
+/** A box for a table that may be wider than it: see useSidewaysScroll. `label` names it while it scrolls. */
+export function ScrollBox({ className, label, children }: { className: string; label: string; children: ReactNode }) {
+  const { box, scrolls } = useSidewaysScroll();
+  return (
+    <div ref={box} className={className} {...(scrolls ? { tabIndex: 0, role: 'group', 'aria-label': label } : {})}>
+      {children}
+    </div>
+  );
+}
+
 export function useCommonStyles() {
   return useStyles();
 }

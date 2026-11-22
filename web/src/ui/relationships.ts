@@ -29,6 +29,8 @@ export interface Relationship {
   changedAt: string;
   changedBy: ChangedBy | null;
   eTag: string;
+  /** Read as of a past moment: whether it has ended since (the "Ended since" badge; DEC-047). */
+  endedSince?: boolean;
 }
 
 export interface RelationshipSection {
@@ -56,8 +58,14 @@ export const ownerTypes = ['Team', 'Person'];
 /** "Show N more" adds up to this many rows (DEC-046 item 12); the first page is 50. */
 export const morePage = 200;
 
-/** A CI's two sections, their first pages loaded with the page (the tab's count), then "Show N more". */
-export function useRelationships(ciId: string): {
+/**
+ * A CI's two sections, their first pages loaded with the page (the tab's count), then "Show N more"; as of `asOf`
+ * in a past view (slice 7).
+ */
+export function useRelationships(
+  ciId: string,
+  asOf: string | null = null,
+): {
   data: Relationships | null;
   totals: { dependencies: number; dependents: number } | null;
   failure: ApiError | null;
@@ -80,14 +88,17 @@ export function useRelationships(ciId: string): {
     setFailure(null);
     setMoreFailure(null);
     try {
-      const { data: loaded } = await api<Relationships>('GET', `/api/v1/cis/${ciId}/relationships`);
+      const { data: loaded } = await api<Relationships>(
+        'GET',
+        `/api/v1/cis/${ciId}/relationships${asOf ? `?asOf=${encodeURIComponent(asOf)}` : ''}`,
+      );
       if (request.current !== current) return;
       setData(loaded);
       setTotals({ dependencies: loaded.dependencies.total ?? 0, dependents: loaded.dependents.total ?? 0 });
     } catch (error) {
       if (request.current === current) setFailure(asApiError(error));
     }
-  }, [ciId]);
+  }, [ciId, asOf]);
 
   useEffect(() => {
     setData(null);
@@ -105,6 +116,7 @@ export function useRelationships(ciId: string): {
       setMoreFailure((f) => (f?.direction === direction ? null : f));
       try {
         const query = new URLSearchParams({ direction, limit: String(morePage), cursor: section.next });
+        if (asOf) query.set('asOf', asOf);
         const { data: page } = await api<RelationshipSection>(
           'GET',
           `/api/v1/cis/${ciId}/relationships?${query.toString()}`,
@@ -131,7 +143,7 @@ export function useRelationships(ciId: string): {
         setMoreBusy(new Set(pending.current));
       }
     },
-    [ciId, data],
+    [ciId, asOf, data],
   );
 
   return { data, totals, failure, reload, more, moreBusy, moreFailure };

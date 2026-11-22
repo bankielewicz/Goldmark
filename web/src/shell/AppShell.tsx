@@ -48,9 +48,11 @@ import {
 import { useEffect, useState, type MouseEvent, type ReactElement, type ReactNode } from 'react';
 
 import { api, ApiError } from '../api';
+import { hasPast, keptAsOf, useAsOf, withAsOf } from '../asOf';
 import { usePreferences } from '../preferences';
 import { followLink, navigate, useLocation } from '../router';
 import { canReadAudit, isAdmin, useSession } from '../session';
+import { AsOfControl } from '../ui/asOf';
 import { ErrorBar } from '../ui/common';
 import { ChangePasswordDialog } from './ChangePasswordDialog';
 
@@ -85,7 +87,11 @@ const useStyles = makeStyles({
     padding: `0 ${tokens.spacingHorizontalM}`,
     backgroundColor: tokens.colorNeutralBackground1,
     borderBottom: `${tokens.strokeWidthThin} solid ${tokens.colorNeutralStroke2}`,
+    // On a phone the bar has less at its edges and the mark alone (the TopBarStates board): with the As-of
+    // control the name no longer fits.
+    '@media (max-width: 599px)': { padding: '0 6px' },
   },
+  brandName: { '@media (max-width: 599px)': { display: 'none' } },
   brand: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS, marginRight: 'auto' },
   mark: {
     width: '28px',
@@ -99,6 +105,11 @@ const useStyles = makeStyles({
     fontWeight: tokens.fontWeightBold,
   },
   body: { flexGrow: 1, display: 'flex', minHeight: 0 },
+  // The inline navigation is 260 px wide and never shrinks, as the boards draw it (DEC-039). Fluent's Drawer would
+  // be 320 px (the `size` given for the items' density also sets its width) and, as a flex item that hides its
+  // overflow, free to shrink: beside a page whose content is very wide when laid out on one line (a table), it
+  // shrank to nothing, still there for a screen reader and out of a pointer's reach.
+  inlineNav: { width: '260px', flexShrink: 0 },
   rail: {
     width: '48px',
     flexShrink: 0,
@@ -198,8 +209,8 @@ export function useWide(): boolean {
  * The app shell for signed-in screens (DEC-039; slice 3's sparse nav: only the screens that exist).
  * NavDrawer inline at 1100 px and wider, an icon rail with an overlay drawer below; top bar with the
  * CI search (slice 5: a box, or below 1100 px a button opening it in a Popover; not on /search, which has
- * its own), the theme toggle and the account menu; a skip link to the main region. The As-of control
- * (slice 7) arrives with its slice.
+ * its own), the As-of control (slice 7, DEC-047 item 10), the theme toggle and the account menu; a skip link to
+ * the main region. While a moment is shown or kept, the links to Search and the Graph explorer carry it.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const styles = useStyles();
@@ -215,6 +226,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { dispatchToast } = useToastController(toasterId);
   const user = session.user;
   const approvals = useApprovals(isAdmin(user), pathname);
+  // The moment the links to the screens with a past bring back: this screen's own, or the one kept for the session
+  // while on another screen (Notes default 2).
+  const asOf = useAsOf();
+  const moment = hasPast(pathname) ? asOf : keptAsOf();
 
   const closeChangePassword = () => {
     setChangingPassword(false);
@@ -233,9 +248,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const entries: NavEntry[] = [
     { value: 'dashboard', label: 'Dashboard', group: 'Overview', path: '/', icon: <BoardRegular /> },
-    { value: 'search', label: 'Search', group: 'Inventory', path: '/search', icon: <SearchRegular /> },
+    {
+      value: 'search',
+      label: 'Search',
+      group: 'Inventory',
+      path: withAsOf('/search', moment),
+      icon: <SearchRegular />,
+    },
     // Slice 6 (screen 6): for everyone signed in, after Search.
-    { value: 'graph', label: 'Graph explorer', group: 'Inventory', path: '/graph', icon: <FlowchartRegular /> },
+    {
+      value: 'graph',
+      label: 'Graph explorer',
+      group: 'Inventory',
+      path: withAsOf('/graph', moment),
+      icon: <FlowchartRegular />,
+    },
     ...(isAdmin(user)
       ? [
           // Slice 5b (screen 14): first in the group, Admin only.
@@ -271,7 +298,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   // A CI's page sits under Search (its breadcrumb starts there).
   const selected = pathname.startsWith('/ci/')
     ? 'search'
-    : (entries.find((entry) => (entry.path === '/' ? pathname === '/' : pathname.startsWith(entry.path)))?.value ?? '');
+    : (entries.find((entry) => {
+        const path = entry.path.split('?')[0] ?? entry.path;
+        return path === '/' ? pathname === '/' : pathname.startsWith(path);
+      })?.value ?? '');
   const otherTheme = preferences.theme === 'dark' ? 'light' : 'dark';
   const initials = (user?.displayName ?? '')
     .split(/\s+/)
@@ -295,6 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       onOpenChange={(_, data) => setOverlayOpen(data.open)}
       aria-label="Main"
       size="small"
+      {...(type === 'inline' ? { className: styles.inlineNav } : {})}
     >
       <NavDrawerBody>
         {['Overview', 'Inventory', 'Administration'].map((group) => {
@@ -348,11 +379,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <span aria-hidden="true" className={styles.mark}>
             G
           </span>
-          <Text weight="semibold" size={400}>
+          <Text weight="semibold" size={400} className={styles.brandName}>
             Goldmark
           </Text>
         </div>
-        {pathname === '/search' ? null : <TopSearch wide={wide} />}
+        {pathname === '/search' ? null : <TopSearch wide={wide} moment={moment} />}
+        <AsOfControl wide={wide} />
         <Tooltip content={`Switch to ${otherTheme} theme`} relationship="label">
           <Button
             appearance="subtle"
@@ -479,8 +511,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 }
 
-/** The top bar's CI search: Enter opens /search?q=… (US-53). */
-function TopSearch({ wide }: { wide: boolean }) {
+/** The top bar's CI search: Enter opens /search?q=… (US-53), at the moment shown or kept (slice 7). */
+function TopSearch({ wide, moment }: { wide: boolean; moment: string | null }) {
   const styles = useStyles();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -488,7 +520,7 @@ function TopSearch({ wide }: { wide: boolean }) {
     const text = q.trim();
     setOpen(false);
     setQ('');
-    navigate(`/search${text ? `?q=${encodeURIComponent(text)}` : ''}`);
+    navigate(withAsOf(`/search${text ? `?q=${encodeURIComponent(text)}` : ''}`, moment));
   };
   const box = (
     <SearchBox

@@ -30,7 +30,7 @@ body{margin:0}
         <input aria-label="Search CIs" placeholder="Search CIs, Enter to search" style="flex: 1; min-width: 0; border: none; background: transparent; color: var(--fg1); font: inherit; outline: none">
       </label>
     </div>
-    <div title="The As-of control arrives in slice 7" style="height: 32px; display: flex; align-items: center; padding: 0 10px; border: 1px dashed var(--st1); border-radius: 4px; color: var(--fg3); font-size: 12px; white-space: nowrap">As of · slice 7</div>
+    <button type="button" aria-haspopup="dialog" aria-label="As of: Now. Choose a point in time" style="height: 32px; flex: none; box-sizing: border-box; padding: 0 {{asPad}}px; display: inline-flex; align-items: center; gap: 6px; border-radius: 4px; background: var(--bg1); border: 1px solid var(--st1); color: var(--fg1); font: inherit; font-weight: 600; white-space: nowrap"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex: none"><path d="M3.5 10a6.5 6.5 0 1 0 2-4.7M3 3.5V7h3.5M10 6.5V10l2.5 1.5"></path></svg><span>{{asLabel}}</span></button>
     <button type="button" aria-label="Switch to {{otherTheme}} theme" style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 4px; background: transparent; color: var(--fg2)"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="{{themeIcon}}"></path></svg></button>
     <button type="button" aria-label="Account: Dana Kowalski" aria-haspopup="menu" style="height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; border: none; border-radius: 4px; background: transparent; color: var(--fg2)">
       <span aria-hidden="true" style="width: 28px; height: 28px; border-radius: 50%; background: var(--bbg2); color: var(--bfg1); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600">DK</span>
@@ -207,6 +207,9 @@ class Component extends DCLogic {
     if (overlay) notes.push('The menu button opens the full nav as an overlay drawer over a scrim; focus is trapped in it, Esc closes it.');
     if (sparse) notes.push('Slice 3 shows only the screens that exist. Skip-to-content link shown in its focused state.');
     return {
+      // The As-of control (slice 7, DEC-047 item 10): the full label on a wide bar, "Now" on the rail.
+      asLabel: width >= 1100 ? 'As of: Now' : 'Now',
+      asPad: width >= 1100 ? 12 : 8,
       rootStyle: (dark ? DARK : LIGHT) + 'position: relative; width: ' + width + 'px; height: ' + height + 'px; overflow: hidden; display: flex; flex-direction: column; background: var(--bg3); color: var(--fg1); font-family: \'Segoe UI\', -apple-system, BlinkMacSystemFont, Roboto, \'Helvetica Neue\', sans-serif;',
       navStyle: 'position: relative; flex: none; width: ' + navWidth + 'px; box-sizing: border-box; padding: 8px ' + (rail ? '4px' : '8px') + '; background: var(--bg2); border-right: 1px solid var(--st2); display: flex; flex-direction: column; gap: ' + (rail ? '0' : '2px') + '; overflow: hidden;',
       groups,

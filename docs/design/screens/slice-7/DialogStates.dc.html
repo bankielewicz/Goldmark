@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Goldmark dialog “Show Goldmark as of” in each state</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1560px; box-sizing: border-box; padding: 40px 56px; background: #fafafa; color: #242424; font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif; font-size: 14px; line-height: 20px; display: flex; flex-direction: column; gap: 20px">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <div style="font-size: 12px; line-height: 16px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #616161">App shell · Dialog</div>
+    <h1 style="margin: 0; font-size: 28px; line-height: 36px; font-weight: 600">“Show Goldmark as of”</h1>
+    <p style="margin: 0; color: #424242">Fluent v9 Dialog (modal, aria-label “Choose a point in time”), Field + DatePicker and TimePicker (the compat packages the audit log already uses), Buttons. Errors show under the fields on Apply; focus returns to the first field in error.</p>
+  </div>
+
+  <div style="background: #f5f5f5; border-radius: 8px; padding: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · empty, as it first opens (focus in Date)</div>
+      <dc-import name="AsOfDialog" mode="empty" width="{{410}}" hint-size="410px,380px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · a moment typed, with the local hint</div>
+      <dc-import name="AsOfDialog" mode="typed" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · reopened with a moment chosen: “Return to now”</div>
+      <dc-import name="AsOfDialog" mode="current" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · error: nothing entered</div>
+      <dc-import name="AsOfDialog" mode="errEmpty" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · error: the future</div>
+      <dc-import name="AsOfDialog" mode="errFuture" width="{{410}}" hint-size="410px,420px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #616161">Light · error: the year (the audit log’s wording)</div>
+      <dc-import name="AsOfDialog" mode="errYear" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+  </div>
+
+  <div style="background: #141414; border-radius: 8px; padding: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px 24px; align-items: start">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #adadad">Dark · a moment typed</div>
+      <dc-import name="AsOfDialog" dark="{{true}}" mode="typed" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #adadad">Dark · reopened with a moment chosen</div>
+      <dc-import name="AsOfDialog" dark="{{true}}" mode="current" width="{{410}}" hint-size="410px,400px"></dc-import>
+    </div>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; line-height: 16px; font-weight: 600; color: #adadad">Dark · error: the future</div>
+      <dc-import name="AsOfDialog" dark="{{true}}" mode="errFuture" width="{{410}}" hint-size="410px,420px"></dc-import>
+    </div>
+  </div>
+  <div style="font-size: 12px; line-height: 16px; color: #616161">Sample data (fictional). The dialog is 480 px wide in the app (drawn at 410 here to sit three across); on a phone it fills the width less 16 px each side. “Yesterday” and “7 days ago” keep the current time of day; a quick choice fills the fields and leaves Apply to the person.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

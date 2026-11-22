@@ -21,7 +21,7 @@ import {
   StorageRegular,
   TableRegular,
 } from '@fluentui/react-icons';
-import { useCallback, useEffect, useState, type ReactElement } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react';
 
 import { api, ApiError, type SessionUser } from '../api';
 
@@ -153,26 +153,54 @@ export function asApiError(error: unknown): ApiError {
  * The CI types with their attributes, and the relationship types, read when a page opens (an Admin may change
  * them at any time).
  */
-export function useCiTypes(): {
+/**
+ * The CI and relationship types, now or as they were at `asOf` (slice 7: a past view reads them as of its moment).
+ * An answer belongs to the moment it was asked for: until that one arrives the types are null, never another
+ * moment's, and an answer that a newer request overtook is dropped. A form built from a past list of attributes
+ * would otherwise save a CI without the attributes added since (DEC-047 item 12).
+ */
+export function useCiTypes(asOf: string | null = null): {
   types: CiType[] | null;
   relationshipTypes: RelationshipType[] | null;
   failure: ApiError | null;
   reload: () => void;
 } {
-  const [types, setTypes] = useState<CiType[] | null>(null);
-  const [relationshipTypes, setRelationshipTypes] = useState<RelationshipType[] | null>(null);
-  const [failure, setFailure] = useState<ApiError | null>(null);
+  const [answer, setAnswer] = useState<{
+    asOf: string | null;
+    types: CiType[] | null;
+    relationshipTypes: RelationshipType[] | null;
+    failure: ApiError | null;
+  } | null>(null);
+  const request = useRef(0);
   const load = useCallback(() => {
-    setFailure(null);
-    api<{ types: CiType[]; relationshipTypes: RelationshipType[] }>('GET', '/api/v1/types')
+    const current = ++request.current;
+    setAnswer((last) => (last && last.asOf === asOf ? { ...last, failure: null } : null));
+    api<{ types: CiType[]; relationshipTypes: RelationshipType[] }>(
+      'GET',
+      asOf ? `/api/v1/types?asOf=${encodeURIComponent(asOf)}` : '/api/v1/types',
+    )
       .then(({ data }) => {
-        setTypes(data.types);
-        setRelationshipTypes(data.relationshipTypes);
+        if (request.current !== current) return;
+        setAnswer({ asOf, types: data.types, relationshipTypes: data.relationshipTypes, failure: null });
       })
-      .catch((error: unknown) => setFailure(asApiError(error)));
-  }, []);
+      .catch((error: unknown) => {
+        if (request.current !== current) return;
+        setAnswer((last) => ({
+          asOf,
+          types: last && last.asOf === asOf ? last.types : null,
+          relationshipTypes: last && last.asOf === asOf ? last.relationshipTypes : null,
+          failure: asApiError(error),
+        }));
+      });
+  }, [asOf]);
   useEffect(load, [load]);
-  return { types, relationshipTypes, failure, reload: load };
+  const mine = answer && answer.asOf === asOf ? answer : null;
+  return {
+    types: mine?.types ?? null,
+    relationshipTypes: mine?.relationshipTypes ?? null,
+    failure: mine?.failure ?? null,
+    reload: load,
+  };
 }
 
 const icons: Record<string, ReactElement> = {
