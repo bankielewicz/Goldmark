@@ -84,7 +84,11 @@ P1 slices wait until slice 24 ships unless the owner pulls one forward.
    raised after that is listed for the owner with a fix-now/defer
    recommendation and, unless the owner says otherwise, becomes an issue
    labelled for the owning slice (or `deferred`) instead of another round.
-   Precedent: PR #1 ended this way (#2–#4, #7).
+   Precedent: PR #1 ended this way (#2–#4, #7). Codex's stop-time review
+   (run when the agent ends a turn) uses no round: its findings about a
+   round's own changes belong to that round. The first batch is fixed in
+   it; any later batch in the same round goes to the owner as fix-now or
+   defer (owner, 2026-11-21; DEC-047 item 12).
 3. **Design handoffs, batched.** Before any user-facing screen or component,
    stop and output one block titled "DESIGN HANDOFF — paste into Claude
    Design" covering **all** the slice's screens together (not one stop per
@@ -188,6 +192,10 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
 - **Browser tests:** after one test fails, the next ones fail at sign-in (the restarted worker forgets the TOTP
   step it used, and five wrong codes lock the smoke administrator for 15 minutes): read the first failure only.
   Switch the theme with `useScheme`, never `page.emulateMedia` alone: axe otherwise measures colours mid-change.
+  An answer the test holds back with a gate is waited for from just before the gate opens, and the page is
+  checked only once the app has taken the answer, never after a fixed wait: the page reports it
+  (`answersTaken` in `history.spec.ts`, an init script counting each `response.text()` a task later), or a
+  control stops waiting (Apply no longer `aria-disabled`).
 
 ### Slice 6 (merged), for reference
 

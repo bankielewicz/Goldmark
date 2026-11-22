@@ -2681,6 +2681,22 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     navigation's width until it settles: just after the window narrows past 1100 px it measured 0 once. And
     `HistoryApiTests.An_attribute_older_than_the_definitions_history_is_not_shown_before_it_was_created`, which
     gives an attribute 0007's 1900 start and listed it before its creation on the query as it was.
+  - *Stop-time findings belong to the round whose changes they check* (owner, 2026-11-21, AskQuestion: "A. Part
+    of the round they check: I fix a round's first stop-time batch myself and bring later batches to you as
+    fix-now or defer. These three: fix now, closing round 1; round 2 stays for Codex's review of that push
+    (Recommended)"). Codex's stop-time review, which runs when the agent ends a turn, had found faults in this
+    round's own changes three times, each batch fixed in the round without asking. After the round's last push it
+    raised a fourth, three points on the browser test itself, and they were fixed in this round. First, a wait for
+    a held answer started before its gate opened, so its time limit ran while the test was holding the answer
+    back: both waits now start just before the gate opens, and the test's 10-second default timeout is gone.
+    Second, the parts for the present's late CI and for Apply after Back looked at the page a fixed 500 ms after
+    the answer, which a slow machine could outlast with the fault back. The page now reports each answer the app
+    reads, a task after its text is handed over: the late-CI part waits for that, then a change of tab, and the
+    Apply parts wait until Apply is no longer waiting. Third, a held answer that was an error would have passed,
+    since any code drops one: both held answers must now be 200, the present's CI under its present name. On a
+    build with the CI page's key back to its path and Apply's navigation check removed, exactly those three parts
+    failed, each on its page check. Rejected: B, counting stop-time findings as a round (these three would have
+    been round 2 of 2); C, never a round, every batch asked first; D, deferring the three to an issue.
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
