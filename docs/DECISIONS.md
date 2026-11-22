@@ -2713,3 +2713,68 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
   10; the handoff was `tmp/screen-handoff-slice7.md`, rule 3).
+
+## DEC-048 Slice 8: API tokens, the OpenAPI contract and the partial save
+
+- **Status.** Approved by the owner on 2026-11-22 ("Ok. Approved"); branch `slice/08-api-tokens-openapi` from
+  `2f28edc` (after PR #82). HANDOFF row 8: "Scoped hashed API tokens, `spec/openapi/v1.json`, contract tests,
+  Deprecation/Sunset, `docs/integration/api-stability.md`; `/api/v1/health` decision; the CI partial save, PATCH
+  (#48, DEC-044 item 11)", done when "US-06/54; US-50 infrastructure …; CI fails on an unreviewed breaking OpenAPI
+  diff; #48 closed" (screen 18). Issue #35 (strict ISO 8601 times in the audit API) belongs here too (DEC-041 item 7,
+  DEC-044 item 5). Items 1 to 7 are the owner's (2026-11-22, AskQuestion, each with the options as asked); the rest
+  were settled without asking, each with its reason, and are the owner's to change in review.
+- **1. The OpenAPI document is built from the endpoints** (owner: "A. Microsoft's OpenAPI package
+  (Microsoft.AspNetCore.OpenApi 10.0.15, MIT) builds it from the endpoints; a test renders it and fails when it
+  differs from the committed file; a script rewrites the file when the API changes on purpose (Recommended)").
+  The package is Microsoft's, signed, MIT, and brings `Microsoft.OpenApi` 2.x. Its documented default is OpenAPI
+  3.0, so the app asks for 3.1 (US-50) explicitly. Rejected: B, `Microsoft.Extensions.ApiDescription.Server` writing
+  the file during `dotnet build`, which starts the app and would need a way past its start-up checks (`Program.cs`
+  refuses to start without its settings); C, a document written by hand, which drifts from the code.
+- **2. The contract tests use a validator in the repository** (owner: "A. A small validator in the repository for
+  the schema rules the document uses; it refuses any rule it doesn't implement, so it can't pass silently; it has
+  its own tests; no package (Recommended)"). Rejected: B, JsonSchema.Net 9.7.0 with JsonPointer.Net, Json.More.Net
+  and Humanizer.Core: its published binaries come under the json-everything "Open Source Maintenance Fee"
+  agreement (`OSMFEULA.txt` in the package: a monthly fee for users with US$10,000 or more of yearly revenue who
+  use it in revenue-generating work; the source stays MIT), read from the package itself on 2026-11-22.
+- **3. CI fails on an unreviewed breaking change by a checker in the repository** (owner: "A. A checker in the
+  repository compares the PR's document with main's and fails on anything that isn't an addition (a removed path,
+  field or parameter, a new required input, a changed type), unless a reviewed file in the PR accepts that change;
+  it runs in the existing .NET job, with its own tests (Recommended)"). No CI job is added, so the "CI must pass"
+  ruleset (DEC-018) stays as it is. Rejected: B, oasdiff as a pinned GitHub Action (a new CI dependency whose
+  OpenAPI 3.1 support would need checking).
+- **4. Scopes: read and write for the inventory, nothing administrative** (owner: "A. Read and write for the
+  inventory: cis:read (CIs, their types, search, history), cis:write (create, change, retire, restore),
+  relationships:read (relationships and the graph), relationships:write; users, types, the audit log and tokens
+  stay with signed-in people (Recommended)"). Rejected: B, read scopes only; C, also `audit:read`. `ingest:write`
+  arrives with sources (slice 13), since such a token is bound to one source (US-06, FR-IN-4).
+- **5. A token lasts at most 365 days** (owner: "A. Up to 365 days: presets 30, 90 (the default) and 180 days, or a
+  custom date within a year (Recommended)"). Every token expires (US-06). Rejected: B, 180 days; C, two years.
+- **6. No `/api/v1/health`** (owner: "A. No /api/v1/health: the two /health endpoints stay the health checks, and
+  the OpenAPI document describes them too; a richer report (component status, versions) would be a separate
+  Admin-only endpoint when someone needs it (Recommended)"), settling DEC-008's deferral. Rejected: B, the same
+  anonymous answer inside `/api/v1`; C, an Admin-only report with component status and versions.
+- **7. The slice 8 boards, with the Notes board's 16 defaults and its design-system changes** (owner: "A. Approve
+  as drawn (Recommended)"; rejected: B, the "API token" badge after the name in the audit log's Actor column too;
+  C, changes). Canvas https://claude.ai/artifact/QYtrozdmDDxRUzxaWjmgNE, 47 boards; the handoff was
+  `tmp/screen-handoff-slice8.md` (rule 3); the boards and their notes are in `docs/design/screens/slice-8/`.
+- **Settled without asking, open to veto:**
+  - *A token request needs no anti-forgery token.* NFR-SEC-2 asks for it on cookie-authenticated changes; a
+    browser never sends an `Authorization` header across sites by itself, so a request that presents a bearer
+    token is authenticated by the token alone and the session cookie is ignored for it.
+  - *A token acts as itself*, never as the Admin who created it: the PRD's `ApiToken` table has no user. The audit
+    log names it (actor type `Token`), and `ChangedBy` holds `token:<id>`, which a CI's history resolves to the
+    token's name (the boards' "owner sync · API token"; DEC-047 item 6 kept `ChangedBy` open for such sources).
+  - *The secret* is `sxt_` and 43 letters and digits (32 random bytes); Goldmark keeps its SHA-256 (US-06,
+    NFR-SEC-5) and its last four characters, which the screen and the audit log show. The handoff's sample has 42
+    characters after `sxt_`; the boards keep the sample as drawn, the code makes 43.
+  - *Token use* (US-07): every change a token makes is audited with the token as actor, as a person's is; reads
+    are recorded as "API token used" at most once an hour per token, and the last-used time at most once a minute,
+    so a script that reads all day doesn't write a row per request.
+  - *The rate limit is per token* (PRD §5.7), a setting with a default, applied after authentication.
+  - *`PATCH /api/v1/cis/{id}` follows RFC 7396* (JSON Merge Patch, `application/merge-patch+json`): a field left
+    out stays, `null` clears it; the name can't be cleared; If-Match is required as for PUT (DEC-044 items 11
+    and 13).
+  - *#35:* the audit API's `from` and `to` accept only full ISO 8601 times with `Z` or an offset
+    (`2026-10-20T08:00:00+02:00` stays valid); anything else is 400 `InvalidTime`, as `asOf` (DEC-047 item 2).
+  - *Deprecation and Sunset* (US-54, RFC 9745 and RFC 8594) are endpoint metadata that adds both headers and marks
+    the operation deprecated in the document; no v1 endpoint is deprecated yet.
