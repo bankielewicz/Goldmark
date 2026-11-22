@@ -179,7 +179,9 @@ reason, and the owner's two decisions (items 7 and 9: who ended a relationship).
   `asOf` is null. A new page or hook that takes `asOf` follows one of these. Whether a moment is in the future is
   the API's to say (`FutureTime`), never `Date.now()`: `api()` turns that refusal into "show the present"
   (`presentInsteadOfFuture`), and the dialog asks the API on Apply. The types as of a moment count a custom
-  attribute that predates migration 0007 from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`).
+  attribute that predates migration 0007 from its `CreatedAt` (`CiTypeCatalog.AttributesAsOfSql`). The History tab
+  is one per version of the CI (`CiPage` keys it by the CI's ETag), so a change made on the page shows in it at once
+  (DEC-047 item 13, review round 2).
 
 - **Design system:** slice 7's changes (the "As of" state amber, the Shell's As-of control, four badges, nine
   icons) are in `docs/design/system/` and on its canvas (version `1795124389-026c`).

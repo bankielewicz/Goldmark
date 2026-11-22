@@ -2697,6 +2697,18 @@ smoke test, with a rotation check added, passes (Playwright 10/10).
     build with the CI page's key back to its path and Apply's navigation check removed, exactly those three parts
     failed, each on its page check. Rejected: B, counting stop-time findings as a round (these three would have
     been round 2 of 2); C, never a round, every batch asked first; D, deferring the three to an issue.
+- **13. Review round 2 (2026-11-22): a change made on a CI's page shows in its History tab at once.** Codex's
+  automatic review of round 1's push (`293d638..b695532`) found nothing. The owner's `/code-review` of the PR found
+  one issue, valid: the History tab read the timeline only when it opened, so an Edit, Retire or Restore made from
+  the CI's page while the tab was open left the timeline without its newest entry, and its count line one short,
+  until the tab was opened again. The owner chose "A. Fix it as round 2: reload the timeline when the CI changes,
+  with a browser-test step that fails first; one rebuilt smoke, one push. Both rounds are then used, and later
+  findings come to you as fix-now or defer (Recommended)" (2026-11-22; rejected: B, fixing it without counting a
+  round; C, an issue). The tab is now one per version of the CI (`CiPage` keys `HistoryTab` by the CI's ETag): a
+  change made on the page starts it again with the newest entry selected, as when it opens. The first browser test
+  renames and retires its CI on the History tab and expects "Changed Name", then "Retired", at the top; on the code
+  before the fix it failed at the rename (the count line stayed at 6 changes). Both review rounds are used: later
+  findings go to the owner as fix-now or defer (HANDOFF rule 2).
 - **Not in this slice.** Impact "as of" (US-42's second sentence) arrives with the impact engine (slice 19).
   Source badges and a filter by source arrive with sources (slices 10 and 11); the history's `by` already carries
   them. The estate-wide change history is screen 15 (slice 23). The screens follow their approved boards (item
