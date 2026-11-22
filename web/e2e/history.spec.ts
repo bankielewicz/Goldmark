@@ -358,6 +358,27 @@ test.describe('slice 7 screens', () => {
       await shot(page, `1100-${name}`);
     }
 
+    // Review round 2: a change made on the History tab is in its timeline at once, not only once the tab reopens.
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto(`/ci/${vm}?tab=history`);
+    await expect(page.getByText('6 changes')).toBeVisible();
+    await page.getByRole('button', { name: 'Edit' }).click();
+    const editPanel = page.getByRole('dialog', { name: 'Edit hist-vm-01b' });
+    await editPanel.getByRole('textbox', { name: /^Name/ }).fill('hist-vm-01c');
+    await editPanel.getByRole('button', { name: 'Save' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'hist-vm-01c' })).toBeVisible();
+    await expect(page.getByText('7 changes')).toBeVisible();
+    const newest = timeline.getByRole('button').first();
+    await expect(newest).toHaveAccessibleName(/Changed Name(?! and)/);
+    await page.getByRole('button', { name: 'Retire…' }).click();
+    await page
+      .getByRole('alertdialog', { name: 'Retire hist-vm-01c?' })
+      .getByRole('button', { name: 'Retire', exact: true })
+      .click();
+    await expect(page.getByText(/^Retired on \d{4}-\d{2}-\d{2} by /)).toBeVisible();
+    await expect(page.getByText('8 changes')).toBeVisible();
+    await expect(newest).toHaveAccessibleName(/Retired/);
+
     expect(problems).toEqual([]);
   });
 

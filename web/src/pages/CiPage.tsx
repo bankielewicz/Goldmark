@@ -585,7 +585,8 @@ function CiView({ id }: { id: string }) {
       </TabList>
       {onHistory ? (
         <section id="panel-history" role="tabpanel" aria-labelledby="tab-history">
-          <HistoryTab ci={ci} asOf={asOf} wide={wide} types={types} />
+          {/* One timeline per version of the CI: a change made on this page (Edit, Retire, Restore) adds an entry. */}
+          <HistoryTab key={ci.eTag} ci={ci} asOf={asOf} wide={wide} types={types} />
         </section>
       ) : onRelationships ? (
         <section
