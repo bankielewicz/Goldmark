@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Goldmark.Api.Audit;
 using Goldmark.Api.Auth;
 using Goldmark.Api.Hosting;
+using Goldmark.Api.Tokens;
 using Serilog.Events;
 
 namespace Goldmark.Api.Configuration;
@@ -24,6 +25,7 @@ internal static partial class ConfigurationPreflight
         Check(errors, DataProtectionSettings.SectionName, () => configuration.GetSection(DataProtectionSettings.SectionName).Get<DataProtectionSettings>());
         Check(errors, AuthOptions.SectionName, () => configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>());
         Check(errors, AuditOptions.SectionName, () => configuration.GetSection(AuditOptions.SectionName).Get<AuditOptions>());
+        Check(errors, ApiOptions.SectionName, () => configuration.GetSection(ApiOptions.SectionName).Get<ApiOptions>());
         Check(errors, LoggingSetup.MinimumLevelKey, () => configuration.GetValue<LogEventLevel>(LoggingSetup.MinimumLevelKey));
         Check(errors, LoggingSetup.RetainedFilesKey, () => configuration.GetValue<int>(LoggingSetup.RetainedFilesKey));
         Check(errors, ServiceOptions.SectionName, () => configuration.GetSection(ServiceOptions.SectionName).Get<ServiceOptions>());

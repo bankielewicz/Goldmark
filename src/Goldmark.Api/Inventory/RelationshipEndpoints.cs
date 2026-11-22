@@ -3,13 +3,15 @@ using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.Inventory;
 
 /// <summary>
 /// Relationships between CIs (screen 5's Relationships tab; US-11, FR-CM-6; DEC-046). Everyone signed in reads them;
-/// Admins and Editors add, change and delete (<see cref="AccessPolicy.CiEditor"/>). A relationship's type and ends
+/// Admins and Editors add, change and delete (<see cref="AccessPolicy.CiEditor"/>); an API token reads with
+/// <c>relationships:read</c> and writes with <c>relationships:write</c> (DEC-048). A relationship's type and ends
 /// never change: a change sets its redundancy group (item 2), and deleting it ends it, its history keeping it
 /// (item 1). Several CIs in one Add are one request each (item 6). Every change is audited in its transaction; a
 /// change or delete needs the relationship's ETag in If-Match (428 without it, 412 if someone else changed it
@@ -27,27 +29,27 @@ internal static class RelationshipEndpoints
     public static RouteGroupBuilder MapRelationshipEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/cis/{id:guid}/relationships", ListAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.RelationshipsRead)
             .WithDisplayName("Relationships: a CI's");
 
         api.MapGet("/cis/{id:guid}/redundancy-groups", GroupsAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.RelationshipsRead)
             .WithDisplayName("Relationships: a CI's redundancy groups");
 
         api.MapGet("/relationships/{id:guid}", GetAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.RelationshipsRead)
             .WithDisplayName("Relationships: get");
 
         api.MapPost("/relationships", CreateAsync)
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.RelationshipsWrite)
             .WithDisplayName("Relationships: add");
 
         api.MapPut("/relationships/{id:guid}", ChangeAsync)
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.RelationshipsWrite)
             .WithDisplayName("Relationships: change");
 
         api.MapDelete("/relationships/{id:guid}", DeleteAsync)
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.RelationshipsWrite)
             .WithDisplayName("Relationships: delete");
 
         return api;

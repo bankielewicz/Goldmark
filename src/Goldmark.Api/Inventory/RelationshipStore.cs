@@ -96,9 +96,10 @@ internal sealed record RelationshipCursor(string Direction, string Type, string 
 /// <summary>
 /// Reads and writes <c>cmdb.Relationship</c> (FR-CM-5, FR-CM-6; DEC-046). The table is system-versioned: a change
 /// moves the row's <c>ValidFrom</c>, its version (and ETag, compared as <c>datetime2(7)</c> as a CI's is), and a delete
-/// leaves the last version in the history. <c>ChangedBy</c> holds the person's account ID, as for CIs. Each section of
-/// the tab reads one index: what a CI depends on through <c>UQ_Relationship (FromCiId, …)</c>, what depends on it
-/// through <c>IX_Relationship_ToCi</c>. Names are ordered in <c>Latin1_General_100_CI_AS</c>, as Search orders them.
+/// leaves the last version in the history. <c>ChangedBy</c> holds the person's account ID or the API token, as for CIs.
+/// Each section of the tab reads one index: what a CI depends on through <c>UQ_Relationship (FromCiId, …)</c>, what
+/// depends on it through <c>IX_Relationship_ToCi</c>. Names are ordered in <c>Latin1_General_100_CI_AS</c>, as Search
+/// orders them.
 /// </summary>
 internal sealed class RelationshipStore(DbSession db)
 {
@@ -107,8 +108,17 @@ internal sealed class RelationshipStore(DbSession db)
 
     private const string ColumnList = """
         SELECT TOP (@take) r.Id, rt.Name AS Type, r.RedundancyGroup, r.CreatedAt, r.ValidFrom, r.ChangedBy, u.DisplayName AS ChangedByName,
+            k.Name AS ChangedByTokenName,
             f.Id AS FromId, f.Name AS FromName, ft.Name AS FromType, f.LifecycleState AS FromState,
             t.Id AS ToId, t.Name AS ToName, tt.Name AS ToType, t.LifecycleState AS ToState
+        """;
+
+    // Who changed it last: a person's account, or an API token (ChangedBy 'token:' and its ID; DEC-048), named by the
+    // current rows of both, as of a moment too: tokens are never deleted and never renamed.
+    private const string ChangedByJoins = """
+
+        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)
+        LEFT JOIN cmdb.ApiToken AS k ON r.ChangedBy LIKE N'token:%' AND k.Id = TRY_CAST(SUBSTRING(r.ChangedBy, 7, 36) AS uniqueidentifier)
         """;
 
     private const string Columns = ColumnList + ", CAST(NULL AS bit) AS EndedSince";
@@ -124,8 +134,7 @@ internal sealed class RelationshipStore(DbSession db)
         JOIN cmdb.CiType AS ft ON ft.Id = f.CiTypeId
         JOIN cmdb.Ci AS t ON t.Id = r.ToCiId
         JOIN cmdb.CiType AS tt ON tt.Id = t.CiTypeId
-        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)
-        """;
+        """ + ChangedByJoins;
 
     // The same tables as they were at @at (US-42, FR-IM-4): the relationships in force then, between the CIs as
     // they were named then, under the type names of then. A relationship ended since is there; one added since is not.
@@ -136,7 +145,7 @@ internal sealed class RelationshipStore(DbSession db)
         + "\nJOIN cmdb.CiType" + AsOf.Clause + " AS ft ON ft.Id = f.CiTypeId"
         + "\nJOIN cmdb.Ci" + AsOf.Clause + " AS t ON t.Id = r.ToCiId"
         + "\nJOIN cmdb.CiType" + AsOf.Clause + " AS tt ON tt.Id = t.CiTypeId"
-        + "\nLEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(r.ChangedBy AS uniqueidentifier)";
+        + ChangedByJoins;
 
     // A section is sorted by relationship type, then the related CI's name (screen 5's tab; Notes board).
     private const string DependenciesPage = """
@@ -285,9 +294,9 @@ internal sealed class RelationshipStore(DbSession db)
     private static RelationshipDetail ToDetail(Row row) =>
         new(row.Id, row.Type, new RelationshipEnd(row.FromId, row.FromName, row.FromType, row.FromState),
             new RelationshipEnd(row.ToId, row.ToName, row.ToType, row.ToState), row.RedundancyGroup, row.CreatedAt, row.ValidFrom,
-            Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, CiStore.Stamp(row.ValidFrom), row.EndedSince);
+            CiChangedBy.Of(row.ChangedBy, row.ChangedByName, row.ChangedByTokenName), CiStore.Stamp(row.ValidFrom), row.EndedSince);
 
     private sealed record Row(Guid Id, string Type, string? RedundancyGroup, DateTime? CreatedAt, DateTime ValidFrom, string ChangedBy,
-        string? ChangedByName, Guid FromId, string FromName, string FromType, string FromState, Guid ToId, string ToName, string ToType,
-        string ToState, bool? EndedSince);
+        string? ChangedByName, string? ChangedByTokenName, Guid FromId, string FromName, string FromType, string FromState, Guid ToId,
+        string ToName, string ToType, string ToState, bool? EndedSince);
 }

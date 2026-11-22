@@ -10,7 +10,8 @@ namespace Goldmark.Api.Audit;
 /// Reads <c>cmdb.AuditLog</c> for screen 16 and its CSV export (US-07). Read-only: the runtime login
 /// holds no UPDATE or DELETE on the log (0002). Names are resolved when read, so an entry about an
 /// account that was removed since (revoking an unused invitation removes it) shows the user name the
-/// entry recorded, if any.
+/// entry recorded, if any. An API token, as actor or as what an entry is about, is named by its name
+/// (DEC-048); tokens are never deleted, so a revoked or expired one keeps it.
 /// </summary>
 internal sealed class AuditLog(DbSession db)
 {
@@ -23,7 +24,7 @@ internal sealed class AuditLog(DbSession db)
         actor.UserName AS ActorUserName, actor.DisplayName AS ActorDisplayName,
         target.UserName AS TargetUserName, target.DisplayName AS TargetDisplayName,
         targetCi.Name AS TargetCiName, targetCiType.Name AS TargetCiTypeName, targetType.Name AS TargetTypeName,
-        targetRelationshipType.Name AS TargetRelationshipTypeName
+        targetRelationshipType.Name AS TargetRelationshipTypeName, actorToken.Name AS ActorTokenName, targetToken.Name AS TargetTokenName
         """;
 
     private const string Joins = """
@@ -35,6 +36,8 @@ internal sealed class AuditLog(DbSession db)
         LEFT JOIN cmdb.CiType AS targetType ON a.TargetType = 'CiType' AND targetType.Id = TRY_CAST(a.TargetId AS int)
         LEFT JOIN cmdb.RelationshipType AS targetRelationshipType
             ON a.TargetType = 'RelationshipType' AND targetRelationshipType.Id = TRY_CAST(a.TargetId AS int)
+        LEFT JOIN cmdb.ApiToken AS actorToken ON a.ActorType = 'Token' AND actorToken.Id = TRY_CAST(a.ActorId AS uniqueidentifier)
+        LEFT JOIN cmdb.ApiToken AS targetToken ON a.TargetType = 'ApiToken' AND targetToken.Id = TRY_CAST(a.TargetId AS uniqueidentifier)
         """;
 
     // Every filter is a parameter (NFR-SEC-3); an unset one is NULL. Times arrive as UTC
@@ -108,6 +111,7 @@ internal sealed class AuditLog(DbSession db)
                 {
                     AuditActorTypes.User => "Person",
                     AuditActorTypes.Anonymous => "Not signed in",
+                    AuditActorTypes.Token => "API token",
                     _ => entry.Actor.Type,
                 },
                 Name(entry.Actor),
@@ -123,9 +127,10 @@ internal sealed class AuditLog(DbSession db)
         return csv.ToString();
     }
 
-    /// <summary>A person's name, or a CI's or a CI type's; empty for System and an anonymous client, whose type column says it all.</summary>
+    /// <summary>A person's name, or a CI's, a CI type's or an API token's; empty for System and an anonymous client, whose type column says it all.</summary>
     private static string Name(AuditParty party) => party switch
     {
+        { Type: AuditActorTypes.Token or AuditTargetTypes.ApiToken, Name: var name } => $"{name} (API token)",
         { Type: AuditTargetTypes.Ci, Name: var name, CiType: var type } => $"{name} ({type})",
         { Type: AuditTargetTypes.CiType, Name: var name } => $"{name} (CI type)",
         { Type: AuditTargetTypes.RelationshipType, Name: var name } => $"{name} (relationship type)",
@@ -162,9 +167,13 @@ internal sealed class AuditLog(DbSession db)
         }
 
         var action = AuditCatalog.Describe(row.Action);
-        var actor = row.ActorType == AuditActorTypes.User
-            ? Person(row.ActorId, row.ActorUserName, row.ActorDisplayName, recordedUserName: null)
-            : new AuditParty(row.ActorType, null, null, null, Removed: false);
+        var actor = row.ActorType switch
+        {
+            AuditActorTypes.User => Person(row.ActorId, row.ActorUserName, row.ActorDisplayName, recordedUserName: null),
+            AuditActorTypes.Token => new AuditParty(AuditActorTypes.Token, Guid.TryParse(row.ActorId, out var token) ? token : null, null, null,
+                Removed: row.ActorTokenName is null, Name: row.ActorTokenName),
+            _ => new AuditParty(row.ActorType, null, null, null, Removed: false),
+        };
         var target = row.TargetType switch
         {
             AuditActorTypes.User when row.TargetId is not null => Person(row.TargetId, row.TargetUserName, row.TargetDisplayName, RecordedUserName(details)),
@@ -181,6 +190,8 @@ internal sealed class AuditLog(DbSession db)
             // they recorded it ("app-erp-db01 runs_on esx-mx-014"), whether it still exists or not.
             AuditTargetTypes.Relationship => new AuditParty(AuditTargetTypes.Relationship, Guid.TryParse(row.TargetId, out var relationship) ? relationship : null,
                 null, null, Removed: false, Name: $"{Recorded(details, "from")} {Recorded(details, "type")} {Recorded(details, "to")}"),
+            AuditTargetTypes.ApiToken => new AuditParty(AuditTargetTypes.ApiToken, Guid.TryParse(row.TargetId, out var apiToken) ? apiToken : null, null, null,
+                Removed: row.TargetTokenName is null, Name: row.TargetTokenName ?? Recorded(details, "name")),
             _ => null,
         };
         return new AuditEntry(row.Id, row.At, actor, row.Action, action.Label, action.Outcome, target, row.Ip, details);
@@ -203,7 +214,8 @@ internal sealed class AuditLog(DbSession db)
 
     private sealed record Row(long Id, DateTime At, string ActorType, string? ActorId, string Action, string? TargetType, string? TargetId,
         string? Ip, string? Details, string? ActorUserName, string? ActorDisplayName, string? TargetUserName, string? TargetDisplayName,
-        string? TargetCiName, string? TargetCiTypeName, string? TargetTypeName, string? TargetRelationshipTypeName);
+        string? TargetCiName, string? TargetCiTypeName, string? TargetTypeName, string? TargetRelationshipTypeName, string? ActorTokenName,
+        string? TargetTokenName);
 }
 
 internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string Action, string Label, string Outcome, AuditParty? Target,
@@ -212,19 +224,21 @@ internal sealed record AuditEntry(long Id, DateTime At, AuditParty Actor, string
 /// <summary>
 /// Who acted, or what it was about: a person (a removed account is <c>Removed</c>), a CI (<c>Name</c>,
 /// <c>CiType</c>), a CI type (<c>Name</c>; slice 5) or a relationship type (<c>Name</c>; slice 5b), these two with
-/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>), or a
-/// relationship (<c>Id</c>, <c>Name</c> as "from type to"; slice 6).
+/// their <c>Number</c> (the audit filter's <c>type:{number}</c> and <c>relationship-type:{number}</c>), a
+/// relationship (<c>Id</c>, <c>Name</c> as "from type to"; slice 6), or an API token (<c>Id</c>, <c>Name</c>; type
+/// <c>Token</c> as actor, <c>ApiToken</c> as what an entry is about; slice 8).
 /// </summary>
 internal sealed record AuditParty(string Type, Guid? Id, string? UserName, string? DisplayName, bool Removed, string? Name = null, string? CiType = null,
     int? Number = null);
 
-/// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5; relationships from slice 6.</summary>
+/// <summary>The non-person things an entry can be about (<c>TargetType</c>), from slice 5; relationships from slice 6, API tokens from slice 8.</summary>
 internal static class AuditTargetTypes
 {
     public const string Ci = "Ci";
     public const string CiType = "CiType";
     public const string RelationshipType = "RelationshipType";
     public const string Relationship = "Relationship";
+    public const string ApiToken = "ApiToken";
 }
 
 internal sealed record AuditPerson(Guid Id, string UserName, string DisplayName);

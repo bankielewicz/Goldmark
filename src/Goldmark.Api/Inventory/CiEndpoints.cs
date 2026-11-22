@@ -4,13 +4,15 @@ using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.Inventory;
 
 /// <summary>
 /// CIs (screens 4 and 5; US-11, US-53; DEC-044); their types are <see cref="TypeEndpoints"/>. Everyone
-/// signed in reads; Admins and Editors create, change, retire and restore (<see cref="AccessPolicy.CiEditor"/>).
+/// signed in reads; Admins and Editors create, change, retire and restore (<see cref="AccessPolicy.CiEditor"/>);
+/// an API token reads with <c>cis:read</c> and changes with <c>cis:write</c>, as itself (DEC-048).
 /// A save locks its type and reads its definitions inside the transaction (<see cref="CiTypeCatalog"/>), so an
 /// Admin's change to the type can't slip in between; no new CI of a hidden type (DEC-045 item 5). Every change is
 /// audited in its transaction. A change needs the CI's ETag in If-Match: HTTP 428 without it, 412 if
@@ -24,33 +26,33 @@ internal static class CiEndpoints
     public static RouteGroupBuilder MapCiEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/cis", SearchAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.CisRead)
             .WithDisplayName("CIs: search");
 
         api.MapGet("/cis/{id:guid}", GetAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.CisRead)
             .WithDisplayName("CIs: get");
 
         api.MapGet("/cis/{id:guid}/history", HistoryAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.CisRead)
             .WithDisplayName("CIs: history");
 
         api.MapPost("/cis", CreateAsync)
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
             .WithDisplayName("CIs: create");
 
         api.MapPut("/cis/{id:guid}", UpdateAsync)
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
             .WithDisplayName("CIs: change");
 
         api.MapPost("/cis/{id:guid}/retire", (Guid id, HttpContext context, IServiceProvider services) =>
                 SetLifecycleAsync(id, context, services, LifecycleStates.Retired))
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
             .WithDisplayName("CIs: retire");
 
         api.MapPost("/cis/{id:guid}/restore", (Guid id, HttpContext context, IServiceProvider services) =>
                 SetLifecycleAsync(id, context, services, LifecycleStates.Active))
-            .RequireAccess(AccessPolicy.CiEditor)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
             .WithDisplayName("CIs: restore");
 
         return api;

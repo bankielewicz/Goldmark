@@ -4,13 +4,15 @@ using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.Inventory;
 
 /// <summary>
 /// CI types, their attributes and the relationship types (screen 14; US-10, FR-CM-1, FR-IM-1; DEC-044 items 4 and
-/// 8, DEC-045). Everyone signed in reads them; only an Admin adds, changes, hides or deletes, and only custom ones:
+/// 8, DEC-045). Everyone signed in reads them, and an API token with <c>cis:read</c>, which a CI's values need (DEC-048);
+/// only an Admin adds, changes, hides or deletes, and only custom ones:
 /// built-in types, attributes and relationship types are locked (409 <c>built-in</c>). Names never change. A
 /// change to an attribute or a relationship type needs its ETag in If-Match (428 without it, 412 if someone else
 /// changed it meanwhile). Every change is audited in its transaction.
@@ -38,7 +40,7 @@ internal static partial class TypeEndpoints
     public static RouteGroupBuilder MapTypeEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/types", ListAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.CisRead)
             .WithDisplayName("Types: list");
 
         api.MapGet("/types/usage", UsageAsync)

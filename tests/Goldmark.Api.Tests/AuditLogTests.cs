@@ -101,6 +101,62 @@ public sealed class AuditLogTests
         Assert.Null(query.ActorId);
     }
 
+    [Fact]
+    public void The_actor_filter_takes_an_API_token_as_token_and_its_id_and_the_export_records_it_so()
+    {
+        var token = Guid.CreateVersion7();
+
+        var (query, problem) = AuditQuery.Parse(Query(("actor", $"token:{token:D}")));
+
+        Assert.Null(problem);
+        Assert.Equal((AuditActorTypes.Token, token), (query!.ActorType, query.ActorId));
+        Assert.Equal($"token:{token:D}", query.Describe()["actor"]);
+        var (person, _) = AuditQuery.Parse(Query(("actor", token.ToString("D"))));
+        Assert.Equal((AuditActorTypes.User, token), (person!.ActorType, person.ActorId));
+    }
+
+    [Theory]
+    [InlineData("token:")]
+    [InlineData("token:owner sync")]
+    [InlineData("Token:0193f5a2-6c1e-7d3a-9b2e-5f4a3c2d1e0f")]
+    [InlineData("token:0193f5a26c1e7d3a9b2e5f4a3c2d1e0f")]
+    public void An_actor_filter_for_a_token_needs_its_id(string value)
+    {
+        var (query, problem) = AuditQuery.Parse(Query(("actor", value)));
+
+        Assert.Null(query);
+        Assert.NotNull(problem);
+    }
+
+    [Fact]
+    public void The_API_token_actions_are_a_group_of_their_own()
+    {
+        Assert.Equal(
+            [("token.created", "API token created"), ("token.revoked", "API token revoked"), ("token.used", "API token used")],
+            AuditCatalog.Actions.Where(a => a.Group == "API tokens").Select(a => (a.Code, a.Label)));
+        Assert.All(AuditCatalog.Actions.Where(a => a.Group == "API tokens"), a => Assert.Equal(AuditCatalog.Succeeded, a.Outcome));
+    }
+
+    [Fact]
+    public void The_export_names_an_API_token_as_who_acted_and_as_what_an_entry_is_about()
+    {
+        var token = Guid.CreateVersion7();
+        var entries = new[]
+        {
+            new AuditEntry(9, new DateTime(2026, 11, 22, 8, 14, 0, DateTimeKind.Utc), new AuditParty(AuditActorTypes.Token, token, null, null, false, Name: "owner sync"),
+                AuditActions.CiChanged, "CI changed", AuditCatalog.Succeeded,
+                new AuditParty(AuditTargetTypes.Ci, Guid.NewGuid(), null, null, false, Name: "app-erp-db01", CiType: "VirtualMachine"), null, null),
+            new AuditEntry(10, new DateTime(2026, 11, 22, 8, 15, 0, DateTimeKind.Utc), new AuditParty(AuditActorTypes.Token, token, null, null, false, Name: "owner sync"),
+                AuditActions.TokenUsed, "API token used", AuditCatalog.Succeeded,
+                new AuditParty(AuditTargetTypes.ApiToken, token, null, null, false, Name: "owner sync"), null, null),
+        };
+
+        var lines = AuditLog.ToCsv(entries).Split("\r\n");
+
+        Assert.Equal("2026-11-22 08:14:00,API token,owner sync (API token),CI changed,ci.changed,app-erp-db01 (VirtualMachine),,Succeeded,", lines[1]);
+        Assert.Equal("2026-11-22 08:15:00,API token,owner sync (API token),API token used,token.used,owner sync (API token),,Succeeded,", lines[2]);
+    }
+
     [Theory]
     [InlineData("ip", "10.20.%")]
     [InlineData("ip", "10.20.4_")]

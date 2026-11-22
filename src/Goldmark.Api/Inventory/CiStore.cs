@@ -21,8 +21,30 @@ internal sealed record CiPage(IReadOnlyList<CiSummary> Items, long? Total, IRead
 /// <summary>A CI another one links to through an attribute, as its detail page shows it.</summary>
 internal sealed record CiReference(Guid Id, string Name, string Type, string LifecycleState);
 
-/// <summary>Who saved a CI last; <c>DisplayName</c> is null when the account no longer exists.</summary>
-internal sealed record CiChangedBy(Guid? Id, string? DisplayName);
+/// <summary>
+/// Who saved a CI or a relationship last. <c>Kind</c> <c>user</c>: an account, its <c>Id</c>, and <c>DisplayName</c>
+/// while it exists. <c>Kind</c> <c>token</c>: an API token acting as itself (DEC-048), its <c>Id</c> and <c>Name</c>, which
+/// stays after the token is revoked or expired.
+/// </summary>
+internal sealed record CiChangedBy(Guid? Id, string? DisplayName, string Kind = ChangedByKinds.User, string? Name = null)
+{
+    /// <summary>
+    /// Who a row's <c>ChangedBy</c> names, with the account's display name or the token's name its query joined; null
+    /// for anything else it may hold.
+    /// </summary>
+    public static CiChangedBy? Of(string? changedBy, string? displayName, string? tokenName) =>
+        Guid.TryParse(changedBy, out var account) ? new CiChangedBy(account, displayName)
+        : ActingPrincipal.TokenOf(changedBy) is { } token ? new CiChangedBy(token, null, ChangedByKinds.Token, tokenName)
+        : null;
+}
+
+/// <summary>What kind of principal made a change: a person's account, an API token, or text of another source (slice 10).</summary>
+internal static class ChangedByKinds
+{
+    public const string User = "user";
+    public const string Token = "token";
+    public const string Other = "other";
+}
 
 /// <summary>A CI as screen 5 shows it (US-11). <c>ETag</c> is the version If-Match must name to change it.</summary>
 internal sealed record CiDetail(Guid Id, string Name, string Type, string LifecycleState, JsonElement Attributes,
@@ -165,8 +187,9 @@ internal sealed record CiCursor(string Sort, string? Name, string? Type, string?
 /// holds everywhere. A CI's version is its <c>ValidFrom</c>, which every committed change moves (the
 /// table is system-versioned): it travels as text and is compared as <c>datetime2(7)</c>, since a .NET
 /// DateTime parameter would be sent as <c>datetime</c> and lose precision. <c>ChangedBy</c> holds the
-/// person's account ID: every write takes it from the connection's <c>SESSION_CONTEXT</c> through the
-/// column's default (FR-CM-5, DEC-047; <see cref="DbSession"/>), and fails when nobody is acting.
+/// person's account ID, or <c>token:</c> and an API token's ID (DEC-048): every write takes it from the
+/// connection's <c>SESSION_CONTEXT</c> through the column's default (FR-CM-5, DEC-047; <see cref="DbSession"/>),
+/// and fails when nobody is acting.
 /// </summary>
 internal sealed class CiStore(DbSession db)
 {
@@ -264,14 +287,23 @@ internal sealed class CiStore(DbSession db)
 
     private const string DetailColumns = """
         SELECT c.Id, c.Name, t.Name AS Type, c.CiTypeId, c.LifecycleState, CAST(c.Attributes AS nvarchar(max)) AS Attributes,
-            c.ValidFrom, c.ChangedBy, u.DisplayName AS ChangedByName
+            c.ValidFrom, c.ChangedBy, u.DisplayName AS ChangedByName, k.Name AS ChangedByTokenName
+        """;
+
+    // Who saved it: a person's account, or an API token (ChangedBy 'token:' and its ID; DEC-048). Tokens are never
+    // deleted and never renamed, so the current row names one in a past version too.
+    private const string ChangedByJoins = """
+
+        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(c.ChangedBy AS uniqueidentifier)
+        LEFT JOIN cmdb.ApiToken AS k ON c.ChangedBy LIKE N'token:%' AND k.Id = TRY_CAST(SUBSTRING(c.ChangedBy, 7, 36) AS uniqueidentifier)
         """;
 
     private const string DetailSql = DetailColumns + """
 
         FROM cmdb.Ci AS c
         JOIN cmdb.CiType AS t ON t.Id = c.CiTypeId
-        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(c.ChangedBy AS uniqueidentifier)
+        """ + ChangedByJoins + """
+
         WHERE c.Id = @id AND c.TenantId = @tenant;
         """;
 
@@ -280,13 +312,14 @@ internal sealed class CiStore(DbSession db)
 
         FROM cmdb.Ci AS c WITH (UPDLOCK, HOLDLOCK)
         JOIN cmdb.CiType AS t ON t.Id = c.CiTypeId
-        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(c.ChangedBy AS uniqueidentifier)
+        """ + ChangedByJoins + """
+
         WHERE c.Id = @id AND c.TenantId = @tenant;
         """;
 
     // The CI as it was at @at; null when it didn't exist yet.
-    private const string DetailAsOfSql = AsOf.Declare + DetailColumns + TablesAsOf + """
-        LEFT JOIN cmdb.UserAccount AS u ON u.Id = TRY_CAST(c.ChangedBy AS uniqueidentifier)
+    private const string DetailAsOfSql = AsOf.Declare + DetailColumns + TablesAsOf + ChangedByJoins + """
+
         WHERE c.Id = @id AND c.TenantId = @tenant;
         """;
 
@@ -425,7 +458,7 @@ internal sealed class CiStore(DbSession db)
         var linked = asOf is { } moment ? await LinkedAsync(linkIds, moment) : await LinkedAsync(linkIds);
         return new CiDetail(row.Id, row.Name, row.Type, row.LifecycleState, JsonSerializer.SerializeToElement(AttributeValues.ForResponse(type, values)),
             linked.Values.ToDictionary(l => l.Id.ToString("D"), l => new CiReference(l.Id, l.Name, l.Type, l.LifecycleState)),
-            row.ValidFrom, Guid.TryParse(row.ChangedBy, out var by) ? new CiChangedBy(by, row.ChangedByName) : null, Stamp(row.ValidFrom));
+            row.ValidFrom, CiChangedBy.Of(row.ChangedBy, row.ChangedByName, row.ChangedByTokenName), Stamp(row.ValidFrom));
     }
 
     public Task InsertAsync(Guid id, int typeId, string name, string attributes) =>
@@ -438,7 +471,7 @@ internal sealed class CiStore(DbSession db)
         db.ExecuteAsync(LifecycleSql, new { id, tenant = Tenants.Default, state });
 
     internal sealed record CiRow(Guid Id, string Name, string Type, int CiTypeId, string LifecycleState, string Attributes,
-        DateTime ValidFrom, string ChangedBy, string? ChangedByName);
+        DateTime ValidFrom, string ChangedBy, string? ChangedByName, string? ChangedByTokenName);
 
     internal sealed record LinkedCi(Guid Id, string Name, string Type, string LifecycleState, int CiTypeId);
 }

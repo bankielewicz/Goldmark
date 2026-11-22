@@ -15,6 +15,9 @@ internal static class TestSecrets
 {
     public const string DatabasePassword = "Db-Pa55word-NEVER-LOG-7f3a";
     public const string BearerToken = "sxt_test-token-NEVER-LOG-91c2";
+
+    /// <summary>An API token's secret in its real form (DEC-048), so the token scheme looks it up.</summary>
+    public const string ApiToken = "sxt_NEVERLOG7f3aApiToken00000000000000000000000";
     public const string CookieValue = "cookie-NEVER-LOG-44d0";
     public const string QuerySecret = "query-NEVER-LOG-0b7e";
 }

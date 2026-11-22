@@ -131,8 +131,10 @@ internal static class GoldmarkApplication
         // request that reaches routing gets an endpoint (or none) before authorization runs.
         app.UseGoldmarkStaticFiles();
         app.UseRouting();
-        app.UseRateLimiter();
         app.UseAuthentication();
+        // After authentication, so an API token's requests count against the token (PRD §5.7, DEC-048); the
+        // credentials limit is the endpoint's, per client address, as before. Before authorization, so a refused request counts.
+        app.UseRateLimiter();
         app.UseAuthorization();
         app.MapGoldmarkHealthEndpoints();
         app.MapGoldmarkApi();

@@ -695,6 +695,7 @@ public sealed class ConfigurationPreflightTests
     [InlineData("Goldmark:Database:ConnectTimeoutSeconds")]
     [InlineData("Goldmark:Bootstrap:AdoptExistingLogin")]
     [InlineData("Goldmark:Logging:MinimumLevel")]
+    [InlineData("Goldmark:Api:TokenRequestsPerMinute")]
     public void A_wrongly_typed_value_names_the_setting_but_never_the_value(string key)
     {
         const string value = "NEVER-ECHO-5d1c";

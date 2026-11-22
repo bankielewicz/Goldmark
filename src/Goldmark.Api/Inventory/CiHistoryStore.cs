@@ -95,6 +95,12 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
         WHERE u.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
         """;
 
+    // The API tokens that made changes (ChangedBy 'token:' and the ID; DEC-048); never deleted, so each keeps its name.
+    private const string TokensSql = """
+        SELECT k.Id, k.Name FROM cmdb.ApiToken AS k
+        WHERE k.Id IN (SELECT CAST(value AS uniqueidentifier) FROM OPENJSON(@ids));
+        """;
+
     /// <summary>One page of the CI's history, newest first, or null when there is no such CI.</summary>
     public async Task<HistoryPage?> PageAsync(Guid id, int take, (DateTime At, string Tie)? after)
     {
@@ -125,18 +131,24 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
                 ids = JsonSerializer.Serialize(ended.Select(r => r.ToString("D"))),
             });
 
-        var accounts = versions.Select(v => v.ChangedBy).Concat(relationships.Select(r => r.ChangedBy)).Concat(stamps.Values)
-            .Concat(enders.Where(e => e.ActorType == AuditActorTypes.User).Select(e => e.ActorId))
-            .Select(text => Guid.TryParse(text, out var account) ? account : (Guid?)null).OfType<Guid>().Distinct().ToList();
+        var changers = versions.Select(v => v.ChangedBy).Concat(relationships.Select(r => r.ChangedBy)).Concat(stamps.Values)
+            .Concat(enders.Where(e => e.ActorType == AuditActorTypes.User).Select(e => e.ActorId)).ToList();
+        var accounts = changers.Select(text => Guid.TryParse(text, out var account) ? account : (Guid?)null).OfType<Guid>().Distinct().ToList();
         var people = accounts.Count == 0
             ? []
             : (await db.QueryAsync<PersonRow>(PeopleSql, new { ids = JsonSerializer.Serialize(accounts.Select(a => a.ToString("D"))) }))
                 .ToDictionary(p => p.Id, p => p.DisplayName);
+        var tokenIds = changers.Select(ActingPrincipal.TokenOf).OfType<Guid>().Distinct().ToList();
+        var tokens = tokenIds.Count == 0
+            ? []
+            : (await db.QueryAsync<TokenRow>(TokensSql, new { ids = JsonSerializer.Serialize(tokenIds.Select(t => t.ToString("D"))) }))
+                .ToDictionary(t => t.Id, t => t.Name);
         HistoryActor? Actor(string? changedBy) => changedBy switch
         {
             null => null,
             _ when Guid.TryParse(changedBy, out var account) => new HistoryActor(account, people.GetValueOrDefault(account), null),
-            _ => new HistoryActor(null, null, changedBy),
+            _ when ActingPrincipal.TokenOf(changedBy) is { } token => new HistoryActor(token, null, tokens.GetValueOrDefault(token), ChangedByKinds.Token),
+            _ => new HistoryActor(null, null, changedBy, ChangedByKinds.Other),
         };
 
         // The stamp first. From the audit log, only a person's entry names who ended it; anything else on record there
@@ -166,4 +178,6 @@ internal sealed class CiHistoryStore(DbSession db, CiStore cis)
     private sealed record EndRow(string TargetId, string ActorType, string? ActorId);
 
     private sealed record PersonRow(Guid Id, string DisplayName);
+
+    private sealed record TokenRow(Guid Id, string Name);
 }

@@ -4,11 +4,13 @@ using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 
 namespace Goldmark.Api.Inventory;
 
 /// <summary>
-/// Screen 6, the graph explorer (US-40; DEC-046 items 4, 5 and 7), for everyone signed in. The read walks the
+/// Screen 6, the graph explorer (US-40; DEC-046 items 4, 5 and 7), for everyone signed in and an API token with
+/// <c>relationships:read</c> (DEC-048). The read walks the
 /// relationships around a CI (<see cref="GraphStore"/>). The CSV export holds every relationship the table view lists
 /// and, as every export does (DEC-041 item 3), writes its own audit entry (the focus CI, the filters and the row count)
 /// in the same transaction; a graph the read cut short is refused, never exported in part. The PNG is made in the
@@ -19,11 +21,11 @@ internal static class GraphEndpoints
     public static RouteGroupBuilder MapGraphEndpoints(this RouteGroupBuilder api)
     {
         api.MapGet("/graph", ReadAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.RelationshipsRead)
             .WithDisplayName("Graph: read");
 
         api.MapPost("/graph/export", ExportAsync)
-            .RequireAccess(AccessPolicy.SignedIn)
+            .RequireAccess(AccessPolicy.SignedIn, TokenScopes.RelationshipsRead)
             .WithDisplayName("Graph: export CSV");
 
         return api;

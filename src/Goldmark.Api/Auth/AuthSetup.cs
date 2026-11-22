@@ -1,20 +1,36 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Options;
 
 namespace Goldmark.Api.Auth;
 
-/// <summary>The three cookie schemes: a signed-in session, a pending second factor, an enrolment in progress.</summary>
+/// <summary>
+/// The three cookie schemes (a signed-in session, a pending second factor, an enrolment in progress), the API token
+/// scheme (DEC-048) and the scheme that chooses between a session and a token for each request.
+/// </summary>
 internal static class AuthSchemes
 {
     /// <summary>Signed in with password and second factor; server-side session (<see cref="SessionTicketStore"/>).</summary>
     public const string Session = "Goldmark.Session";
+
+    /// <summary>An API token in <c>Authorization: Bearer sxt_…</c> (<see cref="ApiTokenHandler"/>).</summary>
+    public const string Token = "Goldmark.Token";
+
+    /// <summary>
+    /// The default scheme and the one the signed-in policies authenticate with: a request that presents a bearer token
+    /// is authenticated by the token alone, its cookies ignored; any other by the session cookie (DEC-048).
+    /// </summary>
+    public const string SessionOrToken = "Goldmark.SessionOrToken";
 
     /// <summary>Password verified, second factor not yet: accepted only by the sign-in step that asks for the code.</summary>
     public const string TwoFactor = "Goldmark.TwoFactor";
@@ -42,12 +58,24 @@ internal static class GoldmarkClaims
 
     /// <summary>The server-side session's id (hex of its key's hash), never the key itself.</summary>
     public const string Session = "goldmark:session";
+
+    /// <summary>An API token's ID (DEC-048): a token's principal has no <c>NameIdentifier</c>, which names a person.</summary>
+    public const string Token = "goldmark:token";
+
+    /// <summary>An API token's name.</summary>
+    public const string TokenName = "goldmark:token-name";
+
+    /// <summary>One of an API token's scopes (<see cref="TokenScopes"/>), a claim each.</summary>
+    public const string Scope = "goldmark:scope";
 }
 
 internal static class RateLimits
 {
     /// <summary>Sign-in, setup and link requests, per client address (AuthOptions.RequestsPerMinute).</summary>
     public const string Credentials = "credentials";
+
+    /// <summary>The answer to a request over a limit: 429, Problem Details with this code, and <c>Retry-After</c>.</summary>
+    public const string RejectedCode = "rate-limited";
 }
 
 internal static class AuthSetup
@@ -92,7 +120,19 @@ internal static class AuthSetup
         services.AddSingleton<SessionTicketStore>();
         services.AddSingleton<IPostConfigureOptions<CookieAuthenticationOptions>, SessionStoreSetup>();
         services.AddSingleton<UnknownUserThrottle>();
-        services.AddAuthentication(AuthSchemes.Session)
+        services.AddScoped<ApiTokenStore>();
+        services.AddSingleton<IValidateOptions<ApiOptions>, ApiOptionsValidator>();
+        services.AddOptions<ApiOptions>().BindConfiguration(ApiOptions.SectionName).ValidateOnStart();
+        services.AddAuthentication(authentication =>
+            {
+                // Authenticate, challenge and forbid per request (DEC-048); only a session is ever signed in or out.
+                authentication.DefaultScheme = AuthSchemes.SessionOrToken;
+                authentication.DefaultSignInScheme = AuthSchemes.Session;
+                authentication.DefaultSignOutScheme = AuthSchemes.Session;
+            })
+            .AddPolicyScheme(AuthSchemes.SessionOrToken, "Session or API token", policy => policy.ForwardDefaultSelector = context =>
+                context.Request.PresentsBearerToken() ? AuthSchemes.Token : AuthSchemes.Session)
+            .AddScheme<AuthenticationSchemeOptions, ApiTokenHandler>(AuthSchemes.Token, "API token", configureOptions: null)
             .AddCookie(AuthSchemes.Session, cookie =>
             {
                 Configure(cookie, AuthSchemes.SessionCookie);
@@ -115,16 +155,20 @@ internal static class AuthSetup
         services.AddOptions<CookieAuthenticationOptions>(AuthSchemes.Session).Configure<IOptions<AuthOptions>>((cookie, auth) =>
             cookie.ExpireTimeSpan = auth.Value.SessionIdle);
 
-        // Deny by default (US-04, M6): an endpoint without a policy rejects everyone, signed in or not.
+        // Deny by default (US-04, M6): an endpoint without a policy rejects everyone, signed in or not. A session is
+        // judged by its roles, an API token by the endpoint's scope alone (EndpointAccessRequirement; DEC-048).
         services.AddSingleton<IAuthorizationHandler, DenyUnclassifiedEndpoints>();
+        services.AddSingleton<IAuthorizationHandler, EndpointAccessHandler>();
         services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder(AuthSchemes.Session).AddRequirements(new DenyUnclassifiedEndpoints()).Build())
-            .AddPolicy(AccessPolicy.SignedIn, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser())
-            .AddPolicy(AccessPolicy.Admin, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin))
-            .AddPolicy(AccessPolicy.AuditReader, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin, Roles.Auditor))
-            .AddPolicy(AccessPolicy.CiEditor, p => p.AddAuthenticationSchemes(AuthSchemes.Session).RequireAuthenticatedUser().RequireRole(Roles.Admin, Roles.Editor))
-            .AddPolicy(AccessPolicy.TwoFactorPending, p => p.AddAuthenticationSchemes(AuthSchemes.TwoFactor).RequireAuthenticatedUser())
-            .AddPolicy(AccessPolicy.Enrolment, p => p.AddAuthenticationSchemes(AuthSchemes.Enrolment).RequireAuthenticatedUser());
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder(AuthSchemes.SessionOrToken).AddRequirements(new DenyUnclassifiedEndpoints()).Build())
+            .AddPolicy(AccessPolicy.SignedIn, p => SessionOrToken(p))
+            .AddPolicy(AccessPolicy.Admin, p => SessionOrToken(p, Roles.Admin))
+            .AddPolicy(AccessPolicy.AuditReader, p => SessionOrToken(p, Roles.Admin, Roles.Auditor))
+            .AddPolicy(AccessPolicy.CiEditor, p => SessionOrToken(p, Roles.Admin, Roles.Editor))
+            .AddPolicy(AccessPolicy.TwoFactorPending, p => p.AddAuthenticationSchemes(AuthSchemes.TwoFactor).RequireAuthenticatedUser()
+                .AddRequirements(new EndpointAccessRequirement([])))
+            .AddPolicy(AccessPolicy.Enrolment, p => p.AddAuthenticationSchemes(AuthSchemes.Enrolment).RequireAuthenticatedUser()
+                .AddRequirements(new EndpointAccessRequirement([])));
 
         // Anti-forgery on every state-changing API request (NFR-SEC-2): the SPA sends the token from
         // GET /api/v1/auth/antiforgery in a header that a cross-site form cannot set.
@@ -138,18 +182,62 @@ internal static class AuthSetup
             antiforgery.Cookie.Path = "/";
         });
 
+        // Runs after authentication (GoldmarkApplication), so a token's requests count against the token.
         services.AddRateLimiter(limiter =>
         {
             limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            limiter.OnRejected = RejectAsync;
             limiter.AddPolicy(RateLimits.Credentials, context =>
             {
                 var perMinute = context.RequestServices.GetRequiredService<IOptions<AuthOptions>>().Value.RequestsPerMinute;
                 return RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                     _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
             });
+            // Per API token, on every request it authenticates, whatever the endpoint (PRD §5.7, DEC-048).
+            limiter.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+            {
+                if (context.User.ApiTokenId() is not { } token)
+                {
+                    return RateLimitPartition.GetNoLimiter("");
+                }
+
+                var perMinute = context.RequestServices.GetRequiredService<IOptions<ApiOptions>>().Value.TokenRequestsPerMinute;
+                return RateLimitPartition.GetFixedWindowLimiter(token.ToString("D"),
+                    _ => new FixedWindowRateLimiterOptions { PermitLimit = perMinute, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 });
+            });
         });
 
         return services;
+    }
+
+    /// <summary>
+    /// A signed-in policy (DEC-048): authenticated by a session or an API token, whichever the request presents, and then
+    /// judged by <see cref="EndpointAccessRequirement"/>: a session by <paramref name="roles"/> (any role when none),
+    /// a token by the endpoint's scope.
+    /// </summary>
+    private static void SessionOrToken(AuthorizationPolicyBuilder policy, params string[] roles) =>
+        policy.AddAuthenticationSchemes(AuthSchemes.SessionOrToken).RequireAuthenticatedUser().AddRequirements(new EndpointAccessRequirement(roles));
+
+    /// <summary>429 as Problem Details with <see cref="RateLimits.RejectedCode"/>, and <c>Retry-After</c> when the limiter says.</summary>
+    private static async ValueTask RejectAsync(OnRejectedContext rejected, CancellationToken cancellationToken)
+    {
+        var context = rejected.HttpContext;
+        if (rejected.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            context.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString(CultureInfo.InvariantCulture);
+        }
+
+        context.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.RequestServices.GetRequiredService<IProblemDetailsService>().WriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = context,
+            ProblemDetails = new ProblemDetails
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too many requests. Try again later.",
+                Extensions = { ["code"] = RateLimits.RejectedCode },
+            },
+        });
     }
 
     private static void Configure(CookieAuthenticationOptions cookie, string name)
@@ -168,7 +256,8 @@ internal static class AuthSetup
         cookie.Events.OnRedirectToReturnUrl = context => Task.CompletedTask;
     }
 
-    private static Task Problem(HttpContext context, int status)
+    /// <summary>The Problem Details answer to a request that is unauthenticated (401) or not allowed (403), for every scheme.</summary>
+    internal static Task Problem(HttpContext context, int status)
     {
         context.Response.StatusCode = status;
         return context.RequestServices.GetRequiredService<IProblemDetailsService>()
@@ -237,6 +326,32 @@ internal sealed class DenyUnclassifiedEndpoints : AuthorizationHandler<DenyUncla
 }
 
 /// <summary>
+/// The access model's last word on a signed-in policy (DEC-048). A session is judged as it always was: by
+/// <see cref="AllowedRoles"/> (any of them; none listed means any role). An API token never by roles: it passes only
+/// where the endpoint declares a scope (<see cref="EndpointAccess.TokenScope"/>) and the token has it. A request that
+/// presents a bearer token is a token's request, so no session passes on it, whatever cookie came with it.
+/// </summary>
+internal sealed record EndpointAccessRequirement(IReadOnlyList<string> AllowedRoles) : IAuthorizationRequirement;
+
+internal sealed class EndpointAccessHandler : AuthorizationHandler<EndpointAccessRequirement>
+{
+    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, EndpointAccessRequirement requirement)
+    {
+        var http = context.Resource as HttpContext;
+        var tokenRequest = http?.Request.PresentsBearerToken() == true;
+        var allowed = context.User.IsApiToken() || tokenRequest
+            ? http?.GetEndpoint()?.Metadata.GetMetadata<EndpointAccess>()?.TokenScope is { } scope && context.User.HasScope(scope)
+            : requirement.AllowedRoles.Count == 0 || requirement.AllowedRoles.Any(context.User.IsInRole);
+        if (allowed)
+        {
+            context.Succeed(requirement);
+        }
+
+        return Task.CompletedTask;
+    }
+}
+
+/// <summary>
 /// Runs on every request with a session cookie, after the server-side session was found: the person
 /// must still exist, be enabled, not be locked by an administrator, have two-factor set up and hold
 /// the same security stamp (a reset, a new authenticator or a new password changes it). Otherwise the
@@ -267,14 +382,16 @@ internal static class SessionValidation
 /// Anti-forgery for the API (NFR-SEC-2): every POST, PUT, PATCH and DELETE under <c>/api/v1</c> needs
 /// the request token in <see cref="AuthSchemes.AntiforgeryHeader"/>. Tokens are bound to the
 /// signed-in session's principal, or to no one before sign-in, whichever scheme the endpoint itself
-/// authenticates with, so the token the SPA fetched is the one checked.
+/// authenticates with, so the token the SPA fetched is the one checked. A request an API token
+/// authenticated needs none (DEC-048): NFR-SEC-2 asks for it on cookie-authenticated changes, and a
+/// browser never sends an <c>Authorization</c> header across sites by itself.
 /// </summary>
 internal static class ApiAntiforgery
 {
     public static async ValueTask<object?> FilterAsync(EndpointFilterInvocationContext invocation, EndpointFilterDelegate next)
     {
         var context = invocation.HttpContext;
-        if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
+        if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method) || context.User.IsApiToken())
         {
             return await next(invocation);
         }

@@ -1,3 +1,5 @@
+using Goldmark.Api.Tokens;
+
 namespace Goldmark.Api.Security;
 
 /// <summary>
@@ -6,8 +8,10 @@ namespace Goldmark.Api.Security;
 /// (<c>EndpointInventoryTests</c>) requires every endpoint to carry either an authorization policy
 /// with this metadata (<see cref="EndpointAccessExtensions.RequireAccess{TBuilder}"/>) or this metadata
 /// with <see cref="AccessPolicy.Anonymous"/> (<see cref="EndpointAccessExtensions.AllowAnonymousByDesign{TBuilder}"/>).
+/// <see cref="TokenScope"/> is the one API token scope that reaches the endpoint (DEC-048); null for most, which no
+/// token ever reaches.
 /// </summary>
-public sealed record EndpointAccess(string Policy, string Rationale);
+public sealed record EndpointAccess(string Policy, string Rationale, string? TokenScope = null);
 
 public static class AccessPolicy
 {
@@ -41,6 +45,9 @@ public static class AccessPolicy
         [TwoFactorPending] = "Password verified within the last 5 minutes; second factor not yet given.",
         [Enrolment] = "An enrolment in progress (setup, invitation, two-factor reset or new authenticator), for 30 minutes.",
     };
+
+    /// <summary>The policies an API token can pass, where an endpoint names its scope: those of a signed-in session.</summary>
+    public static readonly IReadOnlyList<string> ReachableByToken = [SignedIn, Admin, AuditReader, CiEditor];
 }
 
 public static class EndpointAccessExtensions
@@ -53,8 +60,11 @@ public static class EndpointAccessExtensions
         return builder.AllowAnonymous().WithMetadata(new EndpointAccess(AccessPolicy.Anonymous, rationale));
     }
 
-    /// <summary>Requires an authorization policy and records it, in one call so the two cannot diverge.</summary>
-    public static TBuilder RequireAccess<TBuilder>(this TBuilder builder, string policy)
+    /// <summary>
+    /// Requires an authorization policy and records it, in one call so the two cannot diverge. With
+    /// <paramref name="tokenScope"/>, an API token that has that scope also passes (DEC-048); without, none does.
+    /// </summary>
+    public static TBuilder RequireAccess<TBuilder>(this TBuilder builder, string policy, string? tokenScope = null)
         where TBuilder : IEndpointConventionBuilder
     {
         if (!AccessPolicy.Policies.TryGetValue(policy, out var meaning))
@@ -62,6 +72,16 @@ public static class EndpointAccessExtensions
             throw new ArgumentException($"Unknown access policy '{policy}'.", nameof(policy));
         }
 
-        return builder.RequireAuthorization(policy).WithMetadata(new EndpointAccess(policy, meaning));
+        if (tokenScope is not null && !TokenScopes.IsKnown(tokenScope))
+        {
+            throw new ArgumentException($"Unknown token scope '{tokenScope}'.", nameof(tokenScope));
+        }
+
+        if (tokenScope is not null && !AccessPolicy.ReachableByToken.Contains(policy))
+        {
+            throw new ArgumentException($"No API token passes the {policy} policy, so it takes no scope.", nameof(tokenScope));
+        }
+
+        return builder.RequireAuthorization(policy).WithMetadata(new EndpointAccess(policy, meaning, tokenScope));
     }
 }

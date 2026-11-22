@@ -34,6 +34,7 @@ public sealed class MigrationTests(SqlServerFixture sql)
     [InlineData("UserInvitation")]
     [InlineData("UserSession")]
     [InlineData("Installation")]
+    [InlineData("ApiToken")]
     public async Task The_application_tables_exist_in_the_cmdb_schema(string table)
     {
         var (installation, _) = await sql.SharedAsync("schema");

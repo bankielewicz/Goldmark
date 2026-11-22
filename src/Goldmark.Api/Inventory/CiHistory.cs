@@ -4,10 +4,11 @@ using System.Text.Json.Nodes;
 namespace Goldmark.Api.Inventory;
 
 /// <summary>
-/// Who made a change (US-43: "who or what"). An account has <c>Id</c>, and <c>DisplayName</c> while it exists;
-/// anything else <c>ChangedBy</c> holds (a source, from slice 10) is given as <c>Name</c>.
+/// Who made a change (US-43: "who or what"). <c>Kind</c> <c>user</c>: an account, its <c>Id</c>, and <c>DisplayName</c>
+/// while it exists. <c>Kind</c> <c>token</c>: an API token (DEC-048), its <c>Id</c> and <c>Name</c>. <c>Kind</c>
+/// <c>other</c>: anything else <c>ChangedBy</c> holds (a source, from slice 10), given as <c>Name</c>.
 /// </summary>
-internal sealed record HistoryActor(Guid? Id, string? DisplayName, string? Name);
+internal sealed record HistoryActor(Guid? Id, string? DisplayName, string? Name, string Kind = ChangedByKinds.User);
 
 /// <summary>
 /// One difference between two versions: <c>Field</c> is <c>name</c>, <c>lifecycleState</c>, <c>attributes.{name}</c>

@@ -15,19 +15,22 @@ internal sealed class AuditTrail(DbSession db, IHttpContextAccessor http, Acting
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
-    /// <summary>Records <paramref name="action"/> by the signed-in person, or by an anonymous client.</summary>
+    /// <summary>Records <paramref name="action"/> by the signed-in person, the API token (DEC-048), or an anonymous client.</summary>
     public Task WriteAsync(string action, string? targetType = null, Guid? targetId = null, object? details = null) =>
-        acting.UserId is { } id
-            ? WriteAsync(action, AuditActor.User(id), targetType, targetId, details)
-            : WriteAsync(action, AuditActor.Anonymous, targetType, targetId, details);
+        WriteAsync(action, CurrentActor, targetType, targetId, details);
 
     public Task WriteAsync(string action, AuditActor actor, string? targetType = null, Guid? targetId = null, object? details = null) =>
         WriteCoreAsync(action, actor, targetType, targetId?.ToString("D"), details);
 
-    /// <summary>Records <paramref name="action"/> by the signed-in person about something with a numeric ID (a CI type).</summary>
+    /// <summary>Records <paramref name="action"/> by whoever acts about something with a numeric ID (a CI type).</summary>
     public Task WriteAsync(string action, string targetType, int targetId, object? details) =>
-        WriteCoreAsync(action, acting.UserId is { } id ? AuditActor.User(id) : AuditActor.Anonymous, targetType,
-            targetId.ToString(System.Globalization.CultureInfo.InvariantCulture), details);
+        WriteCoreAsync(action, CurrentActor, targetType, targetId.ToString(System.Globalization.CultureInfo.InvariantCulture), details);
+
+    /// <summary>The request's actor, from <see cref="ActingPrincipal"/>, the same answer <c>ChangedBy</c> gets.</summary>
+    private AuditActor CurrentActor =>
+        acting.UserId is { } user ? AuditActor.User(user)
+        : acting.TokenId is { } token ? AuditActor.Token(token)
+        : AuditActor.Anonymous;
 
     private async Task WriteCoreAsync(string action, AuditActor actor, string? targetType, string? targetId, object? details)
     {
@@ -55,9 +58,12 @@ internal sealed record AuditActor(string Type, Guid? Id)
     public static readonly AuditActor System = new(AuditActorTypes.System, null);
 
     public static AuditActor User(Guid id) => new(AuditActorTypes.User, id);
+
+    /// <summary>An API token acting as itself (DEC-048).</summary>
+    public static AuditActor Token(Guid id) => new(AuditActorTypes.Token, id);
 }
 
-/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041), slice 4a (DEC-042), 4b (DEC-043), 5 (DEC-044), 5b (DEC-045) and 6 (DEC-046); <see cref="AuditCatalog"/> labels each one.</summary>
+/// <summary>The audit actions of slice 3 (DEC-038 items 1, 2, 8 and 9), slice 4 (DEC-041), slice 4a (DEC-042), 4b (DEC-043), 5 (DEC-044), 5b (DEC-045), 6 (DEC-046) and 8 (DEC-048); <see cref="AuditCatalog"/> labels each one.</summary>
 internal static class AuditActions
 {
     public const string SetupCompleted = "setup.completed";
@@ -132,4 +138,10 @@ internal static class AuditActions
     public const string RelationshipChanged = "relationship.changed";
     public const string RelationshipDeleted = "relationship.deleted";
     public const string RelationshipsExported = "relationship.exported";
+
+    // Slice 8 (DEC-048): API tokens. A token's changes are audited by the actions above, with the token as actor; its
+    // reads as "used", at most once an hour per token.
+    public const string TokenCreated = "token.created";
+    public const string TokenRevoked = "token.revoked";
+    public const string TokenUsed = "token.used";
 }

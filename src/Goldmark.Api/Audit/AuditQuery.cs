@@ -1,12 +1,14 @@
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Goldmark.Api.Data;
 
 namespace Goldmark.Api.Audit;
 
 /// <summary>
 /// The audit log's filters, from the query string (screen 16; US-07). Every value is validated before it
-/// reaches SQL or the export's audit entry: times are ISO 8601, people are ids, actions come from
+/// reaches SQL or the export's audit entry: times are ISO 8601, people are ids (an API token is
+/// <c>token:{id}</c>, since slice 8), actions come from
 /// <see cref="AuditCatalog"/>, and an IP address prefix holds only hexadecimal digits, dots and colons,
 /// so it can never carry a LIKE wildcard or free text. <c>target</c> is a person's id, or what else an
 /// entry can be about: <c>ci:{id}</c>, <c>type:{number}</c>, <c>relationship-type:{number}</c> (slice 5b),
@@ -66,6 +68,11 @@ internal sealed partial record AuditQuery(
             else if (Guid.TryParseExact(actor, "D", out var id))
             {
                 (actorType, actorId) = (AuditActorTypes.User, id);
+            }
+            else if (ActingPrincipal.TokenOf(actor) is { } token)
+            {
+                // An API token, written as its ChangedBy is (DEC-048; screen 18's "Open in audit log").
+                (actorType, actorId) = (AuditActorTypes.Token, token);
             }
             else
             {
@@ -162,7 +169,7 @@ internal sealed partial record AuditQuery(
 
         if (ActorId is { } actorId)
         {
-            filters["actor"] = actorId;
+            filters["actor"] = ActorType == AuditActorTypes.Token ? ActingPrincipal.ForToken(actorId) : actorId;
         }
         else if (ActorType is { } actorType)
         {
@@ -227,6 +234,9 @@ internal static class AuditActorTypes
     public const string User = "User";
     public const string System = "System";
     public const string Anonymous = "Anonymous";
+
+    /// <summary>An API token acting as itself (DEC-048); its ID is the actor's.</summary>
+    public const string Token = "Token";
 }
 
 /// <summary>What an entry is about, for the <c>target</c> filter: a person, a CI or a relationship by id, a CI type or a relationship type by number.</summary>

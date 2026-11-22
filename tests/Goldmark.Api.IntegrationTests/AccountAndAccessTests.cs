@@ -1,7 +1,9 @@
 using System.Net;
+using System.Net.Http.Headers;
 using Goldmark.Api.Auth;
 using Goldmark.Api.IntegrationTests.Infrastructure;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -11,8 +13,8 @@ namespace Goldmark.Api.IntegrationTests;
 /// <summary>
 /// The self-service two-factor page (DEC-038 item 9) and the M6 enumeration with real sessions: a
 /// signed-in person without the role gets 403 from every Admin endpoint, a password-only sign-in
-/// reaches nothing but the second step, and no state-changing request works without the
-/// anti-forgery token.
+/// reaches nothing but the second step, and no state-changing request with a session works without the
+/// anti-forgery token; an API token reaches exactly the endpoints that declare a scope (DEC-048).
 /// </summary>
 [Collection(SqlServerTests.Name)]
 public sealed class AccountAndAccessTests(SqlServerFixture sql)
@@ -146,6 +148,12 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
         var (viewer, viewerPerson) = await scenario.InviteAndAcceptAsync(admin, "vic.viewer", "Viewer");
         var pending = scenario.App.Client();
         AuthScenario.Ok(await pending.PostAsync("/api/v1/auth/sign-in", new { userName = adminPerson.UserName, password = adminPerson.Password }));
+        // An API token with every scope (DEC-048): it reaches the endpoints that declare a scope, without the
+        // anti-forgery token, and no other.
+        var created = await admin.PostAsync("/api/v1/tokens", new { name = "sweep", scopes = TokenScopes.All, expiresInDays = 30 });
+        Assert.True(created.Status == HttpStatusCode.Created, created.ToString());
+        using var token = new ApiClient(scenario.App.CreateDefaultClient(new Uri("https://localhost")), new CookieContainer());
+        token.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", created.Body.GetProperty("secret").GetString());
 
         var endpoints = scenario.App.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText?.StartsWith("/api/v1/", StringComparison.Ordinal) == true)
@@ -155,6 +163,7 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
         {
             var name = endpoint.DisplayName!;
             var policy = endpoint.Metadata.GetMetadata<EndpointAccess>()!.Policy;
+            var scope = endpoint.Metadata.GetMetadata<EndpointAccess>()!.TokenScope;
             var path = endpoint.RoutePattern.RawText!.Replace("{id:guid}", viewerPerson.Id.ToString("D"), StringComparison.Ordinal)
                 .Replace("{type}", "VirtualMachine", StringComparison.Ordinal).Replace("{name}", "costCentre", StringComparison.Ordinal);
             var method = new HttpMethod(endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods[0]);
@@ -176,6 +185,22 @@ public sealed class AccountAndAccessTests(SqlServerFixture sql)
                 var forged = await admin.SendAsync(method, path, body, antiforgery: false);
                 Assert.True(forged.Status == HttpStatusCode.BadRequest && forged.Text.Contains("anti-forgery", StringComparison.Ordinal),
                     $"{name}: without the anti-forgery token it must be refused, got {forged}");
+            }
+
+            if (policy is not AccessPolicy.Anonymous)
+            {
+                var byToken = await token.SendAsync(method, path, body, antiforgery: false);
+                if (scope is null)
+                {
+                    // The sign-in steps authenticate with their own cookies, which a token request lacks.
+                    var refusal = policy is AccessPolicy.TwoFactorPending or AccessPolicy.Enrolment ? HttpStatusCode.Unauthorized : HttpStatusCode.Forbidden;
+                    Assert.True(byToken.Status == refusal, $"{name}: a token must get {(int)refusal}, got {byToken}");
+                }
+                else
+                {
+                    Assert.True(byToken.Status is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden) && !ApiClient.IsAntiforgeryRefusal(byToken),
+                        $"{name}: a token with {scope} must reach it, got {byToken}");
+                }
             }
         }
 

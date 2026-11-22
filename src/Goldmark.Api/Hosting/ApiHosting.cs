@@ -1,6 +1,7 @@
 using Goldmark.Api.Audit;
 using Goldmark.Api.Auth;
 using Goldmark.Api.Inventory;
+using Goldmark.Api.Tokens;
 using Goldmark.Api.Users;
 using Microsoft.AspNetCore.Identity;
 
@@ -8,8 +9,8 @@ namespace Goldmark.Api.Hosting;
 
 /// <summary>
 /// The JSON API under <c>/api/v1</c> (US-50: every UI function is available here). Every state-changing
-/// request needs the anti-forgery header (<see cref="ApiAntiforgery"/>), and no API response may be
-/// stored by a browser or proxy.
+/// request needs the anti-forgery header (<see cref="ApiAntiforgery"/>), except one an API token
+/// authenticated (DEC-048), and no API response may be stored by a browser or proxy.
 /// </summary>
 internal static class ApiHosting
 {
@@ -41,6 +42,7 @@ internal static class ApiHosting
         api.MapTypeEndpoints();
         api.MapRelationshipEndpoints();
         api.MapGraphEndpoints();
+        api.MapApiTokenEndpoints();
         return endpoints;
     }
 }
@@ -82,9 +84,11 @@ internal static class ApiProblems
             extensions: new Dictionary<string, object?> { ["code"] = "validation" });
 
     /// <summary>One field error (HTTP 400, code "validation").</summary>
-    public static IResult Field(string field, string errorCode) =>
-        Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [errorCode] }, title: "Some values are not valid.",
-            extensions: new Dictionary<string, object?> { ["code"] = "validation" });
+    public static IResult Field(string field, string errorCode) => Fields(new Dictionary<string, string[]> { [field] = [errorCode] });
+
+    /// <summary>Every field's errors at once (HTTP 400, code "validation").</summary>
+    public static IResult Fields(IDictionary<string, string[]> errors) =>
+        Results.ValidationProblem(errors, title: "Some values are not valid.", extensions: new Dictionary<string, object?> { ["code"] = "validation" });
 
     private static string FieldOf(string identityCode) => identityCode switch
     {

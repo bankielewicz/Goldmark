@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using Goldmark.Api.Tests.Infrastructure;
+using Goldmark.Api.Tokens;
 
 namespace Goldmark.Api.Tests;
 
@@ -11,18 +12,25 @@ public sealed class LoggingTests
     {
         await using var factory = new GoldmarkFactory();
         using var client = factory.CreateClient();
-        foreach (var path in new[] { $"/?password={TestSecrets.QuerySecret}", "/health/ready", "/api/v1/tokens" })
+        // The last request's token has the real form, so the token scheme looks it up (the database is unreachable here).
+        foreach (var (path, token) in new[]
+        {
+            ($"/?password={TestSecrets.QuerySecret}", TestSecrets.BearerToken),
+            ("/health/ready", TestSecrets.BearerToken),
+            ("/api/v1/tokens", TestSecrets.BearerToken),
+            ("/api/v1/cis", TestSecrets.ApiToken),
+        })
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(path, UriKind.Relative));
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", TestSecrets.BearerToken);
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             request.Headers.Add("Cookie", $"session={TestSecrets.CookieValue}");
-            request.Headers.Add("X-Api-Key", TestSecrets.BearerToken);
+            request.Headers.Add("X-Api-Key", token);
             using var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
         }
 
         // Request logs are written when the pipeline unwinds, which can be just after the
-        // TestServer hands the response back; wait briefly for both (health probes log at Debug).
-        await factory.Logs.WaitForAsync(events => events.Count(IsRequestLog) >= 2, TimeSpan.FromSeconds(5));
+        // TestServer hands the response back; wait briefly for them (health probes log at Debug).
+        await factory.Logs.WaitForAsync(events => events.Count(IsRequestLog) >= 3, TimeSpan.FromSeconds(5));
         var rendered = factory.Logs.RenderAll();
 
         var requestLog = Assert.Single(factory.Logs.Events,
@@ -30,9 +38,13 @@ public sealed class LoggingTests
         Assert.NotNull(requestLog.TraceId);
         Assert.Contains("\"@tr\":", rendered, StringComparison.Ordinal);
         Assert.Contains("\"RequestPath\":\"/\"", rendered, StringComparison.Ordinal);
+        Assert.Contains(factory.Logs.Events, e => IsRequestLog(e) && e.Properties["RequestPath"].ToString() == "\"/api/v1/cis\"");
 
+        Assert.True(ApiTokenSecret.IsWellFormed(TestSecrets.ApiToken));
         Assert.DoesNotContain(TestSecrets.QuerySecret, rendered, StringComparison.Ordinal);
         Assert.DoesNotContain(TestSecrets.BearerToken, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(TestSecrets.ApiToken, rendered, StringComparison.Ordinal);
+        Assert.DoesNotContain(TestSecrets.ApiToken["sxt_".Length..], rendered, StringComparison.Ordinal);
         Assert.DoesNotContain(TestSecrets.CookieValue, rendered, StringComparison.Ordinal);
         Assert.DoesNotContain(TestSecrets.DatabasePassword, rendered, StringComparison.Ordinal);
         Assert.DoesNotContain("Authorization", rendered, StringComparison.OrdinalIgnoreCase);
