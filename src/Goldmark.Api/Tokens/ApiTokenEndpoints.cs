@@ -104,7 +104,7 @@ internal static class ApiTokenEndpoints
 
                 // Under locks held to the commit: a concurrent disable or removal of Admin has committed (403 here), or it
                 // waits for this insert and then revokes the new token with the others.
-                if (admin == Guid.Empty && !await directory.IsEnabledAdministratorAsync(admin))
+                if (!await directory.IsEnabledAdministratorAsync(admin))
                 {
                     return Results.Problem(statusCode: StatusCodes.Status403Forbidden);
                 }

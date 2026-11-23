@@ -48,8 +48,8 @@ internal sealed class AuditLog(DbSession db)
     private const string Filter = """
         WHERE (@from IS NULL OR a.At >= CAST(@from AS datetime2(7)))
             AND (@to IS NULL OR a.At < CAST(@to AS datetime2(7)))
-            AND (@actorType IS NULL OR a.ActorType = @actorType)
-            AND (@actorId IS NULL OR TRY_CAST(a.ActorId AS uniqueidentifier) = @actorId)
+            AND (@actorType IS NULL OR a.ActorType = CAST(@actorType AS varchar(20)))
+            AND (@actorId IS NULL OR a.ActorId = @actorId)
             AND (@targetType IS NULL OR (a.TargetType = @targetType
                 AND (TRY_CAST(a.TargetId AS uniqueidentifier) = @targetId OR TRY_CAST(a.TargetId AS int) = @targetNumber)))
             AND (@actions IS NULL OR a.Action IN (SELECT [value] FROM OPENJSON(@actions)))
@@ -152,7 +152,7 @@ internal sealed class AuditLog(DbSession db)
         from = query.From,
         to = query.To,
         actorType = query.ActorType,
-        actorId = query.ActorId,
+        actorId = query.ActorId?.ToString("D"),
         targetType = query.Target?.Type,
         targetId = query.Target?.Id,
         targetNumber = query.Target?.Number,
