@@ -131,6 +131,8 @@ internal static class GoldmarkApplication
         // request that reaches routing gets an endpoint (or none) before authorization runs.
         app.UseGoldmarkStaticFiles();
         app.UseRouting();
+        // Before authentication and the rate limiter, so a deprecated endpoint's refusals carry its headers too (US-54).
+        app.UseGoldmarkDeprecation();
         app.UseAuthentication();
         // After authentication, so an API token's requests count against the token (PRD §5.7, DEC-048); the
         // credentials limit is the endpoint's, per client address, as before. Before authorization, so a refused request counts.

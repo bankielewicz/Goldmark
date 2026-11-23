@@ -3,6 +3,7 @@ using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Users;
 using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.Tokens;
@@ -58,8 +59,11 @@ internal static class ApiTokenEndpoints
     /// Creates a token and answers 201 with it and its secret, the only time the secret is sent. Every field's errors come
     /// together, those that need the database too: the date's range by the database's clock, and the name's uniqueness.
     /// Audited <c>token.created</c> with the name, the scopes, the expiry and the last four characters, never the secret.
+    /// A token dies with its creator's account or Admin role (<see cref="ApiTokenRevocations"/>), so one whose creator was
+    /// disabled or lost Admin while the request ran is not created (403).
     /// </summary>
-    private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, ApiTokenStore store, DbSession db, AuditTrail audit)
+    private static async Task<IResult> CreateAsync(CreateRequest request, HttpContext context, ApiTokenStore store, UserDirectory directory, DbSession db,
+        AuditTrail audit)
     {
         var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
         var name = request.Name?.Trim() ?? "";
@@ -96,6 +100,13 @@ internal static class ApiTokenEndpoints
                 if (!errors.ContainsKey("name") && await store.NameTakenAsync(ApiTokenNames.Normalize(name)))
                 {
                     errors["name"] = ["Taken"];
+                }
+
+                // Under locks held to the commit: a concurrent disable or removal of Admin has committed (403 here), or it
+                // waits for this insert and then revokes the new token with the others.
+                if (admin == Guid.Empty && !await directory.IsEnabledAdministratorAsync(admin))
+                {
+                    return Results.Problem(statusCode: StatusCodes.Status403Forbidden);
                 }
 
                 if (errors.Count > 0)

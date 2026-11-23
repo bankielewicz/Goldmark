@@ -203,6 +203,10 @@ internal sealed partial record AuditQuery(
     private static string? Single(IQueryCollection query, string name) =>
         query.TryGetValue(name, out var values) && values.Count > 0 && !string.IsNullOrEmpty(values[^1]) ? values[^1] : null;
 
+    /// <summary>
+    /// A full ISO 8601 date and time (#35; DEC-048): seconds optional, at most seven decimals, and <c>Z</c> or an offset,
+    /// as UTC from 2000 to 9998. A date alone or a time without a zone would be read differently by each client.
+    /// </summary>
     private static DateTimeOffset? Time(IQueryCollection query, string name, Dictionary<string, string[]> errors)
     {
         if (Single(query, name) is not { } text)
@@ -210,7 +214,9 @@ internal sealed partial record AuditQuery(
             return null;
         }
 
-        if (DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var time)
+        if (TimePattern().IsMatch(text)
+            && DateTimeOffset.TryParseExact(text, TimeFormats, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var time)
             && time.Year is >= 2000 and <= 9998)
         {
             return time;
@@ -220,12 +226,23 @@ internal sealed partial record AuditQuery(
         return null;
     }
 
+    private static readonly string[] TimeFormats =
+    [
+        "yyyy-MM-dd'T'HH:mm'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFF'Z'",
+        "yyyy-MM-dd'T'HH:mmzzz", "yyyy-MM-dd'T'HH:mm:sszzz", "yyyy-MM-dd'T'HH:mm:ss.FFFFFFFzzz",
+    ];
+
     private static IResult Problem(Dictionary<string, string[]> errors) =>
         Results.ValidationProblem(errors, title: "Some values are not valid.", extensions: new Dictionary<string, object?> { ["code"] = "validation" });
 
     // \z, not $: in .NET, $ also matches before a final newline.
     [GeneratedRegex(@"^[0-9A-Fa-f.:]{1,45}\z", RegexOptions.CultureInvariant)]
     private static partial Regex IpPrefixPattern();
+
+    // The formats' shape, which they alone don't hold to: a decimal point needs a digit after it, and [0-9], not \d,
+    // which matches every script's digits.
+    [GeneratedRegex(@"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\.[0-9]{1,7})?)?(Z|[+-][0-9]{2}:[0-9]{2})\z", RegexOptions.CultureInvariant)]
+    private static partial Regex TimePattern();
 }
 
 /// <summary>The actor types <see cref="AuditActor"/> writes.</summary>

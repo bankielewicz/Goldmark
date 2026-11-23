@@ -4,7 +4,10 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Xml.Linq;
 using Goldmark.Api.IntegrationTests.Infrastructure;
+using Goldmark.Api.Tokens;
+using Microsoft.Data.SqlClient;
 
 namespace Goldmark.Api.IntegrationTests;
 
@@ -14,7 +17,8 @@ namespace Goldmark.Api.IntegrationTests;
 /// itself, so a CI's <c>changedBy</c>, its history's <c>by</c> and the audit log name the token; it is refused
 /// elsewhere (403), and when revoked, expired, unknown or malformed (401); its use is recorded at most once a minute
 /// and audited at most once an hour; its requests are rate limited per token; and with a session cookie too, the
-/// token alone acts. The M6 sweep with a token is in <see cref="AccountAndAccessTests"/>.
+/// token alone acts. A token dies with its creator's account or Admin role, and its entries are read through their own
+/// index. The M6 sweep with a token is in <see cref="AccountAndAccessTests"/>.
 /// </summary>
 [Collection(SqlServerTests.Name)]
 public sealed class ApiTokenTests(SqlServerFixture sql)
@@ -26,6 +30,9 @@ public sealed class ApiTokenTests(SqlServerFixture sql)
     private static readonly string[] RelationshipsReadCisRead = ["relationships:read", "cis:read"];
     private static readonly string[] IngestWrite = ["ingest:write"];
     private static readonly string[] NotYet = ["lastUsedAt", "revokedAt", "revokedBy"];
+    private static readonly string[] AdminAndEditor = ["Admin", "Editor"];
+    private static readonly string[] AdminEditorAuditor = ["Admin", "Editor", "Auditor"];
+    private static readonly string[] EditorOnly = ["Editor"];
 
     [Fact]
     public async Task An_Admin_creates_a_token_and_sees_its_secret_once_and_its_name_scopes_and_expiry_are_checked()
@@ -376,6 +383,186 @@ public sealed class ApiTokenTests(SqlServerFixture sql)
         ], await scenario.AuditAsync("ci.changed"));
     }
 
+    [Fact]
+    public async Task A_token_with_cis_write_saves_part_of_a_CI_as_itself_without_an_antiforgery_token()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var vm = await CreateAsync(admin, new { type = "VirtualMachine", name = "app-erp-db01" });
+        var (syncId, syncSecret) = await CreateTokenAsync(admin, "owner sync", CisReadWrite);
+        var (_, readerSecret) = await CreateTokenAsync(admin, "reporting read", CisRead);
+        var path = $"/api/v1/cis/{vm.Value("id")}";
+        var etag = $"\"{vm.Value("eTag")}\"";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await TokenClient(scenario, readerSecret).PatchAsync(path, """{"name":"app-erp-db02"}""", etag, antiforgery: false)).Status);
+        var patched = await TokenClient(scenario, syncSecret).PatchAsync(path, """{"name":"app-erp-db02"}""", etag, antiforgery: false);
+
+        Assert.True(patched.Status == HttpStatusCode.OK, patched.ToString());
+        AssertToken(patched.Body.GetProperty("changedBy"), syncId, "owner sync");
+        Assert.Equal($"token:{syncId:D}", await sql.AdminScalarAsync<string>(scenario.Installation.Database,
+            $"SELECT ChangedBy FROM cmdb.Ci WHERE Id = '{vm.Value("id")}';"));
+        Assert.Equal([$"{vm.Value("id")}|Token|{syncId:D}|{{\"type\":\"VirtualMachine\",\"name\":\"app-erp-db02\",\"fields\":[\"Name\"]}}"],
+            await scenario.AuditAsync("ci.changed"));
+    }
+
+    [Fact]
+    public async Task Disabling_an_account_revokes_every_active_token_it_created_in_the_same_step_each_audited_with_the_reason()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, adminPerson) = await scenario.SetUpAsync();
+        var (sam, samPerson) = await SecondAdminAsync(scenario, admin);
+        var db = scenario.Installation.Database;
+        var (syncId, syncSecret) = await CreateTokenAsync(sam, "owner sync", CisRead);
+        var (exportId, exportSecret) = await CreateTokenAsync(sam, "nightly export", CisRead);
+        var (byHandId, _) = await CreateTokenAsync(sam, "old loader", CisRead);
+        var (expiredId, _) = await CreateTokenAsync(sam, "reporting read", CisRead);
+        var (ownId, ownSecret) = await CreateTokenAsync(admin, "pat's export", CisRead);
+        Assert.Equal(HttpStatusCode.NoContent, (await sam.PostAsync($"/api/v1/tokens/{byHandId}/revoke")).Status);
+        await sql.AsAdminAsync(db, $"UPDATE cmdb.ApiToken SET ExpiresAt = DATEADD(second, -1, SYSUTCDATETIME()) WHERE Id = '{expiredId}';");
+        var disable = $"/api/v1/users/{samPerson.Id:D}/disable";
+
+        // One transaction: when the tokens can't be revoked, the account isn't disabled either.
+        await sql.AsAdminAsync(db, "DENY UPDATE ON OBJECT::cmdb.ApiToken TO goldmark_runtime;");
+        Assert.Equal(HttpStatusCode.InternalServerError, (await admin.PostAsync(disable)).Status);
+        await sql.AsAdminAsync(db, "REVOKE UPDATE ON OBJECT::cmdb.ApiToken FROM goldmark_runtime;");
+        Assert.Equal("active", AuthScenario.Ok(await admin.GetAsync($"/api/v1/users/{samPerson.Id:D}")).Body.GetProperty("account").Value("state"));
+        AuthScenario.Ok(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        Assert.Empty(await scenario.AuditAsync("user.disabled"));
+
+        AuthScenario.Ok(await admin.PostAsync(disable));
+
+        // Sam's active tokens stop working with their next request; the one revoked by hand and the expired one stay as
+        // they were, and Pat's own token goes on.
+        AssertUnauthorized(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        AssertUnauthorized(await TokenClient(scenario, exportSecret).GetAsync("/api/v1/cis"));
+        AuthScenario.Ok(await TokenClient(scenario, ownSecret).GetAsync("/api/v1/cis"));
+        var list = AuthScenario.Ok(await admin.GetAsync("/api/v1/tokens"));
+        Assert.All(new[] { syncId, exportId }, id => AssertRevokedBy(Token(list, id), adminPerson.Id));
+        AssertRevokedBy(Token(list, byHandId), samPerson.Id);
+        Assert.Equal(("expired", JsonValueKind.Null), (Token(list, expiredId).Value("status"), Token(list, expiredId).GetProperty("revokedBy").ValueKind));
+        Assert.Equal("active", Token(list, ownId).Value("status"));
+
+        // One "API token revoked" for each, by Pat, with the reason, after "Account disabled".
+        Assert.Equal(
+        [
+            $"{syncId}|User|{adminPerson.Id:D}|{{\"name\":\"owner sync\",\"lastFour\":\"{syncSecret[^4..]}\",\"reason\":\"creator-disabled\"}}",
+            $"{exportId}|User|{adminPerson.Id:D}|{{\"name\":\"nightly export\",\"lastFour\":\"{exportSecret[^4..]}\",\"reason\":\"creator-disabled\"}}",
+        ], (await scenario.AuditAsync("token.revoked")).Skip(1));
+        Assert.Equal("user.disabled,token.revoked,token.revoked", await sql.AdminScalarAsync<string>(db, """
+            SELECT STRING_AGG(Action, ',') WITHIN GROUP (ORDER BY Id) FROM cmdb.AuditLog
+            WHERE Action IN ('user.disabled', 'token.revoked') AND Id >= (SELECT Id FROM cmdb.AuditLog WHERE Action = 'user.disabled');
+            """));
+
+        // Enabled again, the account gets none of them back: a script needs a new token.
+        AuthScenario.Ok(await admin.PostAsync($"/api/v1/users/{samPerson.Id:D}/enable"));
+        AssertUnauthorized(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        Assert.Equal(3, (await scenario.AuditAsync("token.revoked")).Count);
+    }
+
+    [Fact]
+    public async Task Taking_Admin_from_an_account_revokes_every_active_token_it_created_and_another_role_change_revokes_none()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, adminPerson) = await scenario.SetUpAsync();
+        var (sam, samPerson) = await SecondAdminAsync(scenario, admin);
+        var db = scenario.Installation.Database;
+        var (syncId, syncSecret) = await CreateTokenAsync(sam, "owner sync", CisReadWrite);
+        var (exportId, exportSecret) = await CreateTokenAsync(sam, "nightly export", CisRead);
+        var roles = $"/api/v1/users/{samPerson.Id:D}/roles";
+
+        // A change that keeps Admin revokes nothing.
+        AuthScenario.Ok(await admin.PutAsync(roles, new { roles = AdminEditorAuditor }, await UserETagAsync(admin, samPerson)));
+        AuthScenario.Ok(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        Assert.Empty(await scenario.AuditAsync("token.revoked"));
+
+        // One transaction: when the tokens can't be revoked, Admin stays.
+        await sql.AsAdminAsync(db, "DENY UPDATE ON OBJECT::cmdb.ApiToken TO goldmark_runtime;");
+        Assert.Equal(HttpStatusCode.InternalServerError, (await admin.PutAsync(roles, new { roles = EditorOnly }, await UserETagAsync(admin, samPerson))).Status);
+        await sql.AsAdminAsync(db, "REVOKE UPDATE ON OBJECT::cmdb.ApiToken FROM goldmark_runtime;");
+        Assert.Contains("Admin", AuthScenario.Strings(AuthScenario.Ok(await admin.GetAsync($"/api/v1/users/{samPerson.Id:D}")).Body.GetProperty("roles")));
+
+        AuthScenario.Ok(await admin.PutAsync(roles, new { roles = EditorOnly }, await UserETagAsync(admin, samPerson)));
+
+        AssertUnauthorized(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        AssertUnauthorized(await TokenClient(scenario, exportSecret).GetAsync("/api/v1/cis"));
+        var list = AuthScenario.Ok(await admin.GetAsync("/api/v1/tokens"));
+        Assert.All(new[] { syncId, exportId }, id => AssertRevokedBy(Token(list, id), adminPerson.Id));
+        Assert.Equal(
+        [
+            $"{syncId}|User|{adminPerson.Id:D}|{{\"name\":\"owner sync\",\"lastFour\":\"{syncSecret[^4..]}\",\"reason\":\"creator-not-admin\"}}",
+            $"{exportId}|User|{adminPerson.Id:D}|{{\"name\":\"nightly export\",\"lastFour\":\"{exportSecret[^4..]}\",\"reason\":\"creator-not-admin\"}}",
+        ], await scenario.AuditAsync("token.revoked"));
+
+        // Admin given back brings none of them back.
+        AuthScenario.Ok(await admin.PutAsync(roles, new { roles = AdminAndEditor }, await UserETagAsync(admin, samPerson)));
+        AssertUnauthorized(await TokenClient(scenario, syncSecret).GetAsync("/api/v1/cis"));
+        Assert.Equal(2, (await scenario.AuditAsync("token.revoked")).Count);
+    }
+
+    [Fact]
+    public async Task A_token_whose_creator_loses_Admin_while_the_request_runs_is_not_created()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (sam, samPerson) = await SecondAdminAsync(scenario, admin);
+        var db = scenario.Installation.Database;
+        var (syncId, _) = await CreateTokenAsync(sam, "owner sync", CisRead);
+
+        // Another session holds the lock a new token's name takes, so Sam's request, authorized as an Admin's, waits there.
+        await using var other = await sql.OpenAsync(SqlServerFixture.AdminUser, sql.AdminPassword, db);
+        await using var transaction = (SqlTransaction)await other.BeginTransactionAsync(TestContext.Current.CancellationToken);
+        var session = await ExecuteAsync<short>(other, transaction, "SELECT @@SPID;");
+        await ExecuteAsync<bool>(other, transaction, "SELECT CAST(COUNT(*) AS bit) FROM cmdb.ApiToken WITH (UPDLOCK, HOLDLOCK) WHERE NormalizedName = N'LATE TOKEN';");
+        var creating = sam.PostAsync("/api/v1/tokens", new { name = "late token", scopes = CisRead, expiresInDays = 30 });
+        for (var wait = 0; await sql.AdminScalarAsync<int>(db, $"SELECT COUNT(*) FROM sys.dm_exec_requests WHERE blocking_session_id = {session};") == 0; wait++)
+        {
+            Assert.True(wait < 300, "Sam's request never waited for the other session's lock.");
+            await Task.Delay(100, TestContext.Current.CancellationToken);
+        }
+
+        // Meanwhile Pat takes Admin from Sam, which revokes Sam's tokens; then the lock goes, and Sam's request is refused.
+        AuthScenario.Ok(await admin.PutAsync($"/api/v1/users/{samPerson.Id:D}/roles", new { roles = EditorOnly }, await UserETagAsync(admin, samPerson)));
+        await transaction.CommitAsync(TestContext.Current.CancellationToken);
+        var created = await creating;
+
+        Assert.True(created.Status == HttpStatusCode.Forbidden, created.ToString());
+        Assert.Equal(0, await sql.AdminScalarAsync<int>(db, "SELECT COUNT(*) FROM cmdb.ApiToken WHERE NormalizedName = N'LATE TOKEN';"));
+        Assert.Single(await scenario.AuditAsync("token.created"));
+        Assert.Equal("revoked", Token(AuthScenario.Ok(await admin.GetAsync("/api/v1/tokens")), syncId).Value("status"));
+    }
+
+    [Fact]
+    public async Task A_tokens_usage_and_the_audit_logs_actor_filter_seek_the_actor_index()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var db = scenario.Installation.Database;
+        var (id, _) = await CreateTokenAsync(admin, "owner sync", CisRead);
+
+        // A log of some size, so that reading one actor's entries any other way costs more: 20,000 entries by people and 30
+        // by the token. From here on Query Store keeps the plan of every statement, the app's own included.
+        await sql.AsAdminAsync(db, $"""
+            INSERT INTO cmdb.AuditLog (ActorType, ActorId, Action, TargetType, TargetId)
+            SELECT TOP (20000) 'User', LOWER(CONVERT(nvarchar(36), NEWID())), 'ci.changed', 'Ci', LOWER(CONVERT(nvarchar(36), NEWID()))
+            FROM sys.all_columns AS a CROSS JOIN sys.all_columns AS b;
+            INSERT INTO cmdb.AuditLog (ActorType, ActorId, Action, TargetType, TargetId)
+            SELECT TOP (30) 'Token', N'{id:D}', 'ci.changed', 'Ci', LOWER(CONVERT(nvarchar(36), NEWID())) FROM sys.all_columns;
+            ALTER DATABASE CURRENT SET QUERY_STORE = ON (OPERATION_MODE = READ_WRITE, QUERY_CAPTURE_MODE = ALL);
+            ALTER DATABASE CURRENT SET QUERY_STORE CLEAR;
+            """);
+
+        Assert.Equal(ApiTokenEndpoints.UsageEntries, AuthScenario.Ok(await admin.GetAsync($"/api/v1/tokens/{id}/usage")).Body.GetProperty("entries").GetArrayLength());
+        Assert.Equal(30, AuthScenario.Ok(await admin.GetAsync($"/api/v1/audit?actor=token:{id:D}")).Body.GetProperty("total").GetInt64());
+        Assert.Equal(30, AuthScenario.Ok(await admin.GetAsync($"/api/v1/audit?actor=token:{id:D}&from={DateTime.UtcNow.AddDays(-7):O}"))
+            .Body.GetProperty("total").GetInt64());
+
+        // Every plan those reads got, the page's and the count's, seeks IX_AuditLog_Actor on both its keys.
+        var plans = await PlansAsync(scenario, "FROM cmdb.AuditLog AS a");
+        Assert.Contains(plans, p => p.Text.Contains("SELECT TOP (@take)", StringComparison.Ordinal));
+        Assert.Contains(plans, p => p.Text.Contains("COUNT_BIG(*)", StringComparison.Ordinal));
+        Assert.All(plans, p => Assert.True(SeeksActorIndex(p.Plan), $"No seek of IX_AuditLog_Actor in the plan of: {p.Text}"));
+    }
+
     /// <summary>A script's client: the token in every request's Authorization header, no cookies, no anti-forgery token.</summary>
     private static ApiClient TokenClient(AuthScenario scenario, string secret)
     {
@@ -396,6 +583,60 @@ public sealed class ApiTokenTests(SqlServerFixture sql)
         var response = await client.PostAsync("/api/v1/cis", ci);
         Assert.True(response.Status == HttpStatusCode.Created, response.ToString());
         return response.Body;
+    }
+
+    /// <summary>A second Admin, who creates tokens of their own: invited as an Editor, signed in once, then given Admin.</summary>
+    private static async Task<(ApiClient Client, Person Person)> SecondAdminAsync(AuthScenario scenario, ApiClient admin)
+    {
+        var (client, person) = await scenario.InviteAndAcceptAsync(admin, "sam.rivera", "Editor");
+        AuthScenario.Ok(await admin.PutAsync($"/api/v1/users/{person.Id:D}/roles", new { roles = AdminAndEditor }, await UserETagAsync(admin, person)));
+        return (client, person);
+    }
+
+    private static async Task<string?> UserETagAsync(ApiClient admin, Person person) => (await admin.GetAsync($"/api/v1/users/{person.Id:D}")).ETag;
+
+    private static void AssertRevokedBy(JsonElement token, Guid by) =>
+        Assert.Equal(("revoked", by), (token.Value("status"), token.GetProperty("revokedBy").GetProperty("id").GetGuid()));
+
+    private static async Task<T?> ExecuteAsync<T>(SqlConnection connection, SqlTransaction transaction, string text)
+    {
+        await using var command = new SqlCommand(text, connection, transaction);
+        return (T?)await command.ExecuteScalarAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>The statements Query Store kept whose text holds <paramref name="statement"/>, each with its plan.</summary>
+    private static async Task<List<(string Text, XDocument Plan)>> PlansAsync(AuthScenario scenario, string statement)
+    {
+        await using var connection = await scenario.Sql.OpenAsync(SqlServerFixture.AdminUser, scenario.Sql.AdminPassword, scenario.Installation.Database);
+        await using var command = new SqlCommand("""
+            EXEC sys.sp_query_store_flush_db;
+            SELECT t.query_sql_text, p.query_plan
+            FROM sys.query_store_plan AS p
+            JOIN sys.query_store_query AS q ON q.query_id = p.query_id
+            JOIN sys.query_store_query_text AS t ON t.query_text_id = q.query_text_id
+            WHERE CHARINDEX(@statement, t.query_sql_text) > 0;
+            """, connection);
+        command.Parameters.AddWithValue("@statement", statement);
+        var plans = new List<(string, XDocument)>();
+        await using var reader = await command.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+        while (await reader.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            plans.Add((reader.GetString(0), XDocument.Parse(reader.GetString(1))));
+        }
+
+        return plans;
+    }
+
+    /// <summary>Whether the plan seeks IX_AuditLog_Actor on both of its keys, the actor's type and its ID.</summary>
+    private static bool SeeksActorIndex(XDocument plan)
+    {
+        XNamespace showplan = "http://schemas.microsoft.com/sqlserver/2004/07/showplan";
+        return plan.Descendants(showplan + "RelOp").Any(op => (string?)op.Attribute("PhysicalOp") == "Index Seek"
+            && op.Element(showplan + "IndexScan") is { } seek
+            && seek.Elements(showplan + "Object").Any(o => (string?)o.Attribute("Index") == "[IX_AuditLog_Actor]")
+            && seek.Descendants(showplan + "SeekPredicates").Descendants(showplan + "ColumnReference")
+                .Select(c => (string?)c.Attribute("Column")).ToHashSet() is var keys
+            && keys.Contains("ActorType") && keys.Contains("ActorId"));
     }
 
     private static void AssertToken(JsonElement who, Guid id, string name) =>

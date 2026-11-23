@@ -82,6 +82,20 @@ internal sealed class UserDirectory(DbSession db, TimeProvider time)
             """);
 
     /// <summary>
+    /// Whether the person is an enabled Admin, read with shared locks held to the end of the caller's
+    /// transaction: a change that disables them or removes their Admin role waits for the caller to
+    /// commit, or has committed and the caller sees it (an API token dies with its creator's account or
+    /// Admin role, DEC-048).
+    /// </summary>
+    public Task<bool> IsEnabledAdministratorAsync(Guid id) =>
+        db.ExecuteScalarAsync<bool>("""
+            SELECT CAST(COUNT(*) AS bit)
+            FROM cmdb.UserAccount AS u WITH (HOLDLOCK)
+            JOIN cmdb.UserRole AS r WITH (HOLDLOCK) ON r.UserId = u.Id
+            WHERE u.Id = @id AND u.IsDisabled = 0 AND r.Role = 'Admin';
+            """, new { id });
+
+    /// <summary>
     /// Administrators who could approve a request about <paramref name="target"/> asked by
     /// <paramref name="requester"/> (DEC-042): enabled, past their invitation, and neither of the two,
     /// with whether each can sign in to approve. None means the one who asks gets both the link and the

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Goldmark.Api.Audit;
 using Goldmark.Api.Data;
 using Goldmark.Api.Inventory;
 
@@ -16,6 +17,33 @@ internal sealed record ApiTokenSummary(Guid Id, string Name, string LastFour, IR
 
 /// <summary>A token a request presents that is active now: its ID, name and scopes.</summary>
 internal sealed record ActiveApiToken(Guid Id, string Name, IReadOnlyList<string> Scopes);
+
+/// <summary>A token just revoked with its creator's account or Admin role (<see cref="ApiTokenRevocations"/>).</summary>
+internal sealed record RevokedApiToken(Guid Id, string Name, string LastFour, DateTime CreatedAt);
+
+/// <summary>
+/// A token dies with its creator's account or Admin role (owner, 2026-11-22: "disabling the account, or taking away its
+/// Admin role, revokes every token it created in the same step, each audited as 'API token revoked'"): a script set up by
+/// someone who left stops at once and needs a new token. Each revocation's audit entry gives the reason; its actor is
+/// whoever made the change, as for a token revoked by hand.
+/// </summary>
+internal static class ApiTokenRevocations
+{
+    /// <summary>The account that created the token was disabled.</summary>
+    public const string CreatorDisabled = "creator-disabled";
+
+    /// <summary>The account that created the token lost the Admin role.</summary>
+    public const string CreatorNotAdmin = "creator-not-admin";
+
+    /// <summary>Revokes and audits every active token <paramref name="creator"/> created; call in the transaction of the change to the account.</summary>
+    public static async Task RevokeWithCreatorAsync(ApiTokenStore tokens, AuditTrail audit, Guid creator, Guid revokedBy, string reason)
+    {
+        foreach (var token in await tokens.RevokeCreatedByAsync(creator, revokedBy))
+        {
+            await audit.WriteAsync(AuditActions.TokenRevoked, AuditTargetTypes.ApiToken, token.Id, new { name = token.Name, lastFour = token.LastFour, reason });
+        }
+    }
+}
 
 internal static class ApiTokenStatuses
 {
@@ -85,6 +113,12 @@ internal sealed class ApiTokenStore(DbSession db)
         WHERE Id = @id AND RevokedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();
         """;
 
+    private const string RevokeCreatedBySql = """
+        UPDATE cmdb.ApiToken SET RevokedAt = SYSUTCDATETIME(), RevokedBy = @revokedBy
+        OUTPUT inserted.Id, inserted.Name, inserted.LastFour, inserted.CreatedAt
+        WHERE CreatedBy = @createdBy AND RevokedAt IS NULL AND ExpiresAt > SYSUTCDATETIME();
+        """;
+
     /// <summary>The unique index on the normalized name, which a concurrent insert of the same name runs into.</summary>
     public const string NameIndex = "UQ_ApiToken_NormalizedName";
 
@@ -128,6 +162,10 @@ internal sealed class ApiTokenStore(DbSession db)
 
     /// <summary>Revokes the token if it is active; false when there is no such token, or it is revoked or expired already.</summary>
     public async Task<bool> RevokeAsync(Guid id, Guid revokedBy) => await db.ExecuteAsync(RevokeSql, new { id, revokedBy }) == 1;
+
+    /// <summary>Revokes every active token <paramref name="createdBy"/> created; the tokens revoked, oldest first.</summary>
+    public async Task<IReadOnlyList<RevokedApiToken>> RevokeCreatedByAsync(Guid createdBy, Guid revokedBy) =>
+        [.. (await db.QueryAsync<RevokedApiToken>(RevokeCreatedBySql, new { createdBy, revokedBy })).OrderBy(t => t.CreatedAt).ThenBy(t => t.Id)];
 
     /// <summary>The stored scopes this build knows, in its order (a scope of a later build is ignored, never granted).</summary>
     private static IReadOnlyList<string> ScopesOf(string json) =>

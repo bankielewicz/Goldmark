@@ -32,3 +32,10 @@ CREATE TABLE cmdb.ApiToken
     LastUsedAt     datetime2(7)     NULL,
     UseRecordedAt  datetime2(7)     NULL
 );
+
+-- A token's usage (screen 18) and the audit log's actor filter (actor=token:{id}, or a person's ID) read one actor's
+-- entries, newest first. The audit log had only its indexes on At (0001) and on the target (0009). The app compares
+-- ActorId as the text AuditTrail writes, a lower-case GUID, so this index can be sought; At and Action are included for
+-- the screen's time and action filters, which come with the actor's.
+CREATE INDEX IX_AuditLog_Actor ON cmdb.AuditLog (ActorType, ActorId, Id DESC)
+    INCLUDE (At, Action);

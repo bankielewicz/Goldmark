@@ -41,7 +41,10 @@ internal sealed class AuditLog(DbSession db)
         """;
 
     // Every filter is a parameter (NFR-SEC-3); an unset one is NULL. Times arrive as UTC
-    // datetimeoffset values and are compared as datetime2, so the index on At can be used.
+    // datetimeoffset values and are compared as datetime2, so the index on At can be used. The actor's
+    // type is compared as the varchar it is, and its ID as the lower-case text AuditTrail writes, so
+    // IX_AuditLog_Actor can be sought (0010): an nvarchar value against the varchar column, or a cast of
+    // the ID column, would scan it.
     private const string Filter = """
         WHERE (@from IS NULL OR a.At >= CAST(@from AS datetime2(7)))
             AND (@to IS NULL OR a.At < CAST(@to AS datetime2(7)))

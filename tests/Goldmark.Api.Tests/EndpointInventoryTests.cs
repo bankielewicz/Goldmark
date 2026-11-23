@@ -89,6 +89,7 @@ public sealed class EndpointInventoryTests(GoldmarkFactory factory) : IClassFixt
             ["CIs: history"] = ("GET", "/api/v1/cis/{id:guid}/history", AccessPolicy.SignedIn, TokenScopes.CisRead),
             ["CIs: create"] = ("POST", "/api/v1/cis", AccessPolicy.CiEditor, TokenScopes.CisWrite),
             ["CIs: change"] = ("PUT", "/api/v1/cis/{id:guid}", AccessPolicy.CiEditor, TokenScopes.CisWrite),
+            ["CIs: partial save"] = ("PATCH", "/api/v1/cis/{id:guid}", AccessPolicy.CiEditor, TokenScopes.CisWrite),
             ["CIs: retire"] = ("POST", "/api/v1/cis/{id:guid}/retire", AccessPolicy.CiEditor, TokenScopes.CisWrite),
             ["CIs: restore"] = ("POST", "/api/v1/cis/{id:guid}/restore", AccessPolicy.CiEditor, TokenScopes.CisWrite),
             ["Types: list"] = ("GET", "/api/v1/types", AccessPolicy.SignedIn, TokenScopes.CisRead),

@@ -8,8 +8,9 @@ namespace Goldmark.Api.IntegrationTests;
 
 /// <summary>
 /// Screens 4 and 5's API (US-10, US-11, US-53; DEC-044) against SQL Server 2025 with real sessions: the
-/// built-in types, an Admin's custom attributes of every kind, an Editor's create, change, retire and
-/// restore with If-Match, each audited in its transaction, the checks on values and links, and the
+/// built-in types, an Admin's custom attributes of every kind, an Editor's create, change, partial save
+/// (a JSON Merge Patch, slice 8), retire and restore with If-Match, each audited in its transaction, the
+/// checks on values and links, and the
 /// search by name in any case with its filters, counts, orders and cursor. The 403s for a Viewer are in
 /// the M6 sweep (<see cref="AccountAndAccessTests"/>).
 /// </summary>
@@ -410,6 +411,123 @@ public sealed class CiApiTests(SqlServerFixture sql)
         }
     }
 
+    [Fact]
+    public async Task A_partial_save_merges_a_JSON_Merge_Patch_into_the_CI_then_takes_PUTs_path()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, editorPerson) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var (viewer, _) = await scenario.InviteAndAcceptAsync(admin, "vic.viewer", "Viewer");
+        await AddVmAttributesAsync(admin);
+        var vm = await CreateAsync(editor, new
+        {
+            type = "VirtualMachine",
+            name = "app-erp-db01",
+            attributes = new { costCentre = "CC-4410", vcpusReserved = 8, monitored = true, backupTier = "Gold" },
+        });
+        var id = vm.Value("id");
+        var path = $"/api/v1/cis/{id}";
+        var created = $"\"{vm.Value("eTag")}\"";
+
+        // The name alone: every value stays, and the audit names only the name.
+        var renamed = await editor.PatchAsync(path, """{"name":"app-erp-db02"}""", created);
+        Assert.True(renamed.Status == HttpStatusCode.OK, renamed.ToString());
+        Assert.Equal("app-erp-db02", renamed.Body.Value("name"));
+        Assert.Equal("""{"costCentre":"CC-4410","vcpusReserved":"8","monitored":true,"backupTier":"Gold"}""", renamed.Body.GetProperty("attributes").GetRawText());
+        Assert.Equal($"\"{renamed.Body.Value("eTag")}\"", renamed.ETag);
+
+        // Attribute by attribute: a value replaces, null clears, one not named stays (a charset may be named).
+        var merged = await editor.PatchAsync(path, """{"attributes":{"backupTier":"Silver","monitored":null,"patchWindowStarts":"2026-11-07"}}""", renamed.ETag,
+            "application/merge-patch+json; charset=utf-8");
+        Assert.True(merged.Status == HttpStatusCode.OK, merged.ToString());
+        Assert.Equal("""{"costCentre":"CC-4410","vcpusReserved":"8","patchWindowStarts":"2026-11-07","backupTier":"Silver"}""",
+            merged.Body.GetProperty("attributes").GetRawText());
+        Assert.Equal(
+        [
+            $"{id}|User|{editorPerson.Id:D}|{{\"type\":\"VirtualMachine\",\"name\":\"app-erp-db02\",\"fields\":[\"Name\"]}}",
+            $"{id}|User|{editorPerson.Id:D}|{{\"type\":\"VirtualMachine\",\"name\":\"app-erp-db02\",\"fields\":[\"Monitored\",\"Patch window starts\",\"Backup tier\"]}}",
+        ], await scenario.AuditAsync("ci.changed"));
+
+        // An empty patch changes nothing: no new version, no audit entry.
+        var same = AuthScenario.Ok(await editor.PatchAsync(path, "{}", merged.ETag));
+        Assert.Equal(merged.ETag, same.ETag);
+
+        // Every field's errors at once, as PUT's: the name can't be cleared, a member or an attribute that doesn't exist is
+        // refused, the merged values are checked against the type, and null clears every value, a required one too.
+        Assert.Equal(new Dictionary<string, string>
+        {
+            ["name"] = "Required",
+            ["nmae"] = "UnknownField",
+            ["attributes.owner"] = "UnknownAttribute",
+            ["attributes.costCentre"] = "Required",
+            ["attributes.backupTier"] = "InvalidChoice",
+        }, Errors(await editor.PatchAsync(path, """{"name":null,"nmae":"x","attributes":{"owner":"Pat","costCentre":null,"backupTier":"Platinum"}}""", same.ETag)));
+        Assert.Equal(new Dictionary<string, string> { ["attributes"] = "InvalidAttributes" }, Errors(await editor.PatchAsync(path, """{"attributes":"Silver"}""", same.ETag)));
+        Assert.Equal(new Dictionary<string, string> { ["attributes.costCentre"] = "Required" }, Errors(await editor.PatchAsync(path, """{"attributes":null}""", same.ETag)));
+        Assert.Equal(2, (await scenario.AuditAsync("ci.changed")).Count);
+
+        // PUT's preconditions: If-Match (428 without it, 412 when stale), an unknown CI 404; a Viewer 403, and a session needs
+        // the anti-forgery token.
+        Assert.Equal(HttpStatusCode.PreconditionRequired, (await editor.PatchAsync(path, """{"name":"x"}""")).Status);
+        var stale = await editor.PatchAsync(path, """{"name":"x"}""", created);
+        Assert.Equal((HttpStatusCode.PreconditionFailed, "changed"), (stale.Status, stale.Code));
+        var missing = await editor.PatchAsync($"/api/v1/cis/{Guid.NewGuid():D}", """{"name":"x"}""", same.ETag);
+        Assert.Equal((HttpStatusCode.NotFound, "not-found"), (missing.Status, missing.Code));
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PatchAsync(path, """{"name":"x"}""", same.ETag)).Status);
+        Assert.True(ApiClient.IsAntiforgeryRefusal(await editor.PatchAsync(path, """{"name":"x"}""", same.ETag, antiforgery: false)));
+
+        // Only a JSON Merge Patch: any other content type is 415 with Accept-Patch; a body that is no JSON object is 400.
+        foreach (var contentType in new[] { "application/json", "text/plain", "application/merge-patch+json; charset=utf-16", null })
+        {
+            var refused = await editor.PatchAsync(path, """{"name":"x"}""", same.ETag, contentType);
+            Assert.True(refused.Status == HttpStatusCode.UnsupportedMediaType, $"{contentType}: {refused}");
+            Assert.Equal(("unsupported-media-type", ApiClient.MergePatch), (refused.Code, refused.Headers["Accept-Patch"]));
+        }
+
+        foreach (var body in new[] { "", "{", "[]", "\"app-erp-db03\"", "null" })
+        {
+            var refused = await editor.PatchAsync(path, body, same.ETag);
+            Assert.True((refused.Status, refused.Code) == (HttpStatusCode.BadRequest, "invalid-patch"), $"'{body}': {refused}");
+        }
+
+        // A retired CI is changed only by restoring it.
+        var retired = AuthScenario.Ok(await editor.SendAsync(HttpMethod.Post, $"{path}/retire", new { }, ifMatch: same.ETag));
+        var whileRetired = await editor.PatchAsync(path, """{"name":"x"}""", retired.ETag);
+        Assert.Equal((HttpStatusCode.Conflict, "retired"), (whileRetired.Status, whileRetired.Code));
+        Assert.Equal("app-erp-db02", AuthScenario.Ok(await viewer.GetAsync(path)).Body.Value("name"));
+        Assert.Equal(2, (await scenario.AuditAsync("ci.changed")).Count);
+    }
+
+    [Fact]
+    public async Task A_partial_save_keeps_every_digit_of_a_number_it_leaves_and_of_one_it_sends()
+    {
+        await using var scenario = await AuthScenario.StartAsync(sql);
+        var (admin, _) = await scenario.SetUpAsync();
+        var (editor, _) = await scenario.InviteAndAcceptAsync(admin, "eddie.editor", "Editor");
+        var added = await admin.PostAsync("/api/v1/types/StorageArray/attributes", new { name = "capacityBytes", label = "Capacity (bytes)", dataType = "number" });
+        Assert.True(added.Status == HttpStatusCode.Created, added.ToString());
+        var array = await CreateAsync(editor, new { type = "StorageArray", name = "array-01", attributes = new { family = "PowerStore", capacityBytes = 9007199254740993m } });
+        var path = $"/api/v1/cis/{array.Value("id")}";
+        var stored = $"SELECT CAST(Attributes AS nvarchar(max)) FROM cmdb.Ci WHERE Id = '{array.Value("id")}';";
+
+        // A number the patch leaves keeps every digit, stored and sent back (DEC-044 item 12).
+        var renamed = await editor.PatchAsync(path, """{"name":"array-01-renamed"}""", $"\"{array.Value("eTag")}\"");
+        Assert.True(renamed.Status == HttpStatusCode.OK, renamed.ToString());
+        Assert.Equal("9007199254740993", renamed.Body.GetProperty("attributes").Value("capacityBytes"));
+        Assert.Equal("""{"family":"PowerStore","capacityBytes":9007199254740993}""", await scenario.Sql.AdminScalarAsync<string>(scenario.Installation.Database, stored));
+
+        // One it sends, as a decimal string or a JSON number, is kept exactly; one a decimal would round is refused.
+        var largest = AuthScenario.Ok(await editor.PatchAsync(path, """{"attributes":{"capacityBytes":"79228162514264337593543950335"}}""", renamed.ETag));
+        Assert.Equal("79228162514264337593543950335", largest.Body.GetProperty("attributes").Value("capacityBytes"));
+        var fraction = AuthScenario.Ok(await editor.PatchAsync(path, """{"attributes":{"capacityBytes":0.1234567890123456789}}""", largest.ETag));
+        Assert.Equal("0.1234567890123456789", fraction.Body.GetProperty("attributes").Value("capacityBytes"));
+        Assert.Equal("""{"family":"PowerStore","capacityBytes":0.1234567890123456789}""", await scenario.Sql.AdminScalarAsync<string>(scenario.Installation.Database, stored));
+        Assert.Equal("TooPrecise", Field(await editor.PatchAsync(path, """{"attributes":{"capacityBytes":"0.12345678901234567890123456789012"}}""", fraction.ETag),
+            "attributes.capacityBytes"));
+        Assert.Equal(["[\"Name\"]", "[\"Capacity (bytes)\"]", "[\"Capacity (bytes)\"]"],
+            (await scenario.AuditAsync("ci.changed")).Select(row => row[(row.IndexOf("\"fields\":", StringComparison.Ordinal) + 9)..^1]));
+    }
+
     private static async Task AddVmAttributesAsync(ApiClient admin)
     {
         foreach (var attribute in new object[]
@@ -443,6 +561,14 @@ public sealed class CiApiTests(SqlServerFixture sql)
     {
         Assert.True(response.Status == HttpStatusCode.BadRequest, response.ToString());
         return response.Body.GetProperty("errors").GetProperty(field)[0].GetString();
+    }
+
+    /// <summary>Every field's first error code, from a 400 validation problem.</summary>
+    private static Dictionary<string, string> Errors(Response response)
+    {
+        Assert.True(response.Status == HttpStatusCode.BadRequest, response.ToString());
+        Assert.Equal("validation", response.Code);
+        return response.Body.GetProperty("errors").EnumerateObject().ToDictionary(e => e.Name, e => e.Value[0].GetString()!);
     }
 
     private static List<string> Names(Response response) => Names(AuthScenario.Ok(response).Body);

@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Goldmark.Api.Auth;
 using Microsoft.AspNetCore.Hosting;
@@ -129,6 +131,8 @@ public sealed class ApiClient(HttpClient http, CookieContainer cookies) : IDispo
 {
     public const string AntiforgeryHeader = "X-Goldmark-Antiforgery";
 
+    public const string MergePatch = "application/merge-patch+json";
+
     public HttpClient Http { get; } = http;
 
     public CookieContainer Cookies { get; } = cookies;
@@ -145,22 +149,34 @@ public sealed class ApiClient(HttpClient http, CookieContainer cookies) : IDispo
     /// Sends a request. As the SPA does, a request refused for its anti-forgery token is retried once
     /// with a fresh token: signing in ends the session the browser had, which the token was bound to.
     /// </summary>
-    public async Task<Response> SendAsync(HttpMethod method, string path, object? body = null, bool antiforgery = true, string? ifMatch = null)
-    {
-        var response = await SendOnceAsync(method, path, body, antiforgery, ifMatch);
-        return antiforgery && IsAntiforgeryRefusal(response) ? await SendOnceAsync(method, path, body, antiforgery, ifMatch) : response;
-    }
+    public Task<Response> SendAsync(HttpMethod method, string path, object? body = null, bool antiforgery = true, string? ifMatch = null) =>
+        SendContentAsync(method, path, body is null ? null : () => JsonContent.Create(body), antiforgery, ifMatch);
+
+    /// <summary>
+    /// A PATCH with <paramref name="patch"/> as written, as <paramref name="contentType"/> (a JSON Merge Patch unless
+    /// another is given; no Content-Type at all when null).
+    /// </summary>
+    public Task<Response> PatchAsync(string path, string patch, string? ifMatch = null, string? contentType = MergePatch, bool antiforgery = true) =>
+        SendContentAsync(HttpMethod.Patch, path, () =>
+        {
+            var content = new StringContent(patch, Encoding.UTF8);
+            content.Headers.ContentType = contentType is null ? null : MediaTypeHeaderValue.Parse(contentType);
+            return content;
+        }, antiforgery, ifMatch);
 
     public static bool IsAntiforgeryRefusal(Response response) =>
         response.Status == HttpStatusCode.BadRequest && response.Text.Contains("anti-forgery", StringComparison.Ordinal);
 
-    private async Task<Response> SendOnceAsync(HttpMethod method, string path, object? body, bool antiforgery, string? ifMatch)
+    private async Task<Response> SendContentAsync(HttpMethod method, string path, Func<HttpContent>? content, bool antiforgery, string? ifMatch)
+    {
+        var response = await SendOnceAsync(method, path, content, antiforgery, ifMatch);
+        return antiforgery && IsAntiforgeryRefusal(response) ? await SendOnceAsync(method, path, content, antiforgery, ifMatch) : response;
+    }
+
+    private async Task<Response> SendOnceAsync(HttpMethod method, string path, Func<HttpContent>? content, bool antiforgery, string? ifMatch)
     {
         using var request = new HttpRequestMessage(method, path);
-        if (body is not null)
-        {
-            request.Content = JsonContent.Create(body);
-        }
+        request.Content = content?.Invoke();
 
         if (antiforgery && method != HttpMethod.Get && method != HttpMethod.Head)
         {

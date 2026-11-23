@@ -4,6 +4,7 @@ using Goldmark.Api.Auth;
 using Goldmark.Api.Data;
 using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
+using Goldmark.Api.Tokens;
 using Microsoft.AspNetCore.Identity;
 
 namespace Goldmark.Api.Users;
@@ -17,7 +18,8 @@ namespace Goldmark.Api.Users;
 /// changed them. Dual control (DEC-042): an invitation, or a password-and-two-factor reset, asked for
 /// while another Admin could approve it gives the one who asks the link only; another Admin approves
 /// and gets the code. No link alone ever yields an Admin session: the password-and-two-factor reset is
-/// never for an Admin, and Admin is not added while one is open.
+/// never for an Admin, and Admin is not added while one is open. Disabling a person, or removing their
+/// Admin role, revokes every active API token they created, in the same transaction (DEC-048).
 /// </summary>
 internal static class UserEndpoints
 {
@@ -206,7 +208,7 @@ internal static class UserEndpoints
     }
 
     private static async Task<IResult> SetRolesAsync(Guid id, RolesRequest request, HttpContext context, GoldmarkUserManager users,
-        LinkStore links, UserDirectory directory, DbSession db, AuditTrail audit)
+        LinkStore links, UserDirectory directory, ApiTokenStore tokens, DbSession db, AuditTrail audit)
     {
         if (IfMatch(context) is not { } etag)
         {
@@ -292,6 +294,11 @@ internal static class UserEndpoints
             }
 
             await audit.WriteAsync(AuditActions.RolesChanged, "User", user.Id, new { userName = user.UserName, before, after = wanted });
+            if (remove.Contains(Roles.Admin))
+            {
+                await ApiTokenRevocations.RevokeWithCreatorAsync(tokens, audit, user.Id, self, ApiTokenRevocations.CreatorNotAdmin);
+            }
+
             return null;
         }, IsolationLevel.Serializable));
 
@@ -302,6 +309,7 @@ internal static class UserEndpoints
     {
         var users = services.GetRequiredService<GoldmarkUserManager>();
         var directory = services.GetRequiredService<UserDirectory>();
+        var tokens = services.GetRequiredService<ApiTokenStore>();
         var db = services.GetRequiredService<DbSession>();
         var audit = services.GetRequiredService<AuditTrail>();
         var self = context.User.UserId()!.Value;
@@ -357,6 +365,11 @@ internal static class UserEndpoints
             }
 
             await audit.WriteAsync(action, "User", user.Id, new { userName = user.UserName });
+            if (change == Change.Disable)
+            {
+                await ApiTokenRevocations.RevokeWithCreatorAsync(tokens, audit, user.Id, self, ApiTokenRevocations.CreatorDisabled);
+            }
+
             return null;
         }, IsolationLevel.Serializable));
 

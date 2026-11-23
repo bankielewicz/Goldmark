@@ -6,6 +6,7 @@ using Goldmark.Api.Hosting;
 using Goldmark.Api.Security;
 using Goldmark.Api.Tokens;
 using Microsoft.Data.SqlClient;
+using Microsoft.Net.Http.Headers;
 
 namespace Goldmark.Api.Inventory;
 
@@ -15,7 +16,8 @@ namespace Goldmark.Api.Inventory;
 /// an API token reads with <c>cis:read</c> and changes with <c>cis:write</c>, as itself (DEC-048).
 /// A save locks its type and reads its definitions inside the transaction (<see cref="CiTypeCatalog"/>), so an
 /// Admin's change to the type can't slip in between; no new CI of a hidden type (DEC-045 item 5). Every change is
-/// audited in its transaction. A change needs the CI's ETag in If-Match: HTTP 428 without it, 412 if
+/// audited in its transaction. PUT replaces the name and every value; PATCH, a JSON Merge Patch (#48, DEC-048), changes
+/// what it names. A change needs the CI's ETag in If-Match: HTTP 428 without it, 412 if
 /// someone else saved meanwhile; a retired CI is changed only by restoring it (409 <c>retired</c>).
 /// CIs are never deleted (US-12: retired CIs stay, with their history).
 /// </summary>
@@ -44,6 +46,10 @@ internal static class CiEndpoints
         api.MapPut("/cis/{id:guid}", UpdateAsync)
             .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
             .WithDisplayName("CIs: change");
+
+        api.MapPatch("/cis/{id:guid}", PatchAsync)
+            .RequireAccess(AccessPolicy.CiEditor, TokenScopes.CisWrite)
+            .WithDisplayName("CIs: partial save");
 
         api.MapPost("/cis/{id:guid}/retire", (Guid id, HttpContext context, IServiceProvider services) =>
                 SetLifecycleAsync(id, context, services, LifecycleStates.Retired))
@@ -166,8 +172,61 @@ internal static class CiEndpoints
         }));
     }
 
-    private static async Task<IResult> UpdateAsync(Guid id, ChangeRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,
-        DbSession db, AuditTrail audit)
+    private static Task<IResult> UpdateAsync(Guid id, ChangeRequest request, HttpContext context, CiTypeCatalog catalog, CiStore store,
+        DbSession db, AuditTrail audit) =>
+        ChangeAsync(id, context, catalog, store, db, audit, (_, _) =>
+            // PUT replaces every value (DEC-044 item 11), so a request without them is refused rather than
+            // read as "unset them all"; an empty object still clears every value (item 13).
+            request.Attributes is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined }
+                ? RequestedChange.Refused(ApiProblems.Field("attributes", "Required"))
+                : new RequestedChange(request.Name, request.Attributes, NoErrors));
+
+    /// <summary>
+    /// A partial save (#48; DEC-044 item 11, DEC-048): a JSON Merge Patch of the name and values (<see cref="CiMergePatch"/>),
+    /// then PUT's path exactly. Only <c>application/merge-patch+json</c> is taken (415 with <c>Accept-Patch</c>
+    /// otherwise), and only a JSON object (400 <c>invalid-patch</c>). The body is read here, after the anti-forgery check.
+    /// </summary>
+    private static async Task<IResult> PatchAsync(Guid id, HttpContext context, CiTypeCatalog catalog, CiStore store, DbSession db, AuditTrail audit)
+    {
+        if (!IsMergePatch(context.Request))
+        {
+            context.Response.Headers["Accept-Patch"] = CiMergePatch.MediaType;
+            return ApiProblems.Problem(StatusCodes.Status415UnsupportedMediaType, "unsupported-media-type",
+                "Send the changes as a JSON Merge Patch, with Content-Type application/merge-patch+json.");
+        }
+
+        JsonElement patch;
+        try
+        {
+            using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted);
+            patch = document.RootElement.Clone();
+        }
+        catch (JsonException)
+        {
+            return InvalidPatch();
+        }
+
+        if (patch.ValueKind != JsonValueKind.Object)
+        {
+            return InvalidPatch();
+        }
+
+        return await ChangeAsync(id, context, catalog, store, db, audit, (row, stored) =>
+        {
+            var (name, attributes, errors) = CiMergePatch.Apply(patch, row.Name, stored);
+            return new RequestedChange(name, attributes, errors);
+        });
+    }
+
+    /// <summary>
+    /// A change to a CI's name and values, PUT's and PATCH's alike (DEC-044 items 11 to 13): If-Match (428 without it), the
+    /// type's lock and then the CI's, a retired CI refused (409 <c>retired</c>), a version changed meanwhile 412, the values
+    /// checked against the type together with the request's own field errors, and the save audited <c>ci.changed</c> with
+    /// the fields it changed (nothing is written when none did); a deadlock victim runs once more. <paramref name="requested"/>
+    /// turns the CI as stored, and its stored values, into what the request asks for.
+    /// </summary>
+    private static async Task<IResult> ChangeAsync(Guid id, HttpContext context, CiTypeCatalog catalog, CiStore store, DbSession db,
+        AuditTrail audit, Func<CiStore.CiRow, System.Text.Json.Nodes.JsonObject, RequestedChange> requested)
     {
         if (IfMatch(context) is not { } etag)
         {
@@ -196,15 +255,19 @@ internal static class CiEndpoints
                     return Changed();
                 }
 
-                // PUT replaces every value (DEC-044 item 11), so a request without them is refused rather than
-                // read as "unset them all"; an empty object still clears every value (item 13).
-                if (request.Attributes is null or { ValueKind: JsonValueKind.Null or JsonValueKind.Undefined })
+                var before = AttributeValues.Parse(row.Attributes);
+                var change = requested(row, before);
+                if (change.Refusal is not null)
                 {
-                    return ApiProblems.Field("attributes", "Required");
+                    return change.Refusal;
                 }
 
-                var before = AttributeValues.Parse(row.Attributes);
-                var (name, check, errors) = await CheckAsync(store, type, request.Name, request.Attributes, before, self: id);
+                var (name, check, errors) = await CheckAsync(store, type, change.Name, change.Attributes, before, self: id);
+                foreach (var (field, codes) in change.Errors)
+                {
+                    errors[field] = codes;
+                }
+
                 if (errors.Count > 0)
                 {
                     return Fields(errors);
@@ -225,6 +288,23 @@ internal static class CiEndpoints
             return Changed();
         }
     }
+
+    /// <summary>What a change asks for, from the CI as stored: its name and values, with the request's own field errors; or its refusal.</summary>
+    private sealed record RequestedChange(string? Name, JsonElement? Attributes, IReadOnlyDictionary<string, string[]> Errors, IResult? Refusal = null)
+    {
+        public static RequestedChange Refused(IResult refusal) => new(null, null, NoErrors, refusal);
+    }
+
+    private static readonly IReadOnlyDictionary<string, string[]> NoErrors = new Dictionary<string, string[]>();
+
+    /// <summary>The merge patch media type, in any case, in UTF-8 if a charset is named (RFC 8259: JSON between systems is UTF-8).</summary>
+    private static bool IsMergePatch(HttpRequest request) =>
+        MediaTypeHeaderValue.TryParse(request.ContentType, out var type)
+        && type.MediaType.Equals(CiMergePatch.MediaType, StringComparison.OrdinalIgnoreCase)
+        && (type.Charset.Length == 0 || type.Charset.Equals("utf-8", StringComparison.OrdinalIgnoreCase));
+
+    private static IResult InvalidPatch() =>
+        ApiProblems.Problem(StatusCodes.Status400BadRequest, "invalid-patch", "Send a JSON object with the fields to change (a JSON Merge Patch).");
 
     private static async Task<IResult> SetLifecycleAsync(Guid id, HttpContext context, IServiceProvider services, string state)
     {

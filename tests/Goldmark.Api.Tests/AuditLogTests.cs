@@ -158,6 +158,64 @@ public sealed class AuditLogTests
     }
 
     [Theory]
+    [InlineData("2026-10-20T08:00:00+02:00", "2026-10-20T06:00:00.0000000+00:00")]
+    [InlineData("2026-10-13T00:00:00Z", "2026-10-13T00:00:00.0000000+00:00")]
+    [InlineData("2026-10-20T08:00Z", "2026-10-20T08:00:00.0000000+00:00")]
+    [InlineData("2026-10-20T08:00+05:30", "2026-10-20T02:30:00.0000000+00:00")]
+    [InlineData("2026-10-20T08:00:00.5Z", "2026-10-20T08:00:00.5000000+00:00")]
+    [InlineData("2026-11-22T20:10:00.123Z", "2026-11-22T20:10:00.1230000+00:00")]
+    [InlineData("2026-10-20T08:00:00.1234567-04:00", "2026-10-20T12:00:00.1234567+00:00")]
+    [InlineData("2000-01-01T00:00:00Z", "2000-01-01T00:00:00.0000000+00:00")]
+    [InlineData("9998-12-31T23:59:59.9999999Z", "9998-12-31T23:59:59.9999999+00:00")]
+    public void A_time_is_a_full_ISO_8601_date_and_time_with_Z_or_an_offset_read_as_UTC(string value, string utc)
+    {
+        foreach (var name in new[] { "from", "to" })
+        {
+            var (query, problem) = AuditQuery.Parse(Query((name, value)));
+
+            Assert.Null(problem);
+            Assert.Equal(utc, (name == "from" ? query!.From : query!.To)!.Value.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        }
+    }
+
+    [Theory]
+    [InlineData("2026-10-20")] // a date alone
+    [InlineData("2026-10-20T08:00:00")] // no zone: each client would read it differently
+    [InlineData("2026-10-20T08:00")]
+    [InlineData("2026-10-20T08Z")] // no minutes
+    [InlineData("2026-10-20T08:00:00.Z")]
+    [InlineData("2026-10-20T08:00:00.12345678Z")] // eight decimals
+    [InlineData("2026-10-20 08:00:00Z")]
+    [InlineData("2026-10-20t08:00:00z")]
+    [InlineData("20261020T080000Z")] // ISO 8601's basic format
+    [InlineData("2026-10-20T08:00:00+0200")]
+    [InlineData("2026-10-20T08:00:00+02")]
+    [InlineData("2026-10-20T08:00:00 02:00")] // a "+" a query string didn't encode
+    [InlineData("Tue, 20 Oct 2026 08:00:00 GMT")]
+    [InlineData("10/20/2026 08:00:00")]
+    [InlineData(" 2026-10-20T08:00:00Z")]
+    [InlineData("2026-10-20T08:00:00Z\n")]
+    [InlineData("2026-02-30T08:00:00Z")]
+    [InlineData("2026-10-20T24:00:00Z")]
+    [InlineData("2026-10-20T08:00:00+15:00")]
+    [InlineData("1999-12-31T23:59:59Z")] // the years are 2000 to 9998, in UTC
+    [InlineData("2000-01-01T00:30:00+01:00")]
+    [InlineData("9998-12-31T23:00:00-05:00")]
+    [InlineData("9999-01-01T00:00:00Z")]
+    [InlineData("２０２６-10-20T08:00:00Z")] // digits are 0 to 9 only
+    public void Any_other_time_is_InvalidTime(string value)
+    {
+        foreach (var name in new[] { "from", "to" })
+        {
+            var (query, problem) = AuditQuery.Parse(Query((name, value)));
+
+            Assert.Null(query);
+            var details = Assert.IsType<HttpValidationProblemDetails>(Assert.IsType<ProblemHttpResult>(problem).ProblemDetails);
+            Assert.Equal(["InvalidTime"], details.Errors[name]);
+        }
+    }
+
+    [Theory]
     [InlineData("ip", "10.20.%")]
     [InlineData("ip", "10.20.4_")]
     [InlineData("ip", "10.20.4.17' OR 1=1")]
